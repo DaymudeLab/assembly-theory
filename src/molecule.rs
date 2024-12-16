@@ -1,7 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
 use petgraph::{
-    graph::{Graph, NodeIndex}, Undirected
+    data::{Build, DataMap},
+    graph::{Graph, NodeIndex},
+    Undirected,
 };
 
 type Index = u32;
@@ -37,7 +39,6 @@ impl Molecule {
         other: &Molecule,
         on: impl IntoIterator<Item = (NodeIndex, NodeIndex)>,
     ) -> Option<Molecule> {
-
         let mut output_graph = self.clone();
 
         let mut u_set = HashSet::<NodeIndex>::new();
@@ -50,25 +51,25 @@ impl Molecule {
             io_map.insert(v, u);
         }
 
-        for ix in self.graph.node_indices() {
-            if !u_set.contains(&ix) {
-                io_map.insert(ix, ix);
-            }
-        }
-
         for ix in other.graph.node_indices() {
             if !v_set.contains(&ix) {
-                io_map.insert(ix, ix);
+                let out = output_graph
+                    .graph
+                    .add_node(other.graph.node_weight(ix).unwrap().clone());
+                io_map.insert(ix, out);
             }
         }
 
-        println!("{:?}", io_map);
+        for ix in other.graph.edge_indices() {
+            let (u, v) = other.graph.edge_endpoints(ix).unwrap();
+            let w = other.graph.edge_weight(ix).unwrap().clone();
+            let um = io_map.get(&u).unwrap();
+            let vm = io_map.get(&v).unwrap();
 
-        for ix in self.graph.node_indices() {
-            let w = self.graph.node_weight(ix);
+            output_graph.graph.add_edge(*um, *vm, w);
         }
 
-        None
+        Some(output_graph)
     }
 
     // Iterator over every joinable set of n vertices in self
