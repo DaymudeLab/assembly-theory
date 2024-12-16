@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use petgraph::{
     data::{Build, DataMap},
-    graph::{Graph, NodeIndex},
+    graph::{self, Graph, NodeIndex},
     Undirected,
 };
 
@@ -52,18 +52,17 @@ impl Molecule {
 
         for ix in other.graph.node_indices() {
             if !v_set.contains(&ix) {
-                let out = output_graph
-                    .graph
-                    .add_node(other.graph.node_weight(ix).unwrap().clone());
+                let w = other.graph.node_weight(ix).unwrap().clone();
+                let out = output_graph.graph.add_node(w);
                 io_map.insert(ix, out);
             }
         }
 
         for ix in other.graph.edge_indices() {
             let (u, v) = other.graph.edge_endpoints(ix).unwrap();
-            let w = other.graph.edge_weight(ix).unwrap().clone();
             let um = io_map.get(&u).unwrap();
             let vm = io_map.get(&v).unwrap();
+            let w = other.graph.edge_weight(ix).unwrap().clone();
 
             output_graph.graph.add_edge(*um, *vm, w);
         }
@@ -83,6 +82,62 @@ impl Molecule {
     // pub fn n_join_points(&self, n: usize) -> impl Iterator<Item = impl Iterator<Item = Index>> {}
 
     pub fn from_graph(g: Graph<Atom, Bond, Undirected, Index>) -> Self {
+        Self { graph: g }
+    }
+
+    pub fn single_bond() -> Self {
+        let mut g = Graph::default();
+        let u = g.add_node(Atom {
+            capacity: 4,
+            element: Element::Carbon,
+        });
+        let v = g.add_node(Atom {
+            capacity: 4,
+            element: Element::Carbon,
+        });
+        g.add_edge(u, v, Bond::Single);
+        Self { graph: g }
+    }
+
+    pub fn double_bond() -> Self {
+        let mut g = Graph::default();
+        let u = g.add_node(Atom {
+            capacity: 4,
+            element: Element::Carbon,
+        });
+        let v = g.add_node(Atom {
+            capacity: 4,
+            element: Element::Carbon,
+        });
+        g.add_edge(u, v, Bond::Double);
+        Self { graph: g }
+    }
+
+    pub fn carbonyl() -> Self {
+        let mut g = Graph::default();
+        let u = g.add_node(Atom {
+            capacity: 4,
+            element: Element::Carbon,
+        });
+        let v = g.add_node(Atom {
+            capacity: 2,
+            element: Element::Oxygen,
+        });
+        g.add_edge(u, v, Bond::Double);
+        Self { graph: g }
+    }
+
+    pub fn hydroxyl() -> Self {
+        let mut g = Graph::default();
+        let u = g.add_node(Atom {
+            capacity: 4,
+            element: Element::Carbon,
+        });
+        let v = g.add_node(Atom {
+            capacity: 2,
+            element: Element::Oxygen,
+        });
+        g.add_edge(u, v, Bond::Single);
         Self { graph: g }
     }
 }
