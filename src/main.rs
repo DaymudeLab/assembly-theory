@@ -15,16 +15,16 @@ mod assembly;
 #[command(version, about, long_about = None)]
 struct Cli {
     #[arg(short = 'p', long)]
-    path: PathBuf,
+    path: Option<PathBuf>,
 }
 
 fn main() -> std::io::Result<()> {
     let cli = Cli::parse();
 
-    let path = cli.path;
-    let molecule = loader::parse(&path)?;
-    let index = assembly::index(&molecule);
-    println!("{}", index);
-
+    if let Some(path) = cli.path {
+        let molecule = loader::parse(&path)?;
+        let index = assembly::index(&molecule);
+        println!("{}", index);
+    }
     Ok(())
 }
