@@ -22,6 +22,15 @@ pub struct Atom {
     capacity: u32,
 }
 
+impl Atom {
+    pub fn create(element: Element) -> Self {
+        Self {
+            element,
+            capacity: 0
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Bond {
     Single,
