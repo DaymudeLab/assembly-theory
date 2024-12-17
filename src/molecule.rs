@@ -120,7 +120,7 @@ impl Molecule {
 
     fn backtrack(
         &self,
-        remaining_edges: Vec<EdgeIndex>,
+        mut remaining_edges: Vec<EdgeIndex>,
         left: BTreeSet<EdgeIndex>,
         right: BTreeSet<EdgeIndex>,
         solutions: &mut HashSet<(BTreeSet<EdgeIndex>, BTreeSet<EdgeIndex>)>,
@@ -132,16 +132,15 @@ impl Molecule {
             return;
         }
 
-        let mut prefix = remaining_edges.clone();
-        let suffix = prefix.pop().unwrap();
-        let mut new_left = left.clone();
-        new_left.insert(suffix);
+        let suffix = remaining_edges.pop().unwrap();
+        let mut lc = left.clone();
+        lc.insert(suffix);
 
-        let mut new_right = left.clone();
-        new_right.insert(suffix);
+        let mut rc = right.clone();
+        rc.insert(suffix);
 
-        self.backtrack(prefix.clone(), new_left, right, solutions);
-        self.backtrack(prefix, left, new_right, solutions);
+        self.backtrack(remaining_edges.clone(), lc, right, solutions);
+        self.backtrack(remaining_edges, left, rc, solutions);
     }
 
     fn is_valid_partition(&self, left: &BTreeSet<EdgeIndex>, right: &BTreeSet<EdgeIndex>) -> bool {
