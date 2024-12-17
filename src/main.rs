@@ -11,6 +11,9 @@ mod loader;
 // The hard bit: compute assembly index
 mod assembly;
 
+// Utility functions
+mod utils;
+
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Cli {
