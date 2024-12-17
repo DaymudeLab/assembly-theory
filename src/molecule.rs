@@ -209,6 +209,13 @@ impl Molecule {
         g.add_edge(u, v, Bond::Single);
         Self { graph: g }
     }
+
+    pub fn is_basic_unit(&self) -> bool {
+        self.is_isomorphic_to(&Molecule::hydroxyl())
+            || self.is_isomorphic_to(&Molecule::carbonyl())
+            || self.is_isomorphic_to(&Molecule::single_bond())
+            || self.is_isomorphic_to(&Molecule::double_bond())
+    }
 }
 
 mod tests {
