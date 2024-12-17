@@ -1,17 +1,17 @@
 use crate::molecule::{self, Atom, Bond, Element, Molecule};
 use petgraph::{
-    dot::{Config, Dot}, graph::{self, Graph, NodeIndex}, Undirected
+    graph::{Graph, NodeIndex},
+    Undirected,
 };
 
 use std::{
-    fs::{self}, io::{self, Error}, path::PathBuf
+    fs::{self},
+    io::{self, Error},
+    path::PathBuf,
 };
 
 pub fn parse(p: &PathBuf) -> io::Result<molecule::Molecule> {
-    // assert_eq!(&path.is_file(), &true);
-
-    let contents = fs::read_to_string(&p)
-                .expect("Should have been able to read the file");
+    let contents = fs::read_to_string(&p).expect("Should have been able to read the file");
 
     let mut graph: Option<Graph<Atom, Bond, Undirected>> = None;
     let mut curr: Vec<String> = Vec::new();
@@ -19,20 +19,19 @@ pub fn parse(p: &PathBuf) -> io::Result<molecule::Molecule> {
         match line {
             "$$$$" => {
                 if curr.len() > 0 {
-                    graph = Some(parse_single_mol(&curr));
+                    graph = Some(parse_one_molecule(&curr));
                 }
                 curr.clear();
             }
             &_ => {
                 curr.push(line.to_string());
-            } 
+            }
         }
-    };
-    
+    }
+
     if let Some(mol_graph) = graph {
         return Ok(Molecule::from_graph(mol_graph));
-    }
-    else {
+    } else {
         return Err(Error::new(
             io::ErrorKind::InvalidData,
             "Something broke while parsing",
@@ -40,10 +39,10 @@ pub fn parse(p: &PathBuf) -> io::Result<molecule::Molecule> {
     }
 }
 
-pub fn parse_single_mol(mol_data: &Vec<String>) -> Graph<Atom, Bond, Undirected> {
+pub fn parse_one_molecule(mol_data: &Vec<String>) -> Graph<Atom, Bond, Undirected> {
     let mut mol_graph = Graph::<Atom, Bond, Undirected>::new_undirected();
 
-    let (num_atoms,num_bonds) = parse_counts_line(&mol_data[3]);
+    let (num_atoms, num_bonds) = parse_counts_line(&mol_data[3]);
 
     let atom_start_l: usize = (4 + num_atoms).try_into().unwrap();
     let bond_start_l: usize = (4 + num_atoms + num_bonds).try_into().unwrap();
@@ -51,24 +50,20 @@ pub fn parse_single_mol(mol_data: &Vec<String>) -> Graph<Atom, Bond, Undirected>
     let mut atoms: Vec<&str> = Vec::with_capacity(num_atoms as usize);
     let mut atom_node_ids: Vec<NodeIndex> = Vec::new();
     // Atoms block parse
-    for (l_no, atom_line) in mol_data[4..atom_start_l].iter().enumerate() {
+    for (_, atom_line) in mol_data[4..atom_start_l].iter().enumerate() {
         let atom = parse_atom_line(atom_line);
         atoms.push(atom);
         match atom {
             // ignore Hydrogen for now
-            "H" => {
-                atom_node_ids.push(NodeIndex::default())
-            }
+            "H" => atom_node_ids.push(NodeIndex::default()),
             &_ => {
-                // create a node of molecule here
-                // println!("{}-{}", atom, l_no);
-                atom_node_ids.push(mol_graph.add_node(Atom::create(get_element(atom))));
+                atom_node_ids.push(mol_graph.add_node(Atom::new(get_element(atom))));
             }
         }
     }
 
     // Bonds block parse
-    for (l_no, bond_line) in mol_data[atom_start_l..bond_start_l].iter().enumerate() {
+    for (_, bond_line) in mol_data[atom_start_l..bond_start_l].iter().enumerate() {
         let (atom_one, atom_two, bond_type) = parse_bond_line(bond_line);
         let atom_one_idx = atom_one - 1;
         let atom_two_idx = atom_two - 1;
@@ -76,17 +71,22 @@ pub fn parse_single_mol(mol_data: &Vec<String>) -> Graph<Atom, Bond, Undirected>
         match (atoms[atom_one_idx as usize] == "H") | (atoms[atom_two_idx as usize] == "H") {
             true => {}
             false => {
-                // println!("{}-{} <--{}--> {}-{}", atoms[atom_one_idx as usize], atom_one_idx, bond_type, atoms[atom_two_idx as usize], atom_two_idx);
-                mol_graph.add_edge(atom_node_ids[atom_one_idx as usize], atom_node_ids[atom_two_idx as usize], get_bond(bond_type));
+                mol_graph.add_edge(
+                    atom_node_ids[atom_one_idx as usize],
+                    atom_node_ids[atom_two_idx as usize],
+                    get_bond(bond_type),
+                );
             }
         }
     }
-    // println!("{:?}", Dot::with_config(&mol_graph, &[Config::EdgeNoLabel]));
     mol_graph
 }
 
 fn parse_counts_line(counts_line: &String) -> (u32, u32) {
-    (counts_line[0..3].trim().parse().unwrap(), counts_line[3..6].trim().parse().unwrap())
+    (
+        counts_line[0..3].trim().parse().unwrap(),
+        counts_line[3..6].trim().parse().unwrap(),
+    )
 }
 
 fn parse_atom_line(atom_line: &String) -> &str {
@@ -94,7 +94,11 @@ fn parse_atom_line(atom_line: &String) -> &str {
 }
 
 fn parse_bond_line(bond_line: &String) -> (u32, u32, u32) {
-    (bond_line[0..3].trim().parse().unwrap(), bond_line[3..6].trim().parse().unwrap(), bond_line[6..9].trim().parse().unwrap())
+    (
+        bond_line[0..3].trim().parse().unwrap(),
+        bond_line[3..6].trim().parse().unwrap(),
+        bond_line[6..9].trim().parse().unwrap(),
+    )
 }
 
 fn get_element(atom: &str) -> Element {
@@ -102,7 +106,7 @@ fn get_element(atom: &str) -> Element {
         "O" => Element::Oxygen,
         "N" => Element::Nitrogen,
         "C" => Element::Carbon,
-        &_ => Element::Hydrogen
+        &_ => Element::Hydrogen,
     }
 }
 
@@ -110,6 +114,7 @@ fn get_bond(bond_type: u32) -> Bond {
     match bond_type {
         1 => Bond::Single,
         2 => Bond::Double,
-        _ => Bond::Single
+        _ => Bond::Single,
     }
 }
+
