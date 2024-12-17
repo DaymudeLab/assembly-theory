@@ -1,10 +1,12 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use petgraph::{
     algo::is_isomorphic,
-    graph::{Graph, NodeIndex},
+    graph::{EdgeIndex, Graph, NodeIndex},
     Undirected,
 };
+
+use crate::utils::{edge_induced_subgraph, is_subset_connected};
 
 type Index = u32;
 type MGraph = Graph<Atom, Bond, Undirected, Index>;
@@ -94,6 +96,60 @@ impl Molecule {
 
     /// Iterator over every joinable set of n vertices in self
     // pub fn n_join_points(&self, n: usize) -> impl Iterator<Item = impl Iterator<Item = Index>> {}
+
+    pub fn partitions(&self) -> Option<impl Iterator<Item = (Molecule, Molecule)> + '_> {
+        let mut solutions = HashSet::new();
+        let remaining_edges = self.graph.edge_indices().collect();
+        self.backtrack(
+            remaining_edges,
+            BTreeSet::new(),
+            BTreeSet::new(),
+            &mut solutions,
+        );
+        Some(solutions.into_iter().map(|(left, right)| {
+            (
+                Molecule {
+                    graph: edge_induced_subgraph(self.graph.clone(), &left),
+                },
+                Molecule {
+                    graph: edge_induced_subgraph(self.graph.clone(), &right),
+                },
+            )
+        }))
+    }
+
+    fn backtrack(
+        &self,
+        remaining_edges: Vec<EdgeIndex>,
+        left: BTreeSet<EdgeIndex>,
+        right: BTreeSet<EdgeIndex>,
+        solutions: &mut HashSet<(BTreeSet<EdgeIndex>, BTreeSet<EdgeIndex>)>,
+    ) {
+        if remaining_edges.is_empty() {
+            if self.is_valid_partition(&left, &right) {
+                solutions.insert((left, right));
+            }
+            return;
+        }
+
+        let mut prefix = remaining_edges.clone();
+        let suffix = prefix.pop().unwrap();
+        let mut new_left = left.clone();
+        new_left.insert(suffix);
+
+        let mut new_right = left.clone();
+        new_right.insert(suffix);
+
+        self.backtrack(prefix.clone(), new_left, right, solutions);
+        self.backtrack(prefix, left, new_right, solutions);
+    }
+
+    fn is_valid_partition(&self, left: &BTreeSet<EdgeIndex>, right: &BTreeSet<EdgeIndex>) -> bool {
+        !left.is_empty()
+            && !right.is_empty()
+            && is_subset_connected(&self.graph, left)
+            && is_subset_connected(&self.graph, right)
+    }
 
     pub fn from_graph(g: MGraph) -> Self {
         Self { graph: g }
