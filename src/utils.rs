@@ -26,6 +26,14 @@ where
     return visited == g.node_count();
 }
 
-pub fn edge_induced_subgraph<N, E, Ix>(g: Graph<N, E, Ix>, s: &BTreeSet<EdgeIndex>) -> Graph<N, E, Ix> {
+pub fn edge_induced_subgraph<N, E, Ix>(
+    mut g: Graph<N, E, Ix>,
+    s: &BTreeSet<EdgeIndex>,
+) -> Graph<N, E, Ix>
+where
+    Ix: EdgeType,
+{
+    g.retain_edges(|_, e| s.contains(&e));
+    g.retain_nodes(|f, n| f.neighbors(n).count() == 0);
     g
 }
