@@ -34,6 +34,15 @@ pub struct Molecule {
     graph: MGraph,
 }
 
+impl Atom {
+    pub fn new(element: Element) -> Self {
+        Self {
+            element,
+            capacity: 0,
+        }
+    }
+}
+
 impl Molecule {
     /// Join self with other on `on`
     pub fn join(
