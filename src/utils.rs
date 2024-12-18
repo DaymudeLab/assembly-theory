@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 
 use petgraph::{
     graph::{EdgeIndex, Graph, NodeIndex},
+    visit::IntoNeighbors,
     EdgeType,
 };
 
@@ -63,4 +64,29 @@ where
     g.retain_edges(|_, e| !s.contains(&e));
     g.retain_nodes(|f, n| f.neighbors(n).count() != 0);
     g
+}
+
+pub fn connected_components_under<N, E, Ty>(
+    g: Graph<N, E, Ty>,
+    s: &BTreeSet<NodeIndex>,
+) -> impl Iterator<Item = BTreeSet<NodeIndex>>
+where
+    Ty: EdgeType,
+{
+    let mut remainder = s.clone();
+    let mut components = Vec::new();
+    while !remainder.is_empty() {
+        let mut visited = BTreeSet::new();
+        let mut queue = BTreeSet::from([*remainder.iter().next().unwrap()]);
+        while let Some(v) = queue.pop_first() {
+            visited.insert(v);
+            let neighbors = g
+                .neighbors(v)
+                .filter(|n| !visited.contains(n) && s.contains(n));
+            queue.extend(neighbors)
+        }
+        remainder = remainder.difference(&visited).cloned().collect();
+        components.push(visited);
+    }
+    components.into_iter()
 }
