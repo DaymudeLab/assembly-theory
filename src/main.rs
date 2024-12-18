@@ -8,6 +8,9 @@ mod molecule;
 // Data IO
 mod loader;
 
+// Canonizer
+mod canonize;
+
 // The hard bit: compute assembly index
 mod assembly;
 
@@ -23,6 +26,7 @@ fn main() -> std::io::Result<()> {
 
     if let Some(path) = cli.path {
         let molecule = loader::parse(&path)?;
+        canonize::canonize(&molecule);
         let index = assembly::index(&molecule);
         println!("{}", index);
     }
