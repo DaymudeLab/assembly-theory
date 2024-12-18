@@ -120,7 +120,9 @@ impl Molecule {
         };
 
         if candidates.is_empty() {
-            solutions.insert(subset);
+            if subset.len() > 1 {
+                solutions.insert(subset);
+            }
         } else {
             let v = candidates.first().unwrap();
             remainder.remove(v);
