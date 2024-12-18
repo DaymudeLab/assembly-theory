@@ -10,8 +10,9 @@ use crate::utils::{edge_induced_subgraph, is_subset_connected};
 
 type Index = u32;
 type MGraph = Graph<Atom, Bond, Undirected, Index>;
+type MSubgraph = Graph<Option<Atom>, Bond, Undirected, Index>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Element {
     Hydrogen,
     Carbon,
@@ -19,13 +20,13 @@ pub enum Element {
     Oxygen,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Atom {
     element: Element,
     capacity: u32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Bond {
     Single,
     Double,
@@ -99,7 +100,7 @@ impl Molecule {
             BTreeSet::new(),
             &mut solutions,
         );
-        solutions.into_iter()
+        solutions.into_iter().filter(|s| !s.is_empty())
     }
 
     // From
@@ -255,6 +256,25 @@ impl Molecule {
             || self.is_isomorphic_to(&Molecule::carbonyl())
             || self.is_isomorphic_to(&Molecule::single_bond())
             || self.is_isomorphic_to(&Molecule::double_bond())
+    }
+
+    pub fn graph(&self) -> &MGraph {
+        &self.graph
+    }
+}
+
+// This is bad, BIG TODO: replace with handwritten vf3
+pub fn isomorphic_subgraphs_of(pattern: &MGraph, target: &MSubgraph) -> Vec<Vec<NodeIndex<Index>>> {
+    if let Some(iter) = subgraph_isomorphisms_iter(
+        &pattern,
+        &target,
+        &mut |n0, n1| n1.is_some_and(|u| *n0 == u),
+        &mut |e0, e1| e0 == e1,
+    ) {
+        iter.map(|v| v.into_iter().map(|u| NodeIndex::new(u)).collect())
+            .collect()
+    } else {
+        Vec::new()
     }
 }
 

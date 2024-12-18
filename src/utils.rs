@@ -1,13 +1,13 @@
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::BTreeSet;
 
 use petgraph::{
-    graph::{EdgeIndex, Graph},
+    graph::{EdgeIndex, Graph, NodeIndex},
     EdgeType,
 };
 
-pub fn is_subset_connected<N, E, Ix>(g: &Graph<N, E, Ix>, s: &BTreeSet<EdgeIndex>) -> bool
+pub fn is_subset_connected<N, E, Ty>(g: &Graph<N, E, Ty>, s: &BTreeSet<EdgeIndex>) -> bool
 where
-    Ix: EdgeType,
+    Ty: EdgeType,
 {
     let mut visited = BTreeSet::new();
     let mut queue = BTreeSet::from([*s.iter().next().unwrap()]);
@@ -30,14 +30,37 @@ where
     return visited.len() == s.len();
 }
 
-pub fn edge_induced_subgraph<N, E, Ix>(
-    mut g: Graph<N, E, Ix>,
+pub fn edge_induced_subgraph<N, E, Ty>(
+    mut g: Graph<N, E, Ty>,
     s: &BTreeSet<EdgeIndex>,
-) -> Graph<N, E, Ix>
+) -> Graph<N, E, Ty>
 where
-    Ix: EdgeType,
+    Ty: EdgeType,
 {
     g.retain_edges(|_, e| s.contains(&e));
+    g.retain_nodes(|f, n| f.neighbors(n).count() != 0);
+    g
+}
+
+pub fn node_induced_subgraph<N, E, Ty>(
+    mut g: Graph<N, E, Ty>,
+    s: &BTreeSet<NodeIndex>,
+) -> Graph<N, E, Ty>
+where
+    Ty: EdgeType,
+{
+    g.retain_nodes(|_, n| s.contains(&n));
+    g
+}
+
+pub fn edge_induced_cosubgraph<N, E, Ty>(
+    mut g: Graph<N, E, Ty>,
+    s: &BTreeSet<EdgeIndex>,
+) -> Graph<N, E, Ty>
+where
+    Ty: EdgeType,
+{
+    g.retain_edges(|_, e| !s.contains(&e));
     g.retain_nodes(|f, n| f.neighbors(n).count() != 0);
     g
 }
