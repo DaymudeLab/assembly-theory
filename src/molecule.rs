@@ -226,6 +226,10 @@ impl Molecule {
         Self { graph: g }
     }
 
+    pub fn get_graph(&self) -> &MGraph {
+        &self.graph
+    }
+
     pub fn single_bond() -> Self {
         let mut g = Graph::default();
         let u = g.add_node(Atom {
