@@ -149,15 +149,15 @@ impl Molecule {
             let h_prime = self.graph().map(
                 |_, n| *n,
                 |i, e| {
-                    let (src, dst) = m.graph().edge_endpoints(i).unwrap();
+                    let (src, dst) = self.graph.edge_endpoints(i).unwrap();
                     (!subgraph.contains(&src) || !subgraph.contains(&dst)).then_some(*e)
                 },
             );
 
             for cert in isomorphic_subgraphs_of(&h, &h_prime) {
                 let cert = BTreeSet::from_iter(cert);
-                let cert = BTreeSet::from_iter(edges_contained_within(m.graph(), &cert));
-                let comp = BTreeSet::from_iter(edges_contained_within(m.graph(), &subgraph));
+                let cert = BTreeSet::from_iter(edges_contained_within(&self.graph, &cert));
+                let comp = BTreeSet::from_iter(edges_contained_within(&self.graph, &subgraph));
                 matches.insert(if cert < comp {
                     (cert, comp)
                 } else {
