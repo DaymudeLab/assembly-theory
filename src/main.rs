@@ -26,7 +26,7 @@ fn main() -> std::io::Result<()> {
 
     if let Some(path) = cli.path {
         let molecule = loader::parse(&path)?;
-        canonize::canonize(&molecule);
+        println!("Final Molecule Signature: {}", canonize::canonize(&molecule));
         let index = assembly::index(&molecule);
         println!("{}", index);
     }
