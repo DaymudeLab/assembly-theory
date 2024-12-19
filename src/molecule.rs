@@ -6,7 +6,7 @@ use petgraph::{
     Undirected,
 };
 
-use crate::utils::{edge_induced_subgraph, is_subset_connected};
+use crate::utils::{edge_induced_subgraph, edges_contained_within, is_subset_connected};
 
 type Index = u32;
 type MGraph = Graph<Atom, Bond, Undirected, Index>;
@@ -140,6 +140,34 @@ impl Molecule {
         }
     }
 
+    fn fragments(&self) -> impl Iterator<Item = (BTreeSet<EdgeIndex>, BTreeSet<EdgeIndex>)> {
+        let mut matches = BTreeSet::new();
+        for subgraph in self.enumerate_subgraphs() {
+            let mut h = self.graph().clone();
+            h.retain_nodes(|_, n| subgraph.contains(&n));
+
+            let h_prime = self.graph().map(
+                |_, n| *n,
+                |i, e| {
+                    let (src, dst) = m.graph().edge_endpoints(i).unwrap();
+                    (!subgraph.contains(&src) || !subgraph.contains(&dst)).then_some(*e)
+                },
+            );
+
+            for cert in isomorphic_subgraphs_of(&h, &h_prime) {
+                let cert = BTreeSet::from_iter(cert);
+                let cert = BTreeSet::from_iter(edges_contained_within(m.graph(), &cert));
+                let comp = BTreeSet::from_iter(edges_contained_within(m.graph(), &subgraph));
+                matches.insert(if cert < comp {
+                    (cert, comp)
+                } else {
+                    (comp, cert)
+                });
+            }
+        }
+        matches.into_iter()
+    }
+
     pub fn partitions(&self) -> Option<impl Iterator<Item = (Molecule, Molecule)> + '_> {
         let mut solutions = HashSet::new();
         let remaining_edges = self.graph.edge_indices().collect();
@@ -267,12 +295,11 @@ impl Molecule {
 
 // This is bad, BIG TODO: replace with handwritten vf3
 pub fn isomorphic_subgraphs_of(pattern: &MGraph, target: &MSubgraph) -> Vec<Vec<NodeIndex<Index>>> {
-    if let Some(iter) = subgraph_isomorphisms_iter(
-        &pattern,
-        &target,
-        &mut |n0, n1| n1 == n0,
-        &mut |e0, e1| e1.is_some_and(|e| *e0 == e),
-    ) {
+    if let Some(iter) =
+        subgraph_isomorphisms_iter(&pattern, &target, &mut |n0, n1| n1 == n0, &mut |e0, e1| {
+            e1.is_some_and(|e| *e0 == e)
+        })
+    {
         iter.map(|v| v.into_iter().map(|u| NodeIndex::new(u)).collect())
             .collect()
     } else {
