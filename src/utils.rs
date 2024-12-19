@@ -124,12 +124,47 @@ where
     components.into_iter()
 }
 
-//pub fn edge_seperator<N, E, Ty>(
-//    g: &Graph<N, E, Ty>,
-//    s: &BTreeSet<NodeIndex>,
-//) -> (BTreeSet<EdgeIndex>, BTreeSet<EdgeIndex>)
-//where
-//    Ty: EdgeType,
-//{
-//
-//}
+pub fn edge_seperator<N, E, Ty>(
+    g: &Graph<N, E, Ty>,
+    s: &BTreeSet<NodeIndex>,
+) -> (BTreeSet<EdgeIndex>, BTreeSet<EdgeIndex>)
+where
+    Ty: EdgeType,
+{
+    let left = g.edge_indices().filter(|e| {
+        let (src, dst) = g.edge_endpoints(*e).unwrap();
+        s.contains(&src) && s.contains(&dst)
+    });
+
+    let right = g.edge_indices().filter(|e| {
+        let (src, dst) = g.edge_endpoints(*e).unwrap();
+        !s.contains(&src) && !s.contains(&dst)
+    });
+    (BTreeSet::from_iter(left), BTreeSet::from_iter(right))
+}
+
+pub fn edges_contained_within<'a, N, E, Ty>(
+    g: &'a Graph<N, E, Ty>,
+    s: &'a BTreeSet<NodeIndex>,
+) -> impl Iterator<Item = EdgeIndex> + 'a
+where
+    Ty: EdgeType,
+{
+    g.edge_indices().filter(|e| {
+        let (src, dst) = g.edge_endpoints(*e).unwrap();
+        s.contains(&src) && s.contains(&dst)
+    })
+}
+
+pub fn edges_incident_to<'a, N, E, Ty>(
+    g: &'a Graph<N, E, Ty>,
+    s: &'a BTreeSet<NodeIndex>,
+) -> impl Iterator<Item = EdgeIndex> + 'a
+where
+    Ty: EdgeType,
+{
+    g.edge_indices().filter(|e| {
+        let (src, dst) = g.edge_endpoints(*e).unwrap();
+        s.contains(&src) || s.contains(&dst)
+    })
+}
