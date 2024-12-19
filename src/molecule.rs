@@ -140,7 +140,7 @@ impl Molecule {
         }
     }
 
-    fn fragments(&self) -> impl Iterator<Item = (BTreeSet<EdgeIndex>, BTreeSet<EdgeIndex>)> {
+    fn matches(&self) -> impl Iterator<Item = (BTreeSet<EdgeIndex>, BTreeSet<EdgeIndex>)> {
         let mut matches = BTreeSet::new();
         for subgraph in self.enumerate_subgraphs() {
             let mut h = self.graph().clone();
