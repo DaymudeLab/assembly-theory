@@ -41,6 +41,14 @@ impl Atom {
             capacity: 0,
         }
     }
+    pub fn get_element(&self) -> String {
+        (match self.element {
+            Element::Oxygen => "O",
+            Element::Nitrogen => "N",
+            Element::Carbon => "C",
+            Element::Hydrogen => "H",
+        }).to_string()
+    }
 }
 
 impl Molecule {
