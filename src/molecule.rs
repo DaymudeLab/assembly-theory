@@ -10,7 +10,7 @@ use crate::utils::{edge_induced_subgraph, is_subset_connected};
 
 type Index = u32;
 type MGraph = Graph<Atom, Bond, Undirected, Index>;
-type MSubgraph = Graph<Option<Atom>, Bond, Undirected, Index>;
+type MSubgraph = Graph<Atom, Option<Bond>, Undirected, Index>;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Element {
@@ -120,7 +120,7 @@ impl Molecule {
         };
 
         if candidates.is_empty() {
-            if subset.len() > 1 {
+            if subset.len() > 2 {
                 solutions.insert(subset);
             }
         } else {
@@ -270,8 +270,8 @@ pub fn isomorphic_subgraphs_of(pattern: &MGraph, target: &MSubgraph) -> Vec<Vec<
     if let Some(iter) = subgraph_isomorphisms_iter(
         &pattern,
         &target,
-        &mut |n0, n1| n1.is_some_and(|u| *n0 == u),
-        &mut |e0, e1| e0 == e1,
+        &mut |n0, n1| n1 == n0,
+        &mut |e0, e1| e1.is_some_and(|e| *e0 == e),
     ) {
         iter.map(|v| v.into_iter().map(|u| NodeIndex::new(u)).collect())
             .collect()
