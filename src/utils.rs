@@ -1,8 +1,7 @@
 use std::collections::BTreeSet;
 
 use petgraph::{
-    graph::{EdgeIndex, Graph, NodeIndex},
-    visit::IntoNeighbors,
+    graph::{Edge, EdgeIndex, Graph, NodeIndex},
     EdgeType,
 };
 
@@ -67,7 +66,7 @@ where
 }
 
 pub fn connected_components_under<N, E, Ty>(
-    g: Graph<N, E, Ty>,
+    g: &Graph<N, E, Ty>,
     s: &BTreeSet<NodeIndex>,
 ) -> impl Iterator<Item = BTreeSet<NodeIndex>>
 where
@@ -90,3 +89,47 @@ where
     }
     components.into_iter()
 }
+
+pub fn edge_induced_connected_components_under<N, E, Ty>(
+    g: &Graph<N, E, Ty>,
+    s: &BTreeSet<EdgeIndex>,
+) -> impl Iterator<Item = BTreeSet<EdgeIndex>>
+where
+    Ty: EdgeType,
+{
+    let mut remainder = s.clone();
+    let mut components = Vec::new();
+    while !remainder.is_empty() {
+        let mut visited = BTreeSet::new();
+        let mut queue = BTreeSet::from([*remainder.iter().next().unwrap()]);
+        while let Some(e) = queue.pop_first() {
+            visited.insert(e);
+            let (src, dst) = g.edge_endpoints(e).unwrap();
+            let nl = g.neighbors(src).filter_map(|n| {
+                g.find_edge(src, n)
+                    .filter(|f| *f != e && s.contains(&f) && !visited.contains(f))
+            });
+
+            let nr = g.neighbors(dst).filter_map(|n| {
+                g.find_edge(dst, n)
+                    .filter(|f| *f != e && s.contains(&f) && !visited.contains(f))
+            });
+
+            queue.extend(nl);
+            queue.extend(nr);
+        }
+        remainder = remainder.difference(&visited).cloned().collect();
+        components.push(visited);
+    }
+    components.into_iter()
+}
+
+//pub fn edge_seperator<N, E, Ty>(
+//    g: &Graph<N, E, Ty>,
+//    s: &BTreeSet<NodeIndex>,
+//) -> (BTreeSet<EdgeIndex>, BTreeSet<EdgeIndex>)
+//where
+//    Ty: EdgeType,
+//{
+//
+//}
