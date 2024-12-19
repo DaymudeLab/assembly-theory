@@ -1,9 +1,9 @@
 use std::{collections::BTreeSet, u32};
 
-use petgraph::graph::{EdgeIndex, NodeIndex};
+use petgraph::graph::EdgeIndex;
 
 use crate::{
-    molecule::{self, isomorphic_subgraphs_of, Molecule},
+    molecule::{isomorphic_subgraphs_of, Molecule},
     utils::{connected_components_under_edges, edges_contained_within},
 };
 
@@ -83,18 +83,14 @@ fn remnant_search(m: &Molecule) -> u32 {
                     let f1r = f1.difference(h1).cloned().collect::<BTreeSet<EdgeIndex>>();
                     let f2r = f2.difference(h2).cloned().collect::<BTreeSet<EdgeIndex>>();
 
-                    if f1r.is_empty() || f2r.is_empty() {
-                        continue;
-                    }
-
-                    let mut c1 = connected_components_under_edges(m.graph(), &f1r);
-                    let mut c2 = connected_components_under_edges(m.graph(), &f2r);
-
-                    fractures[i1] = c1.next().unwrap();
-                    fractures[i2] = c2.next().unwrap();
+                    let c1 = connected_components_under_edges(m.graph(), &f1r);
+                    let c2 = connected_components_under_edges(m.graph(), &f2r);
 
                     fractures.extend(c1);
                     fractures.extend(c2);
+
+                    fractures.swap_remove(i1.max(i2));
+                    fractures.swap_remove(i1.min(i2));
 
                     fractures.push(h1.clone());
                 }
