@@ -28,7 +28,6 @@ fn top_down_search(m: &Molecule) -> u32 {
 }
 
 fn remnant_search(m: &Molecule) -> u32 {
-<<<<<<< HEAD
     let mut t1:u32 = 0;
     let mut t2:u32 = 0;
 
@@ -64,8 +63,6 @@ fn remnant_search(m: &Molecule) -> u32 {
         }
     }
 
-=======
->>>>>>> d507ecf2d38e3f2687aa3f7bcb3748dc40ba9457
     fn recurse(
         m: &Molecule,
         matches: &BTreeSet<(BTreeSet<EdgeIndex>, BTreeSet<EdgeIndex>)>,
