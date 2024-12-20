@@ -119,12 +119,7 @@ impl Molecule {
             remainder.intersection(&neighbors).cloned().collect()
         };
 
-        if candidates.is_empty() {
-            if subset.len() > 2 {
-                solutions.insert(subset);
-            }
-        } else {
-            let v = candidates.first().unwrap();
+        if let Some(v) = candidates.first() {
             remainder.remove(v);
 
             self.generate_connected_subgraphs(
@@ -137,6 +132,10 @@ impl Molecule {
             subset.insert(*v);
             neighbors.extend(self.graph.neighbors(*v));
             self.generate_connected_subgraphs(remainder, subset, neighbors, solutions);
+        } else {
+            if subset.len() > 2 {
+                solutions.insert(subset);
+            }
         }
     }
 
