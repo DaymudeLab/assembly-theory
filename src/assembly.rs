@@ -125,6 +125,10 @@ mod tests {
         master_records
     }
 
+    /*
+        Read Test CSV
+     */
+
     fn test_setup(filename: String) -> Vec<String> {
         let mut rdr = ReaderBuilder::new().from_path(filename).expect("Given Test CSV should exist to run tests!");
         let mut mol_names: Vec<String> = Vec::new();
@@ -175,4 +179,25 @@ mod tests {
             assert_eq!(index, *master_dataset.get(&mol).unwrap());
         }
     }
+
+    /*
+        Uncomment below lines to check benchmark specs for running assembly index
+        Use following lines to enable the unstable benchmarking feature
+        #![feature(test)]
+        extern crate test; 
+    */
+    
+    // #[bench]
+    // fn bench_medium(b: &mut Bencher) {
+    //     let master_dataset: HashMap<String, u32> = read_master();
+    //     let test_mol_names: Vec<String> = test_setup("./tests/suite2.csv".to_string());
+
+    //     b.iter(|| {
+    //         for mol in test_mol_names {
+    //             let path = PathBuf::from(format!("./data/{}", mol));
+    //             let molecule = loader::parse(&path).expect(&format!("Error while generating assembly index for molecule: {}", mol));
+    //             let index = index(&molecule);
+    //         }
+    //     });
+    // }
 }
