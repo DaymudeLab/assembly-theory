@@ -95,3 +95,7 @@ pub fn index(m: &Molecule) -> u32 {
 pub fn depth(m: &Molecule) -> u32 {
     top_down_search(m)
 }
+
+pub fn search_space(m: &Molecule) -> u32 {
+    m.matches().count() as u32
+}

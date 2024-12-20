@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
-use clap::Parser;
+use assembly::{depth, index, search_space};
+use clap::{Parser, ValueEnum};
 
 // Molecule definition, joining operation
 mod molecule;
@@ -14,20 +15,34 @@ mod assembly;
 // Utility functions
 mod utils;
 
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
+enum Measure {
+    NaiveDepth,
+    NaiveIndex,
+    SearchSpace,
+}
+
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Cli {
-    #[arg(short = 'p', long)]
-    path: Option<PathBuf>,
+    path: PathBuf,
+
+    #[arg(short, long)]
+    measure: Option<Measure>,
 }
 
 fn main() -> std::io::Result<()> {
     let cli = Cli::parse();
-
-    if let Some(path) = cli.path {
-        let molecule = loader::parse(&path)?;
-        let index = assembly::index(&molecule);
-        println!("{}", index);
-    }
+    let molecule = loader::parse(&cli.path)?;
+    let ix = if let Some(m) = cli.measure {
+        match m {
+            Measure::NaiveIndex => index(&molecule),
+            Measure::NaiveDepth => depth(&molecule),
+            Measure::SearchSpace => search_space(&molecule),
+        }
+    } else {
+        index(&molecule)
+    };
+    println!("{ix}");
     Ok(())
 }
