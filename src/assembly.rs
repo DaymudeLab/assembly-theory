@@ -148,7 +148,7 @@ mod tests {
 
         for mol in test_mol_names {
             let path = PathBuf::from(format!("./data/{}", mol));
-            let molecule = loader::parse(&path).expect(&format!("Error while generating assembly index for molecule: {}", mol));
+            let molecule = loader::parse(&path).expect(&format!("Error while parsing molecule files: {}", mol));
             let index = index(&molecule);
             assert_eq!(index, *master_dataset.get(&mol).unwrap());
         }
@@ -161,7 +161,7 @@ mod tests {
 
         for mol in test_mol_names {
             let path = PathBuf::from(format!("./data/{}", mol));
-            let molecule = loader::parse(&path).expect(&format!("Error while generating assembly index for molecule: {}", mol));
+            let molecule = loader::parse(&path).expect(&format!("Error while parsing molecule files: {}", mol));
             let index = index(&molecule);
             assert_eq!(index, *master_dataset.get(&mol).unwrap());
         }
@@ -174,7 +174,7 @@ mod tests {
 
         for mol in test_mol_names {
             let path = PathBuf::from(format!("./data/{}", mol));
-            let molecule = loader::parse(&path).expect(&format!("Error while generating assembly index for molecule: {}", mol));
+            let molecule = loader::parse(&path).expect(&format!("Error while parsing molecule files: {}", mol));
             let index = index(&molecule);
             assert_eq!(index, *master_dataset.get(&mol).unwrap());
         }
