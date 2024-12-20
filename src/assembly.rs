@@ -28,6 +28,9 @@ fn top_down_search(m: &Molecule) -> u32 {
 }
 
 fn remnant_search(m: &Molecule) -> u32 {
+    let mut t1:u32 = 0;
+    let mut t2:u32 = 0;
+
     let mut matches = BTreeSet::new();
     for subgraph in m.enumerate_subgraphs() {
         let mut h = m.graph().clone();
@@ -50,6 +53,13 @@ fn remnant_search(m: &Molecule) -> u32 {
             } else {
                 (comp, cert)
             });
+
+            t1 = t1 + 1;
+            if(t1 == 1000000) {
+                t1 = 0;
+                t2 = t2 + 1;
+                println!("{}\n", t2);
+            }
         }
     }
 
@@ -106,6 +116,8 @@ fn remnant_search(m: &Molecule) -> u32 {
         cx
     }
 
+
+    println!("Done!\n");
     recurse(
         m,
         &matches,
@@ -122,4 +134,29 @@ pub fn index(m: &Molecule) -> u32 {
 
 pub fn depth(m: &Molecule) -> u32 {
     top_down_search(m)
+}
+
+pub fn addition_chain_bound(m: usize, fragments: &Vec<BTreeSet<EdgeIndex>>) -> usize{
+    let mut max_s: usize = 0;
+    let mut frag_sizes: Vec<usize> = Vec::new();
+
+    for f in fragments {
+        frag_sizes.push(f.len());
+    }
+
+    let size_sum: usize = frag_sizes.iter().sum();
+
+    for min_frag in 2..m {
+        let log= usize::BITS - min_frag.leading_zeros() - 1;
+        let mut aux_sum: usize = 0;
+
+        for len in &frag_sizes {
+            aux_sum += (len / min_frag) + (len % min_frag != 0) as usize
+        }
+
+        max_s = std::cmp::max(max_s, size_sum - log as usize - aux_sum);
+        
+    }
+
+    return max_s;
 }
