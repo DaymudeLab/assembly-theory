@@ -1,8 +1,5 @@
-use crate::molecule::{self, Atom, Bond, Element, Molecule};
-use petgraph::{
-    graph::{Graph, NodeIndex},
-    Undirected,
-};
+use crate::molecule::{self, Atom, Bond, Element, Index, MGraph, Molecule};
+use petgraph::graph::NodeIndex;
 
 use std::{
     fs::{self},
@@ -13,7 +10,7 @@ use std::{
 pub fn parse(p: &PathBuf) -> io::Result<molecule::Molecule> {
     let contents = fs::read_to_string(&p).expect("Should have been able to read the file");
 
-    let mut graph: Option<Graph<Atom, Bond, Undirected>> = None;
+    let mut graph: Option<MGraph> = None;
     let mut curr: Vec<String> = Vec::new();
     for line in contents.lines() {
         match line {
@@ -39,8 +36,8 @@ pub fn parse(p: &PathBuf) -> io::Result<molecule::Molecule> {
     }
 }
 
-pub fn parse_one_molecule(mol_data: &Vec<String>) -> Graph<Atom, Bond, Undirected> {
-    let mut mol_graph = Graph::<Atom, Bond, Undirected>::new_undirected();
+pub fn parse_one_molecule(mol_data: &Vec<String>) -> MGraph {
+    let mut mol_graph = MGraph::default();
 
     let (num_atoms, num_bonds) = parse_counts_line(&mol_data[3]);
 
@@ -48,7 +45,7 @@ pub fn parse_one_molecule(mol_data: &Vec<String>) -> Graph<Atom, Bond, Undirecte
     let bond_start_l: usize = (4 + num_atoms + num_bonds).try_into().unwrap();
 
     let mut atoms: Vec<&str> = Vec::with_capacity(num_atoms as usize);
-    let mut atom_node_ids: Vec<NodeIndex> = Vec::new();
+    let mut atom_node_ids: Vec<NodeIndex<Index>> = Vec::new();
     // Atoms block parse
     for (_, atom_line) in mol_data[4..atom_start_l].iter().enumerate() {
         let atom = parse_atom_line(atom_line);
@@ -117,4 +114,3 @@ fn get_bond(bond_type: u32) -> Bond {
         _ => Bond::Single,
     }
 }
-
