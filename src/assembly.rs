@@ -1,11 +1,8 @@
 use std::{collections::BTreeSet, u32};
 
-use petgraph::graph::EdgeIndex;
+use bit_set::BitSet;
 
-use crate::{
-    molecule::{isomorphic_subgraphs_of, Molecule},
-    utils::{connected_components_under_edges, edges_contained_within},
-};
+use crate::{molecule::Molecule, utils::connected_components_under_edges};
 
 fn top_down_search(m: &Molecule) -> u32 {
     let mut ix = u32::MAX;
@@ -30,8 +27,8 @@ fn top_down_search(m: &Molecule) -> u32 {
 fn remnant_search(m: &Molecule) -> u32 {
     fn recurse(
         m: &Molecule,
-        matches: &BTreeSet<(BTreeSet<EdgeIndex>, BTreeSet<EdgeIndex>)>,
-        fragments: &Vec<BTreeSet<EdgeIndex>>,
+        matches: &BTreeSet<(BitSet, BitSet)>,
+        fragments: &Vec<BitSet>,
         ix: usize,
         depth: usize,
     ) -> usize {
@@ -41,19 +38,22 @@ fn remnant_search(m: &Molecule) -> u32 {
             let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
             let f2 = fragments.iter().enumerate().find(|(_, c)| h2.is_subset(c));
 
+            // All of these clones are on bitsets and cheap enough
             if let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) {
                 if f1 == f2 {
-                    let remainder = f1
-                        .difference(&h1.union(h2).cloned().collect::<BTreeSet<EdgeIndex>>())
-                        .cloned()
-                        .collect::<BTreeSet<EdgeIndex>>();
-                    let c = connected_components_under_edges(m.graph(), &remainder);
+                    let mut union = h1.clone();
+                    union.union_with(h2);
+                    let mut difference = f1.clone();
+                    difference.difference_with(&union);
+                    let c = connected_components_under_edges(m.graph(), &difference);
                     fractures.extend(c);
                     fractures.swap_remove(i1);
                     fractures.push(h1.clone());
                 } else {
-                    let f1r = f1.difference(h1).cloned().collect::<BTreeSet<EdgeIndex>>();
-                    let f2r = f2.difference(h2).cloned().collect::<BTreeSet<EdgeIndex>>();
+                    let mut f1r = f1.clone();
+                    f1r.difference_with(h1);
+                    let mut f2r = f2.clone();
+                    f2r.difference_with(h2);
 
                     let c1 = connected_components_under_edges(m.graph(), &f1r);
                     let c2 = connected_components_under_edges(m.graph(), &f2r);
@@ -78,10 +78,13 @@ fn remnant_search(m: &Molecule) -> u32 {
         cx
     }
 
+    let mut init = BitSet::new();
+    init.extend(m.graph().edge_indices().map(|ix| ix.index()));
+
     recurse(
         m,
         &m.matches().collect(),
-        &vec![m.graph().edge_indices().collect()],
+        &vec![init],
         m.graph().edge_count() - 1,
         0,
     ) as u32

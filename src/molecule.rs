@@ -1,5 +1,6 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
+use bit_set::BitSet;
 use petgraph::{
     algo::{is_isomorphic, is_isomorphic_subgraph, subgraph_isomorphisms_iter},
     graph::{EdgeIndex, Graph, NodeIndex},
@@ -8,8 +9,8 @@ use petgraph::{
 
 use crate::utils::{edge_induced_subgraph, edges_contained_within, is_subset_connected};
 
-type Index = u32;
-type MGraph = Graph<Atom, Bond, Undirected, Index>;
+pub type Index = u32;
+pub type MGraph = Graph<Atom, Bond, Undirected, Index>;
 type MSubgraph = Graph<Atom, Option<Bond>, Undirected, Index>;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -51,12 +52,12 @@ impl Molecule {
     pub fn join(
         &self,
         other: &Molecule,
-        on: impl IntoIterator<Item = (NodeIndex, NodeIndex)>,
+        on: impl IntoIterator<Item = (NodeIndex<Index>, NodeIndex<Index>)>,
     ) -> Option<Molecule> {
         let mut output_graph = self.clone();
 
-        let mut v_set = HashSet::<NodeIndex>::new();
-        let mut io_map = HashMap::<NodeIndex, NodeIndex>::new();
+        let mut v_set = HashSet::<NodeIndex<Index>>::new();
+        let mut io_map = HashMap::<NodeIndex<Index>, NodeIndex<Index>>::new();
 
         for (u, v) in on.into_iter() {
             v_set.insert(v);
@@ -91,7 +92,7 @@ impl Molecule {
         is_isomorphic_subgraph(&self.graph, &other.graph)
     }
 
-    pub fn enumerate_subgraphs(&self) -> impl Iterator<Item = BTreeSet<NodeIndex>> {
+    pub fn enumerate_subgraphs(&self) -> impl Iterator<Item = BTreeSet<NodeIndex<Index>>> {
         let mut solutions = HashSet::new();
         let remainder = BTreeSet::from_iter(self.graph.node_indices());
         self.generate_connected_subgraphs(
@@ -108,10 +109,10 @@ impl Molecule {
     // https://stackoverflow.com/a/15658245
     fn generate_connected_subgraphs(
         &self,
-        mut remainder: BTreeSet<NodeIndex>,
-        mut subset: BTreeSet<NodeIndex>,
-        mut neighbors: BTreeSet<NodeIndex>,
-        solutions: &mut HashSet<BTreeSet<NodeIndex>>,
+        mut remainder: BTreeSet<NodeIndex<Index>>,
+        mut subset: BTreeSet<NodeIndex<Index>>,
+        mut neighbors: BTreeSet<NodeIndex<Index>>,
+        solutions: &mut HashSet<BTreeSet<NodeIndex<Index>>>,
     ) {
         let candidates = if subset.is_empty() {
             remainder.clone()
@@ -119,12 +120,7 @@ impl Molecule {
             remainder.intersection(&neighbors).cloned().collect()
         };
 
-        if candidates.is_empty() {
-            if subset.len() > 2 {
-                solutions.insert(subset);
-            }
-        } else {
-            let v = candidates.first().unwrap();
+        if let Some(v) = candidates.first() {
             remainder.remove(v);
 
             self.generate_connected_subgraphs(
@@ -137,10 +133,14 @@ impl Molecule {
             subset.insert(*v);
             neighbors.extend(self.graph.neighbors(*v));
             self.generate_connected_subgraphs(remainder, subset, neighbors, solutions);
+        } else {
+            if subset.len() > 2 {
+                solutions.insert(subset);
+            }
         }
     }
 
-    pub fn matches(&self) -> impl Iterator<Item = (BTreeSet<EdgeIndex>, BTreeSet<EdgeIndex>)> {
+    pub fn matches(&self) -> impl Iterator<Item = (BitSet, BitSet)> {
         let mut matches = BTreeSet::new();
         for subgraph in self.enumerate_subgraphs() {
             let mut h = self.graph().clone();
@@ -156,15 +156,17 @@ impl Molecule {
 
             for cert in isomorphic_subgraphs_of(&h, &h_prime) {
                 let cert = BTreeSet::from_iter(cert);
-                let cert = BTreeSet::from_iter(edges_contained_within(&self.graph, &cert));
-                let comp = BTreeSet::from_iter(edges_contained_within(&self.graph, &subgraph));
-                matches.insert(if cert < comp {
-                    (cert, comp)
-                } else {
-                    (comp, cert)
-                });
+
+                let mut c = BitSet::new();
+                c.extend(edges_contained_within(&self.graph, &cert).map(|e| e.index()));
+
+                let mut h = BitSet::new();
+                h.extend(edges_contained_within(&self.graph, &subgraph).map(|e| e.index()));
+
+                matches.insert(if c < h { (c, h) } else { (h, c) });
             }
         }
+
         matches.into_iter()
     }
 
@@ -191,10 +193,10 @@ impl Molecule {
 
     fn backtrack(
         &self,
-        mut remaining_edges: Vec<EdgeIndex>,
-        left: BTreeSet<EdgeIndex>,
-        right: BTreeSet<EdgeIndex>,
-        solutions: &mut HashSet<(BTreeSet<EdgeIndex>, BTreeSet<EdgeIndex>)>,
+        mut remaining_edges: Vec<EdgeIndex<Index>>,
+        left: BTreeSet<EdgeIndex<Index>>,
+        right: BTreeSet<EdgeIndex<Index>>,
+        solutions: &mut HashSet<(BTreeSet<EdgeIndex<Index>>, BTreeSet<EdgeIndex<Index>>)>,
     ) {
         if remaining_edges.is_empty() {
             if self.is_valid_partition(&left, &right) {
@@ -214,7 +216,11 @@ impl Molecule {
         self.backtrack(remaining_edges, left, rc, solutions);
     }
 
-    fn is_valid_partition(&self, left: &BTreeSet<EdgeIndex>, right: &BTreeSet<EdgeIndex>) -> bool {
+    fn is_valid_partition(
+        &self,
+        left: &BTreeSet<EdgeIndex<Index>>,
+        right: &BTreeSet<EdgeIndex<Index>>,
+    ) -> bool {
         !left.is_empty()
             && !right.is_empty()
             && is_subset_connected(&self.graph, left)
