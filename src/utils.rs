@@ -90,7 +90,7 @@ where
     components.into_iter()
 }
 
-pub fn edge_induced_connected_components_under<N, E, Ty>(
+pub fn connected_components_under_edges<N, E, Ty>(
     g: &Graph<N, E, Ty>,
     s: &BTreeSet<EdgeIndex>,
 ) -> impl Iterator<Item = BTreeSet<EdgeIndex>>
