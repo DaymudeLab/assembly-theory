@@ -99,3 +99,80 @@ pub fn depth(m: &Molecule) -> u32 {
 pub fn search_space(m: &Molecule) -> u32 {
     m.matches().count() as u32
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::HashMap, path::PathBuf};
+
+    use csv::ReaderBuilder;
+
+    use crate::loader;
+
+    use super::*;
+
+    /*
+        Read Master CSV
+     */
+
+    fn read_master() -> HashMap<String,u32> {
+        let mut rdr = ReaderBuilder::new().from_path("./data/master.csv").expect("Master CSV should exist to run tests!");
+        let mut master_records: HashMap<String,u32> = HashMap::new();
+        for result in rdr.records() {
+            let record = result.expect("Error while reading Master file content");
+            let record_vec: Vec<&str> = record.iter().collect();
+            master_records.insert(record_vec[0].to_string(), record_vec[1].to_string().parse::<u32>().expect("Error while reading Master file content: Assembly Index is not Integer"));
+        }
+        master_records
+    }
+
+    fn test_setup(filename: String) -> Vec<String> {
+        let mut rdr = ReaderBuilder::new().from_path(filename).expect("Given Test CSV should exist to run tests!");
+        let mut mol_names: Vec<String> = Vec::new();
+        for result in rdr.records() {
+            let record = result.expect("Error while reading Test file content");
+            for field in &record {
+                mol_names.push(field.to_string());
+            }
+        }
+        mol_names
+    }
+
+    #[test]
+    fn test_small() {
+        let master_dataset: HashMap<String, u32> = read_master();
+        let test_mol_names: Vec<String> = test_setup("./tests/suite1.csv".to_string());
+
+        for mol in test_mol_names {
+            let path = PathBuf::from(format!("./data/{}", mol));
+            let molecule = loader::parse(&path).expect(&format!("Error while generating assembly index for molecule: {}", mol));
+            let index = index(&molecule);
+            assert_eq!(index, *master_dataset.get(&mol).unwrap());
+        }
+    }
+
+    #[test]
+    fn test_medium() {
+        let master_dataset: HashMap<String, u32> = read_master();
+        let test_mol_names: Vec<String> = test_setup("./tests/suite2.csv".to_string());
+
+        for mol in test_mol_names {
+            let path = PathBuf::from(format!("./data/{}", mol));
+            let molecule = loader::parse(&path).expect(&format!("Error while generating assembly index for molecule: {}", mol));
+            let index = index(&molecule);
+            assert_eq!(index, *master_dataset.get(&mol).unwrap());
+        }
+    }
+
+    #[test]
+    fn test_large() {
+        let master_dataset: HashMap<String, u32> = read_master();
+        let test_mol_names: Vec<String> = test_setup("./tests/suite3.csv".to_string());
+
+        for mol in test_mol_names {
+            let path = PathBuf::from(format!("./data/{}", mol));
+            let molecule = loader::parse(&path).expect(&format!("Error while generating assembly index for molecule: {}", mol));
+            let index = index(&molecule);
+            assert_eq!(index, *master_dataset.get(&mol).unwrap());
+        }
+    }
+}
