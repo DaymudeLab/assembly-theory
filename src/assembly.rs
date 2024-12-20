@@ -28,6 +28,7 @@ fn top_down_search(m: &Molecule) -> u32 {
 }
 
 fn remnant_search(m: &Molecule) -> u32 {
+<<<<<<< HEAD
     let mut t1:u32 = 0;
     let mut t2:u32 = 0;
 
@@ -63,6 +64,8 @@ fn remnant_search(m: &Molecule) -> u32 {
         }
     }
 
+=======
+>>>>>>> d507ecf2d38e3f2687aa3f7bcb3748dc40ba9457
     fn recurse(
         m: &Molecule,
         matches: &BTreeSet<(BTreeSet<EdgeIndex>, BTreeSet<EdgeIndex>)>,
@@ -82,12 +85,9 @@ fn remnant_search(m: &Molecule) -> u32 {
                         .difference(&h1.union(h2).cloned().collect::<BTreeSet<EdgeIndex>>())
                         .cloned()
                         .collect::<BTreeSet<EdgeIndex>>();
-                    if remainder.is_empty() {
-                        continue;
-                    }
-                    let mut c = connected_components_under_edges(m.graph(), &remainder);
-                    fractures[i1] = c.next().unwrap();
+                    let c = connected_components_under_edges(m.graph(), &remainder);
                     fractures.extend(c);
+                    fractures.swap_remove(i1);
                     fractures.push(h1.clone());
                 } else {
                     let f1r = f1.difference(h1).cloned().collect::<BTreeSet<EdgeIndex>>();
@@ -108,7 +108,7 @@ fn remnant_search(m: &Molecule) -> u32 {
                     m,
                     matches,
                     &fractures,
-                    ix - (h1.len() - 1),
+                    ix - h1.len() + 1,
                     depth + 1,
                 ));
             }
@@ -120,7 +120,7 @@ fn remnant_search(m: &Molecule) -> u32 {
     println!("Done!\n");
     recurse(
         m,
-        &matches,
+        &m.matches().collect(),
         &vec![m.graph().edge_indices().collect()],
         m.graph().edge_count() - 1,
         0,
@@ -134,6 +134,10 @@ pub fn index(m: &Molecule) -> u32 {
 
 pub fn depth(m: &Molecule) -> u32 {
     top_down_search(m)
+}
+
+pub fn search_space(m: &Molecule) -> u32 {
+    m.matches().count() as u32
 }
 
 pub fn addition_chain_bound(m: usize, fragments: &Vec<BTreeSet<EdgeIndex>>) -> usize{
