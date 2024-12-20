@@ -28,31 +28,6 @@ fn top_down_search(m: &Molecule) -> u32 {
 }
 
 fn remnant_search(m: &Molecule) -> u32 {
-    let mut matches = BTreeSet::new();
-    for subgraph in m.enumerate_subgraphs() {
-        let mut h = m.graph().clone();
-        h.retain_nodes(|_, n| subgraph.contains(&n));
-
-        let h_prime = m.graph().map(
-            |_, n| *n,
-            |i, e| {
-                let (src, dst) = m.graph().edge_endpoints(i).unwrap();
-                (!subgraph.contains(&src) || !subgraph.contains(&dst)).then_some(*e)
-            },
-        );
-
-        for cert in isomorphic_subgraphs_of(&h, &h_prime) {
-            let cert = BTreeSet::from_iter(cert);
-            let cert = BTreeSet::from_iter(edges_contained_within(m.graph(), &cert));
-            let comp = BTreeSet::from_iter(edges_contained_within(m.graph(), &subgraph));
-            matches.insert(if cert < comp {
-                (cert, comp)
-            } else {
-                (comp, cert)
-            });
-        }
-    }
-
     fn recurse(
         m: &Molecule,
         matches: &BTreeSet<(BTreeSet<EdgeIndex>, BTreeSet<EdgeIndex>)>,
@@ -72,12 +47,9 @@ fn remnant_search(m: &Molecule) -> u32 {
                         .difference(&h1.union(h2).cloned().collect::<BTreeSet<EdgeIndex>>())
                         .cloned()
                         .collect::<BTreeSet<EdgeIndex>>();
-                    if remainder.is_empty() {
-                        continue;
-                    }
-                    let mut c = connected_components_under_edges(m.graph(), &remainder);
-                    fractures[i1] = c.next().unwrap();
+                    let c = connected_components_under_edges(m.graph(), &remainder);
                     fractures.extend(c);
+                    fractures.swap_remove(i1);
                     fractures.push(h1.clone());
                 } else {
                     let f1r = f1.difference(h1).cloned().collect::<BTreeSet<EdgeIndex>>();
@@ -98,7 +70,7 @@ fn remnant_search(m: &Molecule) -> u32 {
                     m,
                     matches,
                     &fractures,
-                    ix - (h1.len() - 1),
+                    ix - h1.len() + 1,
                     depth + 1,
                 ));
             }
@@ -108,7 +80,7 @@ fn remnant_search(m: &Molecule) -> u32 {
 
     recurse(
         m,
-        &matches,
+        &m.matches().collect(),
         &vec![m.graph().edge_indices().collect()],
         m.graph().edge_count() - 1,
         0,
