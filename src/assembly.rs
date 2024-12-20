@@ -1,4 +1,4 @@
-use std::u32;
+use std::{collections::BTreeSet, u32};
 
 use bit_set::BitSet;
 
@@ -27,7 +27,7 @@ fn top_down_search(m: &Molecule) -> u32 {
 fn remnant_search(m: &Molecule) -> u32 {
     fn recurse(
         m: &Molecule,
-        matches: &Vec<(BitSet, BitSet)>,
+        matches: &BTreeSet<(BitSet, BitSet)>,
         fragments: &Vec<BitSet>,
         ix: usize,
         depth: usize,
@@ -41,18 +41,22 @@ fn remnant_search(m: &Molecule) -> u32 {
             // All of these clones are on bitsets and cheap enough
             if let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) {
                 if f1 == f2 {
-                    h1.clone().union_with(h2);
-                    f1.clone().difference_with(h1);
-                    let c = connected_components_under_edges(m.graph(), &f1);
+                    let mut union = h1.clone();
+                    union.union_with(h2);
+                    let mut difference = f1.clone();
+                    difference.difference_with(&union);
+                    let c = connected_components_under_edges(m.graph(), &difference);
                     fractures.extend(c);
                     fractures.swap_remove(i1);
                     fractures.push(h1.clone());
                 } else {
-                    f1.clone().difference_with(h1);
-                    f2.clone().difference_with(h2);
+                    let mut f1r = f1.clone();
+                    f1r.difference_with(h1);
+                    let mut f2r = f2.clone();
+                    f2r.difference_with(h2);
 
-                    let c1 = connected_components_under_edges(m.graph(), &f1);
-                    let c2 = connected_components_under_edges(m.graph(), &f2);
+                    let c1 = connected_components_under_edges(m.graph(), &f1r);
+                    let c2 = connected_components_under_edges(m.graph(), &f2r);
 
                     fractures.extend(c1);
                     fractures.extend(c2);

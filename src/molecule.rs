@@ -141,7 +141,7 @@ impl Molecule {
     }
 
     pub fn matches(&self) -> impl Iterator<Item = (BitSet, BitSet)> {
-        let mut matches = Vec::new();
+        let mut matches = BTreeSet::new();
         for subgraph in self.enumerate_subgraphs() {
             let mut h = self.graph().clone();
             h.retain_nodes(|_, n| subgraph.contains(&n));
@@ -163,9 +163,10 @@ impl Molecule {
                 let mut h = BitSet::new();
                 h.extend(edges_contained_within(&self.graph, &subgraph).map(|e| e.index()));
 
-                matches.push(if c < h { (c, h) } else { (h, c) });
+                matches.insert(if c < h { (c, h) } else { (h, c) });
             }
         }
+
         matches.into_iter()
     }
 

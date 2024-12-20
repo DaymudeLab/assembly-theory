@@ -114,10 +114,12 @@ where
         visited.reserve_len(s.len());
         let mut queue = BitSet::new();
         queue.reserve_len(s.len());
-        queue.insert(s.iter().next().unwrap());
+        queue.insert(remainder.iter().next().unwrap());
         while let Some(e) = queue.iter().next() {
+            queue.remove(e);
             visited.insert(e);
             let (src, dst) = g.edge_endpoints(EdgeIndex::new(e)).unwrap();
+
             let nl = g.neighbors(src).filter_map(|n| {
                 g.find_edge(src, n).and_then(|f| {
                     let ix = f.index();
