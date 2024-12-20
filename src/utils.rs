@@ -109,12 +109,14 @@ where
 {
     let mut remainder = s.clone();
     let mut components = Vec::new();
-    while !remainder.is_empty() {
-        let mut visited = BitSet::new();
-        visited.reserve_len(s.len());
+    while let Some(c) = remainder.iter().next() {
         let mut queue = BitSet::new();
         queue.reserve_len(s.len());
-        queue.insert(remainder.iter().next().unwrap());
+        queue.insert(c);
+
+        let mut visited = BitSet::new();
+        visited.reserve_len(s.len());
+
         while let Some(e) = queue.iter().next() {
             queue.remove(e);
             visited.insert(e);
