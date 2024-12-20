@@ -197,8 +197,6 @@ pub fn canonize(m: &Molecule) -> String {
         if lexical_cmp(&max_string, &canon_string).is_lt() {
             max_string = canon_string
         }
-        
-        // break;
     }
     return max_string;
 }
@@ -289,14 +287,14 @@ fn print_signature_string(
     }
     print_sign.push(']');
 
-    let dag_childs = &DAG.neighbors_directed(vertex, Outgoing);
-    if dag_childs.clone().count() == 0 { return print_sign; }
+    let mut child_vec = DAG.neighbors_directed(vertex, Outgoing).collect::<Vec<NodeIndex>>();
+    if child_vec.len() == 0 { return print_sign; }
     else {
-        print_sign.push('(');
-
         // sort children in descending order of inv
-        let mut child_vec = dag_childs.clone().collect::<Vec<NodeIndex>>();
+        // let child_vec = dag_childs;
         child_vec.sort_by(|vert_a, vert_b| DAG[*vert_b].inv.cmp(&DAG[*vert_a].inv));
+        
+        print_sign.push('(');
         for child in child_vec {
             if let Some(_edge) = edges.iter().find(|egde| (egde.0 == vertex) && (egde.1 == child)) {}
             else {
@@ -322,12 +320,10 @@ fn invariant_atom(
 ) {
     let mut count = 0;
     loop {
-        let start_inv_atoms = mol_graph.node_indices()
-            .into_iter()
-            .map(|atom_idx| extended_molg_atom_map.get(&atom_idx).unwrap().inv.to_string())
-            .collect::<String>();
-
-        println!("Begin Atom Invariants: {}", start_inv_atoms);
+        let start_inv_atoms = HashSet::<u32>::from_iter(mol_graph.node_indices()
+        .into_iter()
+        .map(|atom_idx| extended_molg_atom_map.get(&atom_idx).unwrap().inv)).len();
+        // println!("Begin Atom Invariants: {}", start_inv_atoms);
 
         /*
         3.1 Generate Invariants for DAG vertex
@@ -375,17 +371,20 @@ fn invariant_atom(
             }
         }
 
-        let end_inv_atoms = mol_graph.node_indices()
-            .into_iter()
-            .map(|atom_idx| extended_molg_atom_map.get(&atom_idx).unwrap().inv.to_string())
-            .collect::<String>();
 
-        println!("End Atom Invariants: {}", end_inv_atoms);
+        let end_inv_atoms = HashSet::<u32>::from_iter(mol_graph.node_indices()
+        .into_iter()
+        .map(|atom_idx| extended_molg_atom_map.get(&atom_idx).unwrap().inv)).len();
 
-        // compare invariants of all the atoms with the one's they started from
+
+        // println!("End Atom Invariants: {}", end_inv_atoms);
+
+        // compare the no. of invariants of all the atoms with the one's they started from
         if start_inv_atoms == end_inv_atoms {break;}
-        if count > 100 {
-            println!("Breaking because the invariants never settle!");
+
+        // Naive way of stopping
+        if count > mol_graph.node_count() {
+            println!("breaking out because reached upper limit!");
             break;
         }
         count +=1;
