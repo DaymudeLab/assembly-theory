@@ -17,7 +17,7 @@ pub fn parse(p: &PathBuf) -> io::Result<molecule::Molecule> {
     let mut curr: Vec<String> = Vec::new();
     for line in contents.lines() {
         match line {
-            "$$$$" => {
+            "$$$$" | "M  END" => {
                 if curr.len() > 0 {
                     graph = Some(parse_one_molecule(&curr));
                 }
