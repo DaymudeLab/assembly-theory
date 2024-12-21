@@ -114,18 +114,17 @@ mod tests {
     use super::*;
 
     // Read Master CSV
-
     fn read_master() -> HashMap<String, u32> {
-        let mut rdr = ReaderBuilder::new()
+        let mut reader = ReaderBuilder::new()
             .from_path("./data/master.csv")
             .expect("data/master.csv does not exist.");
-        let mut master_records: HashMap<String, u32> = HashMap::new();
-        for result in rdr.records() {
+        let mut master_records = HashMap::new();
+        for result in reader.records() {
             let record = result.expect("master.csv is malformed.");
-            let record_vec: Vec<&str> = record.iter().collect();
+            let record = record.iter().collect::<Vec<_>>();
             master_records.insert(
-                record_vec[0].to_string(),
-                record_vec[1]
+                record[0].to_string(),
+                record[1]
                     .to_string()
                     .parse::<u32>()
                     .expect("Assembly index is not an integer."),
@@ -135,66 +134,41 @@ mod tests {
     }
 
     // Read Test CSV
-
-    fn test_setup(filename: String) -> Vec<String> {
-        let mut rdr = ReaderBuilder::new()
+    fn test_setup(filename: &str) {
+        let mut reader = ReaderBuilder::new()
             .from_path(filename)
             .expect("Test file does not exist.");
-        let mut mol_names: Vec<String> = Vec::new();
-        for result in rdr.records() {
+        let mut molecule_names: Vec<String> = Vec::new();
+        for result in reader.records() {
             let record = result.expect("Cannot read test file.");
             for field in &record {
-                mol_names.push(field.to_string());
+                molecule_names.push(field.to_string());
             }
         }
-        mol_names
+        let master_dataset: HashMap<String, u32> = read_master();
+        for name in molecule_names {
+            let path = PathBuf::from(format!("./data/{}", name));
+            let molecule = loader::parse(&path).expect(&format!(
+                "Cannot generate assembly index for molecule: {}.",
+                name
+            ));
+            let index = index(&molecule);
+            assert_eq!(index, *master_dataset.get(&name).unwrap());
+        }
     }
 
     #[test]
     fn test_small() {
-        let master_dataset: HashMap<String, u32> = read_master();
-        let test_mol_names: Vec<String> = test_setup("./tests/suite1.csv".to_string());
-
-        for mol in test_mol_names {
-            let path = PathBuf::from(format!("./data/{}", mol));
-            let molecule = loader::parse(&path).expect(&format!(
-                "Cannot generate assembly index for molecule: {}.",
-                mol
-            ));
-            let index = index(&molecule);
-            assert_eq!(index, *master_dataset.get(&mol).unwrap());
-        }
+        test_setup("./tests/suite1.csv");
     }
 
     #[test]
     fn test_medium() {
-        let master_dataset: HashMap<String, u32> = read_master();
-        let test_mol_names: Vec<String> = test_setup("./tests/suite2.csv".to_string());
-
-        for mol in test_mol_names {
-            let path = PathBuf::from(format!("./data/{}", mol));
-            let molecule = loader::parse(&path).expect(&format!(
-                "Cannot generate assembly index for molecule: {}.",
-                mol
-            ));
-            let index = index(&molecule);
-            assert_eq!(index, *master_dataset.get(&mol).unwrap());
-        }
+        test_setup("./tests/suite2.csv");
     }
 
     #[test]
     fn test_large() {
-        let master_dataset: HashMap<String, u32> = read_master();
-        let test_mol_names: Vec<String> = test_setup("./tests/suite3.csv".to_string());
-
-        for mol in test_mol_names {
-            let path = PathBuf::from(format!("./data/{}", mol));
-            let molecule = loader::parse(&path).expect(&format!(
-                "Cannot generate assembly index for molecule: {}.",
-                mol
-            ));
-            let index = index(&molecule);
-            assert_eq!(index, *master_dataset.get(&mol).unwrap());
-        }
+        test_setup("./tests/suite3.csv");
     }
 }
