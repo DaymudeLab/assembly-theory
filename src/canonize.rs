@@ -1,7 +1,7 @@
 use std::collections::{btree_set::Range, HashMap, HashSet, VecDeque};
-use lexical_sort::{lexical_cmp, lexical_only_alnum_cmp, StringSort};
+use lexical_sort::{cmp, lexical_cmp, lexical_only_alnum_cmp, natural_cmp, StringSort};
 
-use crate::molecule::{Atom, Bond, Molecule};
+use crate::molecule::{Atom, Bond, Molecule, Element};
 use petgraph::{adj::Neighbors, dot::{Config, Dot}, graph::NodeIndex, visit::DfsPostOrder, Directed, Direction::{self, Incoming, Outgoing}, Graph, Undirected};
 
 #[derive(Debug, Clone)]
@@ -40,9 +40,52 @@ impl MolAtomNode {
 
 // Compute the assembly index of a molecule
 pub fn canonize(m: &Molecule) -> String {
-    let mol_graph = m.get_graph().clone();
+    let mol_graph = m.get_graph();
+
+    /*
+    // Dummy Molecule for testing
+
+    let mut mol_graph: Graph<Atom, Bond, Undirected> = Graph::<Atom, Bond, Undirected>::new_undirected();
+
+    let mut vec_nodes: Vec<NodeIndex> = Vec::new();
+    vec_nodes.push(NodeIndex::new(99999));
+    for i in  0..16 {
+        vec_nodes.push(mol_graph.add_node(Atom::new(Element::Carbon))); 
+    }
+    mol_graph.add_edge(vec_nodes[1],vec_nodes[2],Bond::Single);
+    mol_graph.add_edge(vec_nodes[2],vec_nodes[3],Bond::Single);
+    mol_graph.add_edge(vec_nodes[3],vec_nodes[4],Bond::Single);
+    mol_graph.add_edge(vec_nodes[4],vec_nodes[1],Bond::Single);
+
+    mol_graph.add_edge(vec_nodes[1],vec_nodes[5],Bond::Single);
+    mol_graph.add_edge(vec_nodes[2],vec_nodes[7],Bond::Single);
+    mol_graph.add_edge(vec_nodes[3],vec_nodes[9],Bond::Single);
+    mol_graph.add_edge(vec_nodes[4],vec_nodes[11],Bond::Single);
+
+    mol_graph.add_edge(vec_nodes[13],vec_nodes[14],Bond::Single);
+    mol_graph.add_edge(vec_nodes[14],vec_nodes[15],Bond::Single);
+    mol_graph.add_edge(vec_nodes[15],vec_nodes[16],Bond::Single);
+    mol_graph.add_edge(vec_nodes[16],vec_nodes[13],Bond::Single);
+
+    mol_graph.add_edge(vec_nodes[13],vec_nodes[6],Bond::Single);
+    mol_graph.add_edge(vec_nodes[14],vec_nodes[8],Bond::Single);
+    mol_graph.add_edge(vec_nodes[15],vec_nodes[10],Bond::Single);
+    mol_graph.add_edge(vec_nodes[16],vec_nodes[12],Bond::Single);
+
+    mol_graph.add_edge(vec_nodes[12],vec_nodes[5],Bond::Single);
+    mol_graph.add_edge(vec_nodes[6],vec_nodes[7],Bond::Single);
+    mol_graph.add_edge(vec_nodes[8],vec_nodes[9],Bond::Single);
+    mol_graph.add_edge(vec_nodes[10],vec_nodes[11],Bond::Single);
+
+    mol_graph.add_edge(vec_nodes[12],vec_nodes[11],Bond::Single);
+    mol_graph.add_edge(vec_nodes[6],vec_nodes[5],Bond::Single);
+    mol_graph.add_edge(vec_nodes[8],vec_nodes[7],Bond::Single);
+    mol_graph.add_edge(vec_nodes[10],vec_nodes[9],Bond::Single);
+     */
+
     let mut max_string = String::new();
     for root in mol_graph.node_indices() {
+        // let root = vec_nodes[1];
         // for each node in the molecule graph create a signature
         /*
         1. create a DAG from each start node
@@ -182,7 +225,7 @@ pub fn canonize(m: &Molecule) -> String {
         let mut order_idx:HashMap<String, u32> = HashMap::new();
 
         for (idx, order_str) in ordered_vec.iter().enumerate() {
-            order_idx.insert(order_str.clone(), idx as u32);
+            order_idx.insert(order_str.clone(), (idx as u32)+1);
         }
 
         // update the molecule graph invariant based on order idx of lexico-sort of (atom_type,#parents in DAG)
@@ -320,9 +363,14 @@ fn invariant_atom(
 ) {
     let mut count = 0;
     loop {
-        let start_inv_atoms = HashSet::<u32>::from_iter(mol_graph.node_indices()
+        // let start_inv_atoms = HashSet::<u32>::from_iter(mol_graph.node_indices()
+        // .into_iter()
+        // .map(|atom_idx| extended_molg_atom_map.get(&atom_idx).unwrap().inv)).len();
+
+        // Better stopping condition ??
+        let start_inv_atoms = mol_graph.node_indices()
         .into_iter()
-        .map(|atom_idx| extended_molg_atom_map.get(&atom_idx).unwrap().inv)).len();
+        .filter(|atom_idx| extended_molg_atom_map.get(&atom_idx).unwrap().inv == 0).count();
         // println!("Begin Atom Invariants: {}", start_inv_atoms);
 
         /*
@@ -333,13 +381,13 @@ fn invariant_atom(
         invariant_dag_vert(&mut DAG, &extended_molg_atom_map, &dag_level_list, max_level, true);
 
         // println!("DAG after bottom invariants");
-        // println!("{:?}", Dot::with_config(&DAG, &[Config::EdgeNoLabel]));
+        // println!("{:?}", Dot::with_config(&*DAG, &[Config::EdgeNoLabel]));
 
         // then top-down
         invariant_dag_vert(&mut DAG, &extended_molg_atom_map, &dag_level_list, max_level, false);
 
         // println!("DAG after top invariants");
-        // println!("{:?}", Dot::with_config(&DAG, &[Config::EdgeNoLabel]));
+        // println!("{:?}", Dot::with_config(&*DAG, &[Config::EdgeNoLabel]));
 
         // Create a vector for each atom in molecule graph based on associated vertex in  
         let mut order_map_vert_atom: HashMap<NodeIndex, Vec<u32>> = HashMap::new();
@@ -359,22 +407,26 @@ fn invariant_atom(
             order_to_atom.entry(order_str).and_modify(|atom_list| atom_list.push(atom)).or_insert([atom].to_vec());
         }
 
-        // lexico-sort the vectors-strings in descending order
+        // lexico-sort the vectors-strings
         let mut atom_ordered_vec: Vec<_> = order_to_atom.keys().into_iter().collect();
         atom_ordered_vec.string_sort_unstable(lexical_only_alnum_cmp);
-        atom_ordered_vec.reverse();
 
         // assign the invariant of atom as the order of vectors-strings
         for (idx, order) in atom_ordered_vec.iter().enumerate() {
             for atom in order_to_atom.get(*order).unwrap() {
-                extended_molg_atom_map.entry(*atom).and_modify(|atom_node| atom_node.inv = idx as u32);
+                extended_molg_atom_map.entry(*atom).and_modify(|atom_node| atom_node.inv = (idx as u32)+1);
             }
         }
 
 
-        let end_inv_atoms = HashSet::<u32>::from_iter(mol_graph.node_indices()
+        // let end_inv_atoms = HashSet::<u32>::from_iter(mol_graph.node_indices()
+        // .into_iter()
+        // .map(|atom_idx| extended_molg_atom_map.get(&atom_idx).unwrap().inv)).len();
+
+        // Better stopping condition ??
+        let end_inv_atoms = mol_graph.node_indices()
         .into_iter()
-        .map(|atom_idx| extended_molg_atom_map.get(&atom_idx).unwrap().inv)).len();
+        .filter(|atom_idx| extended_molg_atom_map.get(&atom_idx).unwrap().inv == 0).count();
 
 
         // println!("End Atom Invariants: {}", end_inv_atoms);
@@ -410,25 +462,31 @@ fn invariant_dag_vert(
                 let atom_node = extended_molg_atom_map.get(&atom_idx_for_vert).unwrap();
                 let (atom_color, atom_inv) = (atom_node.color, atom_node.inv);
                 let mut vert_order = format!("{}{}", atom_color, atom_inv);
-                
+                let mut child_inv_set: Vec<u32> = Vec::new();
+
                 if bottom {
                     for vert_neigh in DAG.neighbors_directed(*vert, Outgoing) {
-                        vert_order.push_str(&format!("{}", DAG[vert_neigh].inv));
+                        child_inv_set.push(DAG[vert_neigh].inv);
                     }
                 }
                 else {
                     for vert_neigh in DAG.neighbors_directed(*vert, Incoming) {
-                        vert_order.push_str(&format!("{}", DAG[vert_neigh].inv));
+                        child_inv_set.push(DAG[vert_neigh].inv);
                     }
                 }
-                
-                DAG[*vert].order = vert_order.clone();
-                order_str_set.insert(vert_order);
+
+                child_inv_set.sort();
+                child_inv_set.reverse();
+                child_inv_set.iter().for_each(|val| vert_order.push_str(&format!("{}", *val)));
+
+                let vec_string = format!("{:0>20}", vert_order);
+                DAG[*vert].order = vec_string.clone();
+                order_str_set.insert(vec_string);
             }
 
             // lexico-sort the invariant-strings in descending order
-            let mut ordered_vec: Vec<_> = order_str_set.into_iter().collect();
-            ordered_vec.string_sort_unstable(lexical_only_alnum_cmp);
+            let mut ordered_vec: Vec<String> = order_str_set.into_iter().collect();
+            ordered_vec.string_sort_unstable(natural_cmp);
             ordered_vec.reverse();
 
             let mut order_idx:HashMap<String, u32> = HashMap::new();
