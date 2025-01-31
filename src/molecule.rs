@@ -314,6 +314,7 @@ pub fn isomorphic_subgraphs_of(pattern: &MGraph, target: &MSubgraph) -> Vec<Vec<
 }
 
 mod tests {
+    #![allow(unused_imports)]
     use super::*;
 
     #[test]
