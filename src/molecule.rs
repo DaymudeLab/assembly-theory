@@ -67,17 +67,17 @@ impl Molecule {
 
         for ix in other.graph.node_indices() {
             if !v_set.contains(&ix) {
-                let w = *other.graph.node_weight(ix).unwrap();
+                let w = *other.graph.node_weight(ix)?;
                 let out = output_graph.graph.add_node(w);
                 io_map.insert(ix, out);
             }
         }
 
         for ix in other.graph.edge_indices() {
-            let (u, v) = other.graph.edge_endpoints(ix).unwrap();
-            let um = io_map.get(&u).unwrap();
-            let vm = io_map.get(&v).unwrap();
-            let w = *other.graph.edge_weight(ix).unwrap();
+            let (u, v) = other.graph.edge_endpoints(ix)?;
+            let um = io_map.get(&u)?;
+            let vm = io_map.get(&v)?;
+            let w = *other.graph.edge_weight(ix)?;
 
             output_graph.graph.add_edge(*um, *vm, w);
         }
@@ -197,22 +197,18 @@ impl Molecule {
         right: BTreeSet<EdgeIndex<Index>>,
         solutions: &mut SolutionPairs,
     ) {
-        if remaining_edges.is_empty() {
-            if self.is_valid_partition(&left, &right) {
-                solutions.insert((left, right));
-            }
-            return;
+        if let Some(suffix) = remaining_edges.pop() {
+            let mut lc = left.clone();
+            lc.insert(suffix);
+
+            let mut rc = right.clone();
+            rc.insert(suffix);
+
+            self.backtrack(remaining_edges.clone(), lc, right, solutions);
+            self.backtrack(remaining_edges, left, rc, solutions);
+        } else if self.is_valid_partition(&left, &right) {
+            solutions.insert((left, right));
         }
-
-        let suffix = remaining_edges.pop().unwrap();
-        let mut lc = left.clone();
-        lc.insert(suffix);
-
-        let mut rc = right.clone();
-        rc.insert(suffix);
-
-        self.backtrack(remaining_edges.clone(), lc, right, solutions);
-        self.backtrack(remaining_edges, left, rc, solutions);
     }
 
     fn is_valid_partition(
