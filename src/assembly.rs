@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, u32};
+use std::collections::BTreeSet;
 
 use bit_set::BitSet;
 
@@ -28,13 +28,12 @@ fn remnant_search(m: &Molecule) -> u32 {
     fn recurse(
         m: &Molecule,
         matches: &BTreeSet<(BitSet, BitSet)>,
-        fragments: &Vec<BitSet>,
+        fragments: &[BitSet],
         ix: usize,
-        depth: usize,
     ) -> usize {
         let mut cx = ix;
         for (h1, h2) in matches {
-            let mut fractures = fragments.clone();
+            let mut fractures = fragments.to_owned();
             let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
             let f2 = fragments.iter().enumerate().find(|(_, c)| h2.is_subset(c));
 
@@ -71,7 +70,6 @@ fn remnant_search(m: &Molecule) -> u32 {
                     matches,
                     &fractures,
                     ix - h1.len() + 1,
-                    depth + 1,
                 ));
             }
         }
@@ -84,9 +82,8 @@ fn remnant_search(m: &Molecule) -> u32 {
     recurse(
         m,
         &m.matches().collect(),
-        &vec![init],
+        &[init],
         m.graph().edge_count() - 1,
-        0,
     ) as u32
 }
 

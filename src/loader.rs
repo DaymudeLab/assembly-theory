@@ -8,14 +8,14 @@ use std::{
 };
 
 pub fn parse(p: &PathBuf) -> io::Result<molecule::Molecule> {
-    let contents = fs::read_to_string(&p).expect("Should have been able to read the file");
+    let contents = fs::read_to_string(p).expect("Should have been able to read the file");
 
     let mut graph: Option<MGraph> = None;
     let mut curr: Vec<String> = Vec::new();
     for line in contents.lines() {
         match line {
             "$$$$" | "M  END" => {
-                if curr.len() > 0 {
+                if !curr.is_empty() {
                     graph = Some(parse_one_molecule(&curr));
                 }
                 curr.clear();
@@ -27,16 +27,16 @@ pub fn parse(p: &PathBuf) -> io::Result<molecule::Molecule> {
     }
 
     if let Some(mol_graph) = graph {
-        return Ok(Molecule::from_graph(mol_graph));
+        Ok(Molecule::from_graph(mol_graph))
     } else {
-        return Err(Error::new(
+        Err(Error::new(
             io::ErrorKind::InvalidData,
             "Something broke while parsing",
-        ));
+        ))
     }
 }
 
-pub fn parse_one_molecule(mol_data: &Vec<String>) -> MGraph {
+pub fn parse_one_molecule(mol_data: &[String]) -> MGraph {
     let mut mol_graph = MGraph::default();
 
     let (num_atoms, num_bonds) = parse_counts_line(&mol_data[3]);
@@ -47,7 +47,7 @@ pub fn parse_one_molecule(mol_data: &Vec<String>) -> MGraph {
     let mut atoms: Vec<&str> = Vec::with_capacity(num_atoms as usize);
     let mut atom_node_ids: Vec<NodeIndex<Index>> = Vec::new();
     // Atoms block parse
-    for (_, atom_line) in mol_data[4..atom_start_l].iter().enumerate() {
+    for atom_line in mol_data[4..atom_start_l].iter() {
         let atom = parse_atom_line(atom_line);
         atoms.push(atom);
         match atom {
@@ -60,7 +60,7 @@ pub fn parse_one_molecule(mol_data: &Vec<String>) -> MGraph {
     }
 
     // Bonds block parse
-    for (_, bond_line) in mol_data[atom_start_l..bond_start_l].iter().enumerate() {
+    for bond_line in mol_data[atom_start_l..bond_start_l].iter() {
         let (atom_one, atom_two, bond_type) = parse_bond_line(bond_line);
         let atom_one_idx = atom_one - 1;
         let atom_two_idx = atom_two - 1;
@@ -79,18 +79,18 @@ pub fn parse_one_molecule(mol_data: &Vec<String>) -> MGraph {
     mol_graph
 }
 
-fn parse_counts_line(counts_line: &String) -> (u32, u32) {
+fn parse_counts_line(counts_line: &str) -> (u32, u32) {
     (
         counts_line[0..3].trim().parse().unwrap(),
         counts_line[3..6].trim().parse().unwrap(),
     )
 }
 
-fn parse_atom_line(atom_line: &String) -> &str {
+fn parse_atom_line(atom_line: &str) -> &str {
     atom_line[31..34].trim()
 }
 
-fn parse_bond_line(bond_line: &String) -> (u32, u32, u32) {
+fn parse_bond_line(bond_line: &str) -> (u32, u32, u32) {
     (
         bond_line[0..3].trim().parse().unwrap(),
         bond_line[3..6].trim().parse().unwrap(),
