@@ -12,6 +12,7 @@ use crate::utils::{edge_induced_subgraph, edges_contained_within, is_subset_conn
 pub type Index = u32;
 pub type MGraph = Graph<Atom, Bond, Undirected, Index>;
 type MSubgraph = Graph<Atom, Option<Bond>, Undirected, Index>;
+type SolutionPairs = HashSet<(BTreeSet<EdgeIndex<Index>>, BTreeSet<EdgeIndex<Index>>)>;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Element {
@@ -194,7 +195,7 @@ impl Molecule {
         mut remaining_edges: Vec<EdgeIndex<Index>>,
         left: BTreeSet<EdgeIndex<Index>>,
         right: BTreeSet<EdgeIndex<Index>>,
-        solutions: &mut HashSet<(BTreeSet<EdgeIndex<Index>>, BTreeSet<EdgeIndex<Index>>)>,
+        solutions: &mut SolutionPairs,
     ) {
         if remaining_edges.is_empty() {
             if self.is_valid_partition(&left, &right) {

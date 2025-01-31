@@ -36,7 +36,7 @@ pub fn parse(p: &PathBuf) -> io::Result<molecule::Molecule> {
     }
 }
 
-pub fn parse_one_molecule(mol_data: &Vec<String>) -> MGraph {
+pub fn parse_one_molecule(mol_data: &[String]) -> MGraph {
     let mut mol_graph = MGraph::default();
 
     let (num_atoms, num_bonds) = parse_counts_line(&mol_data[3]);
@@ -79,18 +79,18 @@ pub fn parse_one_molecule(mol_data: &Vec<String>) -> MGraph {
     mol_graph
 }
 
-fn parse_counts_line(counts_line: &String) -> (u32, u32) {
+fn parse_counts_line(counts_line: &str) -> (u32, u32) {
     (
         counts_line[0..3].trim().parse().unwrap(),
         counts_line[3..6].trim().parse().unwrap(),
     )
 }
 
-fn parse_atom_line(atom_line: &String) -> &str {
+fn parse_atom_line(atom_line: &str) -> &str {
     atom_line[31..34].trim()
 }
 
-fn parse_bond_line(bond_line: &String) -> (u32, u32, u32) {
+fn parse_bond_line(bond_line: &str) -> (u32, u32, u32) {
     (
         bond_line[0..3].trim().parse().unwrap(),
         bond_line[3..6].trim().parse().unwrap(),
