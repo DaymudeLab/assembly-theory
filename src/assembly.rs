@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, u32};
+use std::collections::BTreeSet;
 
 use bit_set::BitSet;
 

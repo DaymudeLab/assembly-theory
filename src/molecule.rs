@@ -66,7 +66,7 @@ impl Molecule {
 
         for ix in other.graph.node_indices() {
             if !v_set.contains(&ix) {
-                let w = other.graph.node_weight(ix).unwrap().clone();
+                let w = *other.graph.node_weight(ix).unwrap();
                 let out = output_graph.graph.add_node(w);
                 io_map.insert(ix, out);
             }
@@ -76,7 +76,7 @@ impl Molecule {
             let (u, v) = other.graph.edge_endpoints(ix).unwrap();
             let um = io_map.get(&u).unwrap();
             let vm = io_map.get(&v).unwrap();
-            let w = other.graph.edge_weight(ix).unwrap().clone();
+            let w = *other.graph.edge_weight(ix).unwrap();
 
             output_graph.graph.add_edge(*um, *vm, w);
         }
@@ -133,10 +133,8 @@ impl Molecule {
             subset.insert(*v);
             neighbors.extend(self.graph.neighbors(*v));
             self.generate_connected_subgraphs(remainder, subset, neighbors, solutions);
-        } else {
-            if subset.len() > 2 {
-                solutions.insert(subset);
-            }
+        } else if subset.len() > 2 {
+            solutions.insert(subset);
         }
     }
 
@@ -306,7 +304,7 @@ pub fn isomorphic_subgraphs_of(pattern: &MGraph, target: &MSubgraph) -> Vec<Vec<
             e1.is_some_and(|e| *e0 == e)
         })
     {
-        iter.map(|v| v.into_iter().map(|u| NodeIndex::new(u)).collect())
+        iter.map(|v| v.into_iter().map(NodeIndex::new).collect())
             .collect()
     } else {
         Vec::new()
