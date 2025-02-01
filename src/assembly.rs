@@ -1,4 +1,4 @@
-use std::cmp::Ordering;
+use std::{cmp::Ordering, collections::BTreeSet};
 
 use bit_set::BitSet;
 
@@ -24,6 +24,64 @@ fn top_down_search(m: &Molecule) -> u32 {
         ix = ix.min(l.max(r) + 1)
     }
     ix
+}
+
+fn naive_search(m: &Molecule) -> u32 {
+    fn recurse(
+        m: &Molecule,
+        matches: &BTreeSet<(BitSet, BitSet)>,
+        fragments: &[BitSet],
+        ix: usize,
+    ) -> usize {
+        let mut cx = ix;
+        for (h1, h2) in matches {
+            let mut fractures = fragments.to_owned();
+            let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
+            let f2 = fragments.iter().enumerate().find(|(_, c)| h2.is_subset(c));
+
+            // All of these clones are on bitsets and cheap enough
+            if let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) {
+                if f1 == f2 {
+                    let mut union = h1.clone();
+                    union.union_with(h2);
+                    let mut difference = f1.clone();
+                    difference.difference_with(&union);
+                    let c = connected_components_under_edges(m.graph(), &difference);
+                    fractures.extend(c);
+                    fractures.swap_remove(i1);
+                    fractures.push(h1.clone());
+                } else {
+                    let mut f1r = f1.clone();
+                    f1r.difference_with(h1);
+                    let mut f2r = f2.clone();
+                    f2r.difference_with(h2);
+
+                    let c1 = connected_components_under_edges(m.graph(), &f1r);
+                    let c2 = connected_components_under_edges(m.graph(), &f2r);
+
+                    fractures.extend(c1);
+                    fractures.extend(c2);
+
+                    fractures.swap_remove(i1.max(i2));
+                    fractures.swap_remove(i1.min(i2));
+
+                    fractures.push(h1.clone());
+                }
+                cx = cx.min(recurse(m, matches, &fractures, ix - h1.len() + 1));
+            }
+        }
+        cx
+    }
+
+    let mut init = BitSet::new();
+    init.extend(m.graph().edge_indices().map(|ix| ix.index()));
+
+    recurse(
+        m,
+        &m.matches().collect(),
+        &[init],
+        m.graph().edge_count() - 1,
+    ) as u32
 }
 
 fn remnant_search(m: &Molecule) -> (u32, u32) {
@@ -137,6 +195,10 @@ pub fn index(m: &Molecule) -> u32 {
     remnant_search(m).0
 }
 
+pub fn naive_index(m: &Molecule) -> u32 {
+    naive_search(m)
+}
+
 pub fn depth(m: &Molecule) -> u32 {
     top_down_search(m)
 }
@@ -145,7 +207,7 @@ pub fn search_space(m: &Molecule) -> u32 {
     m.matches().count() as u32
 }
 
-pub fn addition_chain_bound(m: usize, fragments: &Vec<BitSet>) -> usize {
+pub fn addition_chain_bound(m: usize, fragments: &[BitSet]) -> usize {
     let mut max_s: usize = 0;
     let mut frag_sizes: Vec<usize> = Vec::new();
 
@@ -203,7 +265,7 @@ pub fn unique_edges(fragment: &BitSet, mol: &Molecule) -> usize {
     z
 }
 
-pub fn vec_chain_bound(m: usize, fragments: &Vec<BitSet>, mol: &Molecule) -> usize {
+pub fn vec_chain_bound(m: usize, fragments: &[BitSet], mol: &Molecule) -> usize {
     let mut max_s: usize = 0;
     let mut frag_sizes: Vec<usize> = Vec::new();
 
@@ -233,7 +295,7 @@ pub fn vec_chain_bound(m: usize, fragments: &Vec<BitSet>, mol: &Molecule) -> usi
     max_s
 }
 
-pub fn vec_chain_bound2(m: usize, fragments: &Vec<BitSet>, mol: &Molecule) -> usize {
+pub fn vec_chain_bound2(m: usize, fragments: &[BitSet], mol: &Molecule) -> usize {
     // Calculate s (total number of edges)
     // Calculate z (number of unique edges)
     let mut s = 0;
