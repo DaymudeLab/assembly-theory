@@ -12,6 +12,8 @@ use crate::utils::{edge_induced_subgraph, edges_contained_within, is_subset_conn
 pub type Index = u32;
 pub type MGraph = Graph<Atom, Bond, Undirected, Index>;
 type MSubgraph = Graph<Atom, Option<Bond>, Undirected, Index>;
+type EdgeSet = BTreeSet<EdgeIndex<Index>>;
+type NodeSet = BTreeSet<NodeIndex<Index>>;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd)]
 pub enum Element {
@@ -56,7 +58,7 @@ impl Molecule {
     ) -> Option<Molecule> {
         let mut output_graph = self.clone();
 
-        let mut v_set = HashSet::<NodeIndex<Index>>::new();
+        let mut v_set = NodeSet::new();
         let mut io_map = HashMap::<NodeIndex<Index>, NodeIndex<Index>>::new();
 
         for (u, v) in on.into_iter() {
@@ -66,17 +68,17 @@ impl Molecule {
 
         for ix in other.graph.node_indices() {
             if !v_set.contains(&ix) {
-                let w = other.graph.node_weight(ix).unwrap().clone();
+                let w = *other.graph.node_weight(ix)?;
                 let out = output_graph.graph.add_node(w);
                 io_map.insert(ix, out);
             }
         }
 
         for ix in other.graph.edge_indices() {
-            let (u, v) = other.graph.edge_endpoints(ix).unwrap();
-            let um = io_map.get(&u).unwrap();
-            let vm = io_map.get(&v).unwrap();
-            let w = other.graph.edge_weight(ix).unwrap().clone();
+            let (u, v) = other.graph.edge_endpoints(ix)?;
+            let um = io_map.get(&u)?;
+            let vm = io_map.get(&v)?;
+            let w = *other.graph.edge_weight(ix)?;
 
             output_graph.graph.add_edge(*um, *vm, w);
         }
@@ -92,7 +94,7 @@ impl Molecule {
         is_isomorphic_subgraph(&self.graph, &other.graph)
     }
 
-    pub fn enumerate_subgraphs(&self) -> impl Iterator<Item = BTreeSet<NodeIndex<Index>>> {
+    pub fn enumerate_subgraphs(&self) -> impl Iterator<Item = NodeSet> {
         let mut solutions = HashSet::new();
         let remainder = BTreeSet::from_iter(self.graph.node_indices());
         self.generate_connected_subgraphs(
@@ -109,10 +111,10 @@ impl Molecule {
     // https://stackoverflow.com/a/15658245
     fn generate_connected_subgraphs(
         &self,
-        mut remainder: BTreeSet<NodeIndex<Index>>,
-        mut subset: BTreeSet<NodeIndex<Index>>,
-        mut neighbors: BTreeSet<NodeIndex<Index>>,
-        solutions: &mut HashSet<BTreeSet<NodeIndex<Index>>>,
+        mut remainder: NodeSet,
+        mut subset: NodeSet,
+        mut neighbors: NodeSet,
+        solutions: &mut HashSet<NodeSet>,
     ) {
         let candidates = if subset.is_empty() {
             remainder.clone()
@@ -133,10 +135,8 @@ impl Molecule {
             subset.insert(*v);
             neighbors.extend(self.graph.neighbors(*v));
             self.generate_connected_subgraphs(remainder, subset, neighbors, solutions);
-        } else {
-            if subset.len() > 2 {
-                solutions.insert(subset);
-            }
+        } else if subset.len() > 2 {
+            solutions.insert(subset);
         }
     }
 
@@ -166,7 +166,6 @@ impl Molecule {
                 matches.insert(if c < h { (c, h) } else { (h, c) });
             }
         }
-        
         matches.into_iter()
     }
 
@@ -194,32 +193,28 @@ impl Molecule {
     fn backtrack(
         &self,
         mut remaining_edges: Vec<EdgeIndex<Index>>,
-        left: BTreeSet<EdgeIndex<Index>>,
-        right: BTreeSet<EdgeIndex<Index>>,
-        solutions: &mut HashSet<(BTreeSet<EdgeIndex<Index>>, BTreeSet<EdgeIndex<Index>>)>,
+        left: EdgeSet,
+        right: EdgeSet,
+        solutions: &mut HashSet<(EdgeSet, EdgeSet)>,
     ) {
-        if remaining_edges.is_empty() {
-            if self.is_valid_partition(&left, &right) {
-                solutions.insert((left, right));
-            }
-            return;
+        if let Some(suffix) = remaining_edges.pop() {
+            let mut lc = left.clone();
+            lc.insert(suffix);
+
+            let mut rc = right.clone();
+            rc.insert(suffix);
+
+            self.backtrack(remaining_edges.clone(), lc, right, solutions);
+            self.backtrack(remaining_edges, left, rc, solutions);
+        } else if self.is_valid_partition(&left, &right) {
+            solutions.insert((left, right));
         }
-
-        let suffix = remaining_edges.pop().unwrap();
-        let mut lc = left.clone();
-        lc.insert(suffix);
-
-        let mut rc = right.clone();
-        rc.insert(suffix);
-
-        self.backtrack(remaining_edges.clone(), lc, right, solutions);
-        self.backtrack(remaining_edges, left, rc, solutions);
     }
 
     fn is_valid_partition(
         &self,
-        left: &BTreeSet<EdgeIndex<Index>>,
-        right: &BTreeSet<EdgeIndex<Index>>,
+        left: &EdgeSet,
+        right: &EdgeSet,
     ) -> bool {
         !left.is_empty()
             && !right.is_empty()
@@ -306,7 +301,7 @@ pub fn isomorphic_subgraphs_of(pattern: &MGraph, target: &MSubgraph) -> Vec<Vec<
             e1.is_some_and(|e| *e0 == e)
         })
     {
-        iter.map(|v| v.into_iter().map(|u| NodeIndex::new(u)).collect())
+        iter.map(|v| v.into_iter().map(NodeIndex::new).collect())
             .collect()
     } else {
         Vec::new()
@@ -314,6 +309,7 @@ pub fn isomorphic_subgraphs_of(pattern: &MGraph, target: &MSubgraph) -> Vec<Vec<
 }
 
 mod tests {
+    #![allow(unused_imports)]
     use super::*;
 
     #[test]

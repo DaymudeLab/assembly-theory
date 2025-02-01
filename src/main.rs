@@ -1,19 +1,8 @@
 use std::path::PathBuf;
 
-use assembly::{depth, index, search_space};
 use clap::{Parser, ValueEnum};
-
-// Molecule definition, joining operation
-mod molecule;
-
-// Data IO
-mod loader;
-
-// The hard bit: compute assembly index
-mod assembly;
-
-// Utility functions
-mod utils;
+use fastassembly::assembly::{depth, index, search_space};
+use fastassembly::loader;
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
 enum Measure {

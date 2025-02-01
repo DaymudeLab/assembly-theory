@@ -30,7 +30,7 @@ fn remnant_search(m: &Molecule) -> (u32, u32) {
     fn recurse(
         m: &Molecule,
         matches: &[(BitSet, BitSet)],
-        fragments: &Vec<BitSet>,
+        fragments: &[<BitSet>],
         ix: usize,
         largest_remove: usize,
         best: usize,
@@ -55,7 +55,7 @@ fn remnant_search(m: &Molecule) -> (u32, u32) {
         //if addition_chain_bound(largest_remove, fragments) == 0 {return ix}
 
         for (i, (h1, h2)) in matches.iter().enumerate() {
-            let mut fractures = fragments.clone();
+            let mut fractures = fragments.to_owned();
             let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
             let f2 = fragments.iter().enumerate().find(|(_, c)| h2.is_subset(c));
 
@@ -122,7 +122,7 @@ fn remnant_search(m: &Molecule) -> (u32, u32) {
     let ans = recurse(
         m,
         &matches,
-        &vec![init],
+        &[init],
         m.graph().edge_count() - 1,
         m.graph().edge_count(),
         m.graph().edge_count() - 1,

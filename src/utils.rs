@@ -23,18 +23,18 @@ where
         let (src, dst) = g.edge_endpoints(e).unwrap();
         let nl = g.neighbors(src).filter_map(|n| {
             g.find_edge(src, n)
-                .filter(|f| *f != e && s.contains(&f) && !visited.contains(f))
+                .filter(|f| *f != e && s.contains(f) && !visited.contains(f))
         });
 
         let nr = g.neighbors(dst).filter_map(|n| {
             g.find_edge(dst, n)
-                .filter(|f| *f != e && s.contains(&f) && !visited.contains(f))
+                .filter(|f| *f != e && s.contains(f) && !visited.contains(f))
         });
         queue.extend(nl);
         queue.extend(nr);
     }
 
-    return visited.len() == s.len();
+    visited.len() == s.len()
 }
 
 pub fn edge_induced_subgraph<N, E, Ty, Ix>(
