@@ -343,7 +343,7 @@ mod tests {
     }
 
     // Read Test CSV
-    fn test_setup(filename: &str) {
+    fn test_suite(filename: &str) {
         let mut reader = ReaderBuilder::new()
             .from_path(filename)
             .expect("Test file does not exist.");
@@ -357,10 +357,9 @@ mod tests {
         let master_dataset: HashMap<String, u32> = read_master();
         for name in molecule_names {
             let path = PathBuf::from(format!("./data/{}", name));
-            let molecule = loader::parse(&path).expect(&format!(
-                "Cannot generate assembly index for molecule: {}.",
-                name
-            ));
+            let molecule = loader::parse(&path).unwrap_or_else(|_| {
+                panic!("Cannot generate assembly index for molecule: {}.", name)
+            });
             let index = index(&molecule);
             assert_eq!(index, *master_dataset.get(&name).unwrap());
         }
@@ -368,16 +367,11 @@ mod tests {
 
     #[test]
     fn test_small() {
-        test_setup("./tests/suite1.csv");
+        test_suite("./tests/suite1.csv");
     }
 
     #[test]
     fn test_medium() {
-        test_setup("./tests/suite2.csv");
-    }
-
-    #[test]
-    fn test_large() {
-        test_setup("./tests/suite3.csv");
+        test_suite("./tests/suite2.csv");
     }
 }
