@@ -15,7 +15,7 @@ type MSubgraph = Graph<Atom, Option<Bond>, Undirected, Index>;
 type EdgeSet = BTreeSet<EdgeIndex<Index>>;
 type NodeSet = BTreeSet<NodeIndex<Index>>;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd)]
 pub enum Element {
     Hydrogen,
     Carbon,
@@ -25,7 +25,7 @@ pub enum Element {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Atom {
-    element: Element,
+    pub element: Element,
     capacity: u32,
 }
 
@@ -166,7 +166,6 @@ impl Molecule {
                 matches.insert(if c < h { (c, h) } else { (h, c) });
             }
         }
-
         matches.into_iter()
     }
 

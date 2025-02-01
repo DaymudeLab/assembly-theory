@@ -23,6 +23,7 @@ struct Cli {
 fn main() -> std::io::Result<()> {
     let cli = Cli::parse();
     let molecule = loader::parse(&cli.path)?;
+
     let ix = if let Some(m) = cli.measure {
         match m {
             Measure::NaiveIndex => index(&molecule),
