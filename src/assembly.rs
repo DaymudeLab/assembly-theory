@@ -1,9 +1,10 @@
-use std::{cmp::Ordering, collections::BTreeSet, u32};
+use std::cmp::Ordering;
 
 use bit_set::BitSet;
 
-
-use crate::{molecule::Molecule, molecule::Bond, molecule::Element, utils::connected_components_under_edges};
+use crate::{
+    molecule::Bond, molecule::Element, molecule::Molecule, utils::connected_components_under_edges,
+};
 
 fn top_down_search(m: &Molecule) -> u32 {
     let mut ix = u32::MAX;
@@ -25,13 +26,12 @@ fn top_down_search(m: &Molecule) -> u32 {
     ix
 }
 
-fn remnant_search(m: &Molecule) -> u32 {
+fn remnant_search(m: &Molecule) -> (u32, u32) {
     fn recurse(
         m: &Molecule,
         matches: &[(BitSet, BitSet)],
         fragments: &Vec<BitSet>,
         ix: usize,
-        depth: usize,
         largest_remove: usize,
         best: usize,
         ts: &mut u32,
@@ -42,7 +42,7 @@ fn remnant_search(m: &Molecule) -> u32 {
         *ts += 1;
         // Branch and Bound
         // Seet function
-        
+
         if ix - addition_chain_bound(largest_remove, fragments) >= best {
             return ix;
         }
@@ -86,41 +86,21 @@ fn remnant_search(m: &Molecule) -> u32 {
                     fractures.swap_remove(i1.max(i2));
                     fractures.swap_remove(i1.min(i2));
                 }
-                
+
                 fractures.retain(|i| i.len() > 1);
                 fractures.push(h1.clone());
 
                 cx = cx.min(recurse(
                     m,
-                    &matches[i+1..],
+                    &matches[i + 1..],
                     &fractures,
                     ix - h1.len() + 1,
-                    depth + 1,
                     largest_remove,
                     bestx,
                     ts,
                 ));
                 bestx = bestx.min(cx);
             }
-        }
-
-        // Comparisions of bounds to ground truth
-        
-        let a = addition_chain_bound(largest_remove, fragments);
-        let v1 = vec_chain_bound(largest_remove, fragments, m);
-        let v2 = vec_chain_bound2(largest_remove, fragments, m);
-        /*if (*ts % 1000 == 0) {
-            println!("Current Optimum: {}", best);
-            println!("Seet Bound: {} ({})", ix - a, a);
-            println!("Vec1 Bound {} ({})", ix-v1, v1);
-            println!("Vec2 Bound: {} ({})", ix - v2, v2);
-            println!("Ground Truth: {}", cx);
-
-            println!("{}, {:?}", largest_remove, fragments);
-            println!();
-        }*/
-        if (ix - a > cx) || (ix - v1 > cx) || (ix - v2 > cx) {
-            panic!("Theory error: one of the bounds is incorrect");
         }
 
         cx
@@ -131,50 +111,30 @@ fn remnant_search(m: &Molecule) -> u32 {
 
     // Create and sort matches array
     let mut matches: Vec<(BitSet, BitSet)> = m.matches().collect();
-    matches.sort_by(|a, b| my_sort(a, b));
+    matches.sort_by(my_sort);
 
     fn my_sort(e1: &(BitSet, BitSet), e2: &(BitSet, BitSet)) -> Ordering {
-        if e1.0.len() == e2.0.len() {
-            Ordering::Equal
-        } else if e1.0.len() > e2.0.len() {
-            Ordering::Less
-        } else {
-            Ordering::Greater
-        }
+        e1.0.len().cmp(&e2.0.len())
     }
-
-    // Print matches
-    /*for elem in matches.iter() {
-        println!("{:?}", elem);
-    }
-    println!();*/
 
     let mut total_search = 0;
-
-    use std::time::Instant;
-    let now = Instant::now();
 
     let ans = recurse(
         m,
         &matches,
         &vec![init],
         m.graph().edge_count() - 1,
-        0,
         m.graph().edge_count(),
         m.graph().edge_count() - 1,
         &mut total_search,
     ) as u32;
 
-    let elapsed = now.elapsed();
-
-    println!("Number states searched: {total_search}\nTime: {:.2?}", elapsed);
-
-    return ans;
+    (ans, total_search)
 }
 
 // Compute the assembly index of a molecule
 pub fn index(m: &Molecule) -> u32 {
-    remnant_search(m)
+    remnant_search(m).0
 }
 
 pub fn depth(m: &Molecule) -> u32 {
@@ -195,7 +155,7 @@ pub fn addition_chain_bound(m: usize, fragments: &Vec<BitSet>) -> usize {
 
     let size_sum: usize = frag_sizes.iter().sum();
 
-    for max in 2..m+1 {
+    for max in 2..m + 1 {
         let log = (max as f32).log2().ceil();
         let mut aux_sum: usize = 0;
 
@@ -203,10 +163,10 @@ pub fn addition_chain_bound(m: usize, fragments: &Vec<BitSet>) -> usize {
             aux_sum += (len / max) + (len % max != 0) as usize
         }
 
-        max_s = std::cmp::max(max_s, size_sum - log as usize - aux_sum);        
+        max_s = std::cmp::max(max_s, size_sum - log as usize - aux_sum);
     }
 
-    return max_s;
+    max_s
 }
 
 // Count number of unique edges in a fragment
@@ -228,20 +188,13 @@ pub fn unique_edges(fragment: &BitSet, mol: &Molecule) -> usize {
         let (e1, e2) = g.edge_endpoints(e).expect("bad");
         let e1 = nodes[e1.index()];
         let e2 = nodes[e2.index()];
-        let ends: (Element, Element);
-        if e1 < e2 {
-            ends = (e1, e2);
-        }
-        else {
-            ends = (e2, e1);
-        }
+        let ends = if e1 < e2 { (e1, e2) } else { (e2, e1) };
 
         let edge_type = (bond, ends);
-        
+
         if types.iter().any(|&t| t == edge_type) {
-           continue; 
-        }
-        else {
+            continue;
+        } else {
             z += 1;
             types.push(edge_type);
         }
@@ -266,7 +219,7 @@ pub fn vec_chain_bound(m: usize, fragments: &Vec<BitSet>, mol: &Molecule) -> usi
     }
     let z = unique_edges(&union_set, mol);
 
-    for max in 2..m+1 {
+    for max in 2..m + 1 {
         let mut aux_sum = 0;
         for f in fragments {
             let zi = unique_edges(f, mol);
@@ -274,7 +227,7 @@ pub fn vec_chain_bound(m: usize, fragments: &Vec<BitSet>, mol: &Molecule) -> usi
         }
 
         let log = ((max as f32).log2() - (z as f32).log2()).ceil() as usize;
-        max_s = std::cmp::max(max_s, size_sum + 1 - aux_sum - z - log);   
+        max_s = max_s.max(size_sum + 1 - aux_sum - z - log);
     }
 
     max_s
@@ -293,8 +246,8 @@ pub fn vec_chain_bound2(m: usize, fragments: &Vec<BitSet>, mol: &Molecule) -> us
         union_set.union_with(f);
     }
     let z = unique_edges(&union_set, mol);
-    
-    (s - z) - ((s-z) as f32 / m as f32).ceil() as usize
+
+    (s - z) - ((s - z) as f32 / m as f32).ceil() as usize
 }
 
 #[cfg(test)]
