@@ -30,7 +30,7 @@ fn remnant_search(m: &Molecule) -> (u32, u32) {
     fn recurse(
         m: &Molecule,
         matches: &[(BitSet, BitSet)],
-        fragments: &[<BitSet>],
+        fragments: &[BitSet],
         ix: usize,
         largest_remove: usize,
         best: usize,
