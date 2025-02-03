@@ -24,6 +24,9 @@ struct Cli {
 fn main() -> std::io::Result<()> {
     let cli = Cli::parse();
     let molecule = loader::parse(&cli.path)?;
+    if molecule.is_malformed() {
+        panic!("Bad input! Molecule has self-loops or doubled edges")
+    }
 
     let ix = if let Some(m) = cli.measure {
         match m {

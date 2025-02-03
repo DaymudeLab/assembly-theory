@@ -106,6 +106,18 @@ impl Molecule {
         solutions.into_iter().filter(|s| !s.is_empty())
     }
 
+    // Check if a molecule has self-loops or doubled edges
+    pub fn is_malformed(&self) -> bool {
+        let mut uniq = HashSet::new();
+        !self.graph.edge_indices().all(|ix| {
+            uniq.insert(ix)
+                && self
+                    .graph
+                    .edge_endpoints(ix)
+                    .is_some_and(|(src, dst)| src != dst)
+        })
+    }
+
     // From
     // https://stackoverflow.com/a/15722579
     // https://stackoverflow.com/a/15658245
@@ -211,11 +223,7 @@ impl Molecule {
         }
     }
 
-    fn is_valid_partition(
-        &self,
-        left: &EdgeSet,
-        right: &EdgeSet,
-    ) -> bool {
+    fn is_valid_partition(&self, left: &EdgeSet, right: &EdgeSet) -> bool {
         !left.is_empty()
             && !right.is_empty()
             && is_subset_connected(&self.graph, left)
