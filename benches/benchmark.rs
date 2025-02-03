@@ -6,9 +6,9 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use orca::loader;
 
 pub fn criterion_benchmark(c: &mut Criterion) {
-    for str in ["aspartic", ""] {
+    for str in ["aspartic", "benzene", "cubane", "aspirin", "morphine"] {
         let molecule = loader::parse(&PathBuf::from(format!("data/{str}.sdf"))).unwrap();
-        c.bench_function("aspartic", |b| b.iter(|| index(&molecule)));
+        c.bench_function(str, |b| b.iter(|| index(&molecule)));
     }
 }
 
