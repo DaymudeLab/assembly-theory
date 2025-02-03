@@ -91,11 +91,10 @@ fn remnant_search(mol: &Molecule) -> (u32, u32) {
         fragments: &[BitSet],
         ix: usize,
         largest_remove: usize,
-        best: usize,
+        mut best: usize,
         search_space: &mut u32,
     ) -> usize {
         let mut cx = ix;
-        let mut bestx = best;
 
         *search_space += 1;
         // Branch and Bound
@@ -103,7 +102,8 @@ fn remnant_search(mol: &Molecule) -> (u32, u32) {
 
         let exceeds_add_chain_bound = ix - addition_chain_bound(largest_remove, fragments) >= best;
         let exceeds_vec_chain_bound = ix - vec_chain_bound(largest_remove, fragments, mol) >= best;
-        let exceeds_vec_chain_bound2 = ix - vec_chain_bound2(largest_remove, fragments, mol) >= best;
+        let exceeds_vec_chain_bound2 =
+            ix - vec_chain_bound2(largest_remove, fragments, mol) >= best;
 
         if exceeds_add_chain_bound || exceeds_vec_chain_bound || exceeds_vec_chain_bound2 {
             return ix;
@@ -126,7 +126,6 @@ fn remnant_search(mol: &Molecule) -> (u32, u32) {
                     let c = connected_components_under_edges(mol.graph(), &difference);
                     fractures.extend(c);
                     fractures.swap_remove(i1);
-                    fractures.push(h1.clone());
                 } else {
                     let mut f1r = f1.clone();
                     f1r.difference_with(h1);
@@ -141,8 +140,6 @@ fn remnant_search(mol: &Molecule) -> (u32, u32) {
 
                     fractures.swap_remove(i1.max(i2));
                     fractures.swap_remove(i1.min(i2));
-
-                    fractures.push(h1.clone());
                 }
 
                 fractures.retain(|i| i.len() > 1);
@@ -154,10 +151,10 @@ fn remnant_search(mol: &Molecule) -> (u32, u32) {
                     &fractures,
                     ix - h1.len() + 1,
                     largest_remove,
-                    bestx,
+                    best,
                     search_space,
                 ));
-                bestx = bestx.min(cx);
+                best = best.min(cx);
             }
         }
 
@@ -344,7 +341,10 @@ mod tests {
     }
 
     // Read Test CSV
-    fn test_suite(filename: &str) {
+    fn test_suite<F>(function: F, filename: &str)
+    where
+        F: Fn(&Molecule) -> u32,
+    {
         let mut reader = ReaderBuilder::new()
             .from_path(filename)
             .expect("Test file does not exist.");
@@ -361,18 +361,28 @@ mod tests {
             let molecule = loader::parse(&path).unwrap_or_else(|_| {
                 panic!("Cannot generate assembly index for molecule: {}.", name)
             });
-            let index = index(&molecule);
+            let index = function(&molecule);
             assert_eq!(index, *master_dataset.get(&name).unwrap());
         }
     }
 
     #[test]
-    fn test_small() {
-        test_suite("./tests/suite1.csv");
+    fn bound_test_small() {
+        test_suite(index, "./tests/suite1.csv");
     }
 
     #[test]
-    fn test_medium() {
-        test_suite("./tests/suite2.csv");
+    fn bound_test_medium() {
+        test_suite(index, "./tests/suite2.csv");
+    }
+
+    #[test]
+    fn naive_test_small() {
+        test_suite(naive_index, "./tests/suite1.csv");
+    }
+
+    #[test]
+    fn naive_test_medium() {
+        test_suite(naive_index, "./tests/suite2.csv");
     }
 }
