@@ -1,11 +1,12 @@
 use std::path::PathBuf;
 
 use clap::{Parser, ValueEnum};
-use fastassembly::assembly::{depth, index, search_space};
+use fastassembly::assembly::{depth, index, naive_index, search_space};
 use fastassembly::loader;
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
 enum Measure {
+    Index,
     NaiveDepth,
     NaiveIndex,
     SearchSpace,
@@ -26,8 +27,9 @@ fn main() -> std::io::Result<()> {
 
     let ix = if let Some(m) = cli.measure {
         match m {
-            Measure::NaiveIndex => index(&molecule),
+            Measure::Index => index(&molecule),
             Measure::NaiveDepth => depth(&molecule),
+            Measure::NaiveIndex => naive_index(&molecule),
             Measure::SearchSpace => search_space(&molecule),
         }
     } else {
