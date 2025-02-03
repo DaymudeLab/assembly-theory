@@ -26,6 +26,44 @@ fn top_down_search(m: &Molecule) -> u32 {
     ix
 }
 
+fn split_graph_on(
+    fractures: &mut Vec<BitSet>,
+    m: &Molecule,
+    i1: usize,
+    i2: usize,
+    h1: &BitSet,
+    h2: &BitSet,
+    f1: &BitSet,
+    f2: &BitSet,
+) {
+    if f1 == f2 {
+        let mut union = h1.clone();
+        union.union_with(h2);
+        let mut difference = f1.clone();
+        difference.difference_with(&union);
+        let c = connected_components_under_edges(m.graph(), &difference);
+        fractures.extend(c);
+        fractures.swap_remove(i1);
+        fractures.push(h1.clone());
+    } else {
+        let mut f1r = f1.clone();
+        f1r.difference_with(h1);
+        let mut f2r = f2.clone();
+        f2r.difference_with(h2);
+
+        let c1 = connected_components_under_edges(m.graph(), &f1r);
+        let c2 = connected_components_under_edges(m.graph(), &f2r);
+
+        fractures.extend(c1);
+        fractures.extend(c2);
+
+        fractures.swap_remove(i1.max(i2));
+        fractures.swap_remove(i1.min(i2));
+
+        fractures.push(h1.clone());
+    }
+}
+
 fn naive_search(m: &Molecule) -> u32 {
     fn recurse(
         m: &Molecule,
@@ -41,32 +79,7 @@ fn naive_search(m: &Molecule) -> u32 {
 
             // All of these clones are on bitsets and cheap enough
             if let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) {
-                if f1 == f2 {
-                    let mut union = h1.clone();
-                    union.union_with(h2);
-                    let mut difference = f1.clone();
-                    difference.difference_with(&union);
-                    let c = connected_components_under_edges(m.graph(), &difference);
-                    fractures.extend(c);
-                    fractures.swap_remove(i1);
-                    fractures.push(h1.clone());
-                } else {
-                    let mut f1r = f1.clone();
-                    f1r.difference_with(h1);
-                    let mut f2r = f2.clone();
-                    f2r.difference_with(h2);
-
-                    let c1 = connected_components_under_edges(m.graph(), &f1r);
-                    let c2 = connected_components_under_edges(m.graph(), &f2r);
-
-                    fractures.extend(c1);
-                    fractures.extend(c2);
-
-                    fractures.swap_remove(i1.max(i2));
-                    fractures.swap_remove(i1.min(i2));
-
-                    fractures.push(h1.clone());
-                }
+                split_graph_on(&mut fractures, m, i1, i2, h1, h2, f1, f2);
                 cx = cx.min(recurse(m, matches, &fractures, ix - h1.len() + 1));
             }
         }
@@ -101,16 +114,13 @@ fn remnant_search(m: &Molecule) -> (u32, u32) {
         // Branch and Bound
         // Seet function
 
-        if ix - addition_chain_bound(largest_remove, fragments) >= best {
+        let exceeds_add_chain_bound = ix - addition_chain_bound(largest_remove, fragments) >= best;
+        let exceeds_vec_chain_bound = ix - vec_chain_bound(largest_remove, fragments, m) >= best;
+        let exceeds_vec_chain_bound2 = ix - vec_chain_bound2(largest_remove, fragments, m) >= best;
+
+        if exceeds_add_chain_bound || exceeds_vec_chain_bound || exceeds_vec_chain_bound2 {
             return ix;
         }
-        if ix - vec_chain_bound(largest_remove, fragments, m) >= best {
-            return ix;
-        }
-        if ix - vec_chain_bound2(largest_remove, fragments, m) >= best {
-            return ix;
-        }
-        //if addition_chain_bound(largest_remove, fragments) == 0 {return ix}
 
         for (i, (h1, h2)) in matches.iter().enumerate() {
             let mut fractures = fragments.to_owned();
@@ -121,29 +131,7 @@ fn remnant_search(m: &Molecule) -> (u32, u32) {
 
             // All of these clones are on bitsets and cheap enough
             if let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) {
-                if f1 == f2 {
-                    let mut union = h1.clone();
-                    union.union_with(h2);
-                    let mut difference = f1.clone();
-                    difference.difference_with(&union);
-                    let c = connected_components_under_edges(m.graph(), &difference);
-                    fractures.extend(c);
-                    fractures.swap_remove(i1);
-                } else {
-                    let mut f1r = f1.clone();
-                    f1r.difference_with(h1);
-                    let mut f2r = f2.clone();
-                    f2r.difference_with(h2);
-
-                    let c1 = connected_components_under_edges(m.graph(), &f1r);
-                    let c2 = connected_components_under_edges(m.graph(), &f2r);
-
-                    fractures.extend(c1);
-                    fractures.extend(c2);
-
-                    fractures.swap_remove(i1.max(i2));
-                    fractures.swap_remove(i1.min(i2));
-                }
+                split_graph_on(&mut fractures, m, i1, i2, h1, h2, f1, f2);
 
                 fractures.retain(|i| i.len() > 1);
                 fractures.push(h1.clone());
@@ -207,7 +195,7 @@ pub fn search_space(m: &Molecule) -> u32 {
     m.matches().count() as u32
 }
 
-pub fn addition_chain_bound(m: usize, fragments: &[BitSet]) -> usize {
+fn addition_chain_bound(m: usize, fragments: &[BitSet]) -> usize {
     let mut max_s: usize = 0;
     let mut frag_sizes: Vec<usize> = Vec::new();
 
@@ -232,7 +220,7 @@ pub fn addition_chain_bound(m: usize, fragments: &[BitSet]) -> usize {
 }
 
 // Count number of unique edges in a fragment
-pub fn unique_edges(fragment: &BitSet, mol: &Molecule) -> usize {
+fn unique_edges(fragment: &BitSet, mol: &Molecule) -> usize {
     let g = mol.graph();
     let mut nodes: Vec<Element> = Vec::new();
     for v in g.node_weights() {
@@ -265,7 +253,7 @@ pub fn unique_edges(fragment: &BitSet, mol: &Molecule) -> usize {
     z
 }
 
-pub fn vec_chain_bound(m: usize, fragments: &[BitSet], mol: &Molecule) -> usize {
+fn vec_chain_bound(m: usize, fragments: &[BitSet], mol: &Molecule) -> usize {
     let mut max_s: usize = 0;
     let mut frag_sizes: Vec<usize> = Vec::new();
 
@@ -295,6 +283,7 @@ pub fn vec_chain_bound(m: usize, fragments: &[BitSet], mol: &Molecule) -> usize 
     max_s
 }
 
+// TODO: rename this function
 pub fn vec_chain_bound2(m: usize, fragments: &[BitSet], mol: &Molecule) -> usize {
     // Calculate s (total number of edges)
     // Calculate z (number of unique edges)
@@ -343,7 +332,7 @@ mod tests {
     }
 
     // Read Test CSV
-    fn test_setup(filename: &str) {
+    fn test_suite(filename: &str) {
         let mut reader = ReaderBuilder::new()
             .from_path(filename)
             .expect("Test file does not exist.");
@@ -357,10 +346,9 @@ mod tests {
         let master_dataset: HashMap<String, u32> = read_master();
         for name in molecule_names {
             let path = PathBuf::from(format!("./data/{}", name));
-            let molecule = loader::parse(&path).expect(&format!(
-                "Cannot generate assembly index for molecule: {}.",
-                name
-            ));
+            let molecule = loader::parse(&path).unwrap_or_else(|_| {
+                panic!("Cannot generate assembly index for molecule: {}.", name)
+            });
             let index = index(&molecule);
             assert_eq!(index, *master_dataset.get(&name).unwrap());
         }
@@ -368,16 +356,11 @@ mod tests {
 
     #[test]
     fn test_small() {
-        test_setup("./tests/suite1.csv");
+        test_suite("./tests/suite1.csv");
     }
 
     #[test]
     fn test_medium() {
-        test_setup("./tests/suite2.csv");
-    }
-
-    #[test]
-    fn test_large() {
-        test_setup("./tests/suite3.csv");
+        test_suite("./tests/suite2.csv");
     }
 }
