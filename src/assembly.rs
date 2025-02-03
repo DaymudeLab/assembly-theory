@@ -6,9 +6,9 @@ use crate::{
     molecule::Bond, molecule::Element, molecule::Molecule, utils::connected_components_under_edges,
 };
 
-fn top_down_search(m: &Molecule) -> u32 {
+fn top_down_search(mol: &Molecule) -> u32 {
     let mut ix = u32::MAX;
-    for (left, right) in m.partitions().unwrap() {
+    for (left, right) in mol.partitions().unwrap() {
         let l = if left.is_basic_unit() {
             0
         } else {
@@ -26,9 +26,9 @@ fn top_down_search(m: &Molecule) -> u32 {
     ix
 }
 
-fn naive_search(m: &Molecule) -> u32 {
+fn naive_search(mol: &Molecule) -> u32 {
     fn recurse(
-        m: &Molecule,
+        mol: &Molecule,
         matches: &BTreeSet<(BitSet, BitSet)>,
         fragments: &[BitSet],
         ix: usize,
@@ -46,7 +46,7 @@ fn naive_search(m: &Molecule) -> u32 {
                     union.union_with(h2);
                     let mut difference = f1.clone();
                     difference.difference_with(&union);
-                    let c = connected_components_under_edges(m.graph(), &difference);
+                    let c = connected_components_under_edges(mol.graph(), &difference);
                     fractures.extend(c);
                     fractures.swap_remove(i1);
                     fractures.push(h1.clone());
@@ -56,8 +56,8 @@ fn naive_search(m: &Molecule) -> u32 {
                     let mut f2r = f2.clone();
                     f2r.difference_with(h2);
 
-                    let c1 = connected_components_under_edges(m.graph(), &f1r);
-                    let c2 = connected_components_under_edges(m.graph(), &f2r);
+                    let c1 = connected_components_under_edges(mol.graph(), &f1r);
+                    let c2 = connected_components_under_edges(mol.graph(), &f2r);
 
                     fractures.extend(c1);
                     fractures.extend(c2);
@@ -67,43 +67,43 @@ fn naive_search(m: &Molecule) -> u32 {
 
                     fractures.push(h1.clone());
                 }
-                cx = cx.min(recurse(m, matches, &fractures, ix - h1.len() + 1));
+                cx = cx.min(recurse(mol, matches, &fractures, ix - h1.len() + 1));
             }
         }
         cx
     }
 
     let mut init = BitSet::new();
-    init.extend(m.graph().edge_indices().map(|ix| ix.index()));
+    init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
 
     recurse(
-        m,
-        &m.matches().collect(),
+        mol,
+        &mol.matches().collect(),
         &[init],
-        m.graph().edge_count() - 1,
+        mol.graph().edge_count() - 1,
     ) as u32
 }
 
-fn remnant_search(m: &Molecule) -> (u32, u32) {
+fn remnant_search(mol: &Molecule) -> (u32, u32) {
     fn recurse(
-        m: &Molecule,
+        mol: &Molecule,
         matches: &[(BitSet, BitSet)],
         fragments: &[BitSet],
         ix: usize,
         largest_remove: usize,
         best: usize,
-        ts: &mut u32,
+        search_space: &mut u32,
     ) -> usize {
         let mut cx = ix;
         let mut bestx = best;
 
-        *ts += 1;
+        *search_space += 1;
         // Branch and Bound
         // Seet function
 
         let exceeds_add_chain_bound = ix - addition_chain_bound(largest_remove, fragments) >= best;
-        let exceeds_vec_chain_bound = ix - vec_chain_bound(largest_remove, fragments, m) >= best;
-        let exceeds_vec_chain_bound2 = ix - vec_chain_bound2(largest_remove, fragments, m) >= best;
+        let exceeds_vec_chain_bound = ix - vec_chain_bound(largest_remove, fragments, mol) >= best;
+        let exceeds_vec_chain_bound2 = ix - vec_chain_bound2(largest_remove, fragments, mol) >= best;
 
         if exceeds_add_chain_bound || exceeds_vec_chain_bound || exceeds_vec_chain_bound2 {
             return ix;
@@ -123,7 +123,7 @@ fn remnant_search(m: &Molecule) -> (u32, u32) {
                     union.union_with(h2);
                     let mut difference = f1.clone();
                     difference.difference_with(&union);
-                    let c = connected_components_under_edges(m.graph(), &difference);
+                    let c = connected_components_under_edges(mol.graph(), &difference);
                     fractures.extend(c);
                     fractures.swap_remove(i1);
                     fractures.push(h1.clone());
@@ -133,8 +133,8 @@ fn remnant_search(m: &Molecule) -> (u32, u32) {
                     let mut f2r = f2.clone();
                     f2r.difference_with(h2);
 
-                    let c1 = connected_components_under_edges(m.graph(), &f1r);
-                    let c2 = connected_components_under_edges(m.graph(), &f2r);
+                    let c1 = connected_components_under_edges(mol.graph(), &f1r);
+                    let c2 = connected_components_under_edges(mol.graph(), &f2r);
 
                     fractures.extend(c1);
                     fractures.extend(c2);
@@ -149,13 +149,13 @@ fn remnant_search(m: &Molecule) -> (u32, u32) {
                 fractures.push(h1.clone());
 
                 cx = cx.min(recurse(
-                    m,
+                    mol,
                     &matches[i + 1..],
                     &fractures,
                     ix - h1.len() + 1,
                     largest_remove,
                     bestx,
-                    ts,
+                    search_space,
                 ));
                 bestx = bestx.min(cx);
             }
@@ -165,10 +165,10 @@ fn remnant_search(m: &Molecule) -> (u32, u32) {
     }
 
     let mut init = BitSet::new();
-    init.extend(m.graph().edge_indices().map(|ix| ix.index()));
+    init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
 
     // Create and sort matches array
-    let mut matches: Vec<(BitSet, BitSet)> = m.matches().collect();
+    let mut matches: Vec<(BitSet, BitSet)> = mol.matches().collect();
     matches.sort_by(my_sort);
 
     fn my_sort(e1: &(BitSet, BitSet), e2: &(BitSet, BitSet)) -> Ordering {
@@ -178,12 +178,12 @@ fn remnant_search(m: &Molecule) -> (u32, u32) {
     let mut total_search = 0;
 
     let ans = recurse(
-        m,
+        mol,
         &matches,
         &[init],
-        m.graph().edge_count() - 1,
-        m.graph().edge_count(),
-        m.graph().edge_count() - 1,
+        mol.graph().edge_count() - 1,
+        mol.graph().edge_count(),
+        mol.graph().edge_count() - 1,
         &mut total_search,
     ) as u32;
 
