@@ -41,7 +41,7 @@ fn naive_search(mol: &Molecule) -> u32 {
 
             // All of these clones are on bitsets and cheap enough
             if let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) {
-                if f1 == f2 {
+                if i1 == i2 {
                     let mut union = h1.clone();
                     union.union_with(h2);
                     let mut difference = f1.clone();
@@ -118,7 +118,7 @@ fn remnant_search(mol: &Molecule) -> (u32, u32) {
 
             // All of these clones are on bitsets and cheap enough
             if let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) {
-                if f1 == f2 {
+                if i1 == i2 {
                     let mut union = h1.clone();
                     union.union_with(h2);
                     let mut difference = f1.clone();
