@@ -47,6 +47,14 @@ impl Atom {
             capacity: 0,
         }
     }
+    pub fn get_element(&self) -> String {
+        (match self.element {
+            Element::Oxygen => "O",
+            Element::Nitrogen => "N",
+            Element::Carbon => "C",
+            Element::Hydrogen => "H",
+        }).to_string()
+    }
 }
 
 impl Molecule {
@@ -232,6 +240,10 @@ impl Molecule {
 
     pub fn from_graph(g: MGraph) -> Self {
         Self { graph: g }
+    }
+
+    pub fn get_graph(&self) -> &MGraph {
+        &self.graph
     }
 
     pub fn single_bond() -> Self {
