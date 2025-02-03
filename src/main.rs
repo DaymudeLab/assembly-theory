@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
 use clap::{Parser, ValueEnum};
-use fastassembly::assembly::{depth, index, naive_index, search_space};
-use fastassembly::loader;
+use orca::assembly::{depth, index, naive_index, search_space};
+use orca::loader;
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
 enum Measure {
