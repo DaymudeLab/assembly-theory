@@ -323,7 +323,7 @@ mod tests {
     // Read Master CSV
     fn read_master() -> HashMap<String, u32> {
         let mut reader = ReaderBuilder::new()
-            .from_path("./data/master.csv")
+            .from_path("./tests/master.csv")
             .expect("data/master.csv does not exist.");
         let mut master_records = HashMap::new();
         for result in reader.records() {
@@ -357,7 +357,7 @@ mod tests {
         }
         let master_dataset: HashMap<String, u32> = read_master();
         for name in molecule_names {
-            let path = PathBuf::from(format!("./data/{}", name));
+            let path = PathBuf::from(format!("./tests/inputs/{}", name));
             let molecule = loader::parse(&path).unwrap_or_else(|_| {
                 panic!("Cannot generate assembly index for molecule: {}.", name)
             });
