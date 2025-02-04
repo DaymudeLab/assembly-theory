@@ -12,6 +12,12 @@ petgraph = "0.6.5"
 [dev-dependencies]
 criterion = "0.3"
 
+[lib]
+name = "_lib"
+
+path = "src/lib.rs"
+crate-type = ["cdylib"]
+
 [[bench]]
 name = "benchmark"
 harness = false

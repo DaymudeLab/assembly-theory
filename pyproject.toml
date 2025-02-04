@@ -1,0 +1,40 @@
+# pyproject.toml
+[build-system]
+requires = ["setuptools", "maturin"]
+build-backend = "maturin"
+
+[project]
+name = "ORCA"
+version = "0.0.0"
+description = "Open, Reproducible Assembly index Calculations"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {file = "LICENSE-MIT"}
+authors = [
+  {email = "cole.mathis@asu.edu"},
+  {name = "Cole Mathis"}
+]
+maintainers = [
+  {name = "Devansh Vimal", email = "dvpatel5@asu.edu"},
+  {name = "Cole Mathis", email = "cole.mathis@asu.edu"}
+]
+
+dependencies = []
+
+[tool.setuptools.packages]
+# Pure Python packages/modules
+find = { where = ["python"] }
+
+[project.optional-dependencies]
+test = [
+  "pytest < 5.0.0",
+  "pytest-cov[all]"
+]
+
+[project.urls]
+homepage = "https://github.com/DaymudeLab/ORCA"
+repository = "https://github.com/DaymudeLab/ORCA"
+
+[tool.maturin]
+python-source = "python"
+module-name = "orca._lib"
