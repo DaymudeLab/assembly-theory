@@ -169,7 +169,7 @@ fn remnant_search(mol: &Molecule) -> (u32, u32) {
     matches.sort_by(my_sort);
 
     fn my_sort(e1: &(BitSet, BitSet), e2: &(BitSet, BitSet)) -> Ordering {
-        e1.0.len().cmp(&e2.0.len())
+        e2.0.len().cmp(&e1.0.len())
     }
 
     let mut total_search = 0;
