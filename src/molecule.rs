@@ -26,11 +26,10 @@ macro_rules! periodic_table {
             $( $element, )*
         }
 
-
         impl Display for Element {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 match &self {
-                    $( Element::$element => write!(f, "{}", String::from($name)), )*
+                    $( Element::$element => write!(f, "{}", $name), )*
                 }
             }
         }
@@ -40,7 +39,7 @@ macro_rules! periodic_table {
             fn from_str(s: &str) -> Result<Self, Self::Err> {
                 match s {
                     $( $name => Ok(Element::$element), )*
-                    _ => Err(ParseElementError {}),
+                    _ => Err(ParseElementError),
                 }
             }
         }
@@ -48,7 +47,7 @@ macro_rules! periodic_table {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd)]
-pub struct ParseElementError {}
+pub struct ParseElementError;
 
 periodic_table!(
     (Hydrogen, "H"),
