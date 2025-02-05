@@ -1,4 +1,8 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::{
+    collections::{BTreeSet, HashMap, HashSet},
+    fmt::Display,
+    str::FromStr,
+};
 
 use bit_set::BitSet;
 use petgraph::{
@@ -22,22 +26,29 @@ macro_rules! periodic_table {
             $( $element, )*
         }
 
-        impl Element {
-            pub fn to_string(&self) -> &str {
+
+        impl Display for Element {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 match &self {
-                    $( Element::$element => $name, )*
+                    $( Element::$element => write!(f, "{}", String::from($name)), )*
                 }
             }
+        }
 
-            pub fn from_name(name: &str) -> Option<Self> {
-                match name {
-                    $( $name => Some(Element::$element), )*
-                    _ => None,
+        impl FromStr for Element {
+            type Err = ParseElementError;
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                match s {
+                    $( $name => Ok(Element::$element), )*
+                    _ => Err(ParseElementError {}),
                 }
             }
         }
     };
 }
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd)]
+pub struct ParseElementError {}
 
 periodic_table!(
     (Hydrogen, "H"),
@@ -170,6 +181,7 @@ pub struct Atom {
 pub enum Bond {
     Single,
     Double,
+    Triple,
 }
 
 #[derive(Debug, Clone)]
@@ -491,7 +503,7 @@ mod tests {
 
     #[test]
     fn element_from_string() {
-        assert!(Element::from_name("H") == Some(Element::Hydrogen));
-        assert!(Element::from_name("Foo") == None);
+        assert!(str::parse("H") == Ok(Element::Hydrogen));
+        assert!(str::parse::<Element>("Foo").is_err());
     }
 }
