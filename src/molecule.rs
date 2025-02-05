@@ -15,13 +15,36 @@ type MSubgraph = Graph<Atom, Option<Bond>, Undirected, Index>;
 type EdgeSet = BTreeSet<EdgeIndex<Index>>;
 type NodeSet = BTreeSet<NodeIndex<Index>>;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd)]
-pub enum Element {
-    Hydrogen,
-    Carbon,
-    Nitrogen,
-    Oxygen,
+macro_rules! periodic_table {
+    ( $(($element:ident, $name:literal),)* ) => {
+        #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd)]
+        pub enum Element {
+            $( $element, )*
+        }
+
+        impl Element {
+            pub fn to_string(&self) -> &str {
+                match &self {
+                    $( Element::$element => $name, )*
+                }
+            }
+
+            pub fn from_name(name: &str) -> Option<Self> {
+                match name {
+                    $( $name => Some(Element::$element), )*
+                    _ => None,
+                }
+            }
+        }
+    };
 }
+
+periodic_table!(
+    (Hydrogen, "H"),
+    (Carbon, "C"),
+    (Nitrogen, "N"),
+    (Oxygen, "O"),
+);
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Atom {
@@ -345,5 +368,16 @@ mod tests {
         g.add_edge(u, w, Bond::Double);
 
         assert!(j.is_isomorphic_to(&Molecule { graph: g }));
+    }
+
+    #[test]
+    fn element_to_string() {
+        assert!(Element::Hydrogen.to_string() == "H")
+    }
+
+    #[test]
+    fn element_from_string() {
+        assert!(Element::from_name("H") == Some(Element::Hydrogen));
+        assert!(Element::from_name("Foo") == None);
     }
 }
