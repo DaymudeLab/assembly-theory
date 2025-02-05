@@ -29,12 +29,13 @@ impl DAGVert {
 struct MolAtomNode {
     color: u32,
     inv: u32,
-    order: String
+    order: String,
+    num_parents: u32
 }
 
 impl MolAtomNode {
-    pub fn new(color: u32, inv: u32, order: String) -> Self {
-        MolAtomNode {color, inv, order}
+    pub fn new(color: u32, inv: u32, order: String, num_parents: u32) -> Self {
+        MolAtomNode {color, inv, order, num_parents}
     }
 }
 
@@ -42,7 +43,7 @@ impl MolAtomNode {
 pub fn canonize(m: &Molecule) -> String {
     let mol_graph = m.get_graph();
 
-    /*
+    // /*
     // Dummy Molecule for testing
 
     let mut mol_graph: Graph<Atom, Bond, Undirected> = Graph::<Atom, Bond, Undirected>::new_undirected();
@@ -81,11 +82,11 @@ pub fn canonize(m: &Molecule) -> String {
     mol_graph.add_edge(vec_nodes[6],vec_nodes[5],Bond::Single);
     mol_graph.add_edge(vec_nodes[8],vec_nodes[7],Bond::Single);
     mol_graph.add_edge(vec_nodes[10],vec_nodes[9],Bond::Single);
-     */
+    //  */
 
     let mut max_string = String::new();
     for root in mol_graph.node_indices() {
-        // let root = vec_nodes[1];
+        let root = vec_nodes[1];
         // for each node in the molecule graph create a signature
         /*
         1. create a DAG from each start node
@@ -94,7 +95,7 @@ pub fn canonize(m: &Molecule) -> String {
 
         let mut DAG_vertex_map: HashMap<String, NodeIndex> = HashMap::new();
 
-        let mut mol_g_dag_vertex_map: HashMap<NodeIndex, NodeIndex> = HashMap::new();
+        let mut mol_g_dag_vertex_map: HashMap<NodeIndex, Vec<NodeIndex>> = HashMap::new();
 
         let mut dag_level_list: HashMap<u32, Vec<NodeIndex>> = HashMap::new();
 
@@ -112,7 +113,7 @@ pub fn canonize(m: &Molecule) -> String {
         let root_vertex_id = DAG.add_node(DAGVert::new(root, [].to_vec(), 0));
         DAG_vertex_map.insert(format!("{:?}-{}", root, 0), root_vertex_id);
         dag_level_list.insert(0, [root_vertex_id].to_vec());
-        mol_g_dag_vertex_map.insert(root, root_vertex_id);
+        mol_g_dag_vertex_map.insert(root, [root_vertex_id].to_vec());
 
         loop {
 
@@ -174,7 +175,11 @@ pub fn canonize(m: &Molecule) -> String {
                     // let child_node_idx = DAG.add_node(format!("{:?}-{}", neigh, level+1));
                     let child_node_idx = DAG.add_node(DAGVert::new(neigh, [].to_vec(), level+1));
                     DAG_vertex_map.insert(format!("{:?}-{}", neigh, level+1), child_node_idx);
-                    mol_g_dag_vertex_map.insert(neigh, child_node_idx);
+
+                    // Overriding the map!!! neigh can be seen before in previous layer
+                    // mol_g_dag_vertex_map.insert(, child_node_idx);
+                    mol_g_dag_vertex_map.entry(neigh).and_modify(|vert_assoc_list| vert_assoc_list.push(child_node_idx)).or_insert([child_node_idx].to_vec());
+                    
 
                     // Insert into a level by level hashmap of dag nodes
                     dag_level_list.entry((level+1)).and_modify(|level_vert_list| level_vert_list.push(child_node_idx)).or_insert([child_node_idx].to_vec());
@@ -209,13 +214,22 @@ pub fn canonize(m: &Molecule) -> String {
          */
         let mut extended_molg_atom_map: HashMap<NodeIndex, MolAtomNode> = HashMap::new();
         let mut order_str_set: HashSet<String> = HashSet::new();
+
+        // Each atom does not have just one vertex in dag!!!
         for atom_node in mol_graph.node_indices() {
-            let dag_vert = mol_g_dag_vertex_map.get(&atom_node).unwrap();
-            let parent_len = DAG[*dag_vert].parents.len();
+            // find unique parents for an atom's associated vertices in DAG
+            let atom_assoc_vert_list = mol_g_dag_vertex_map.get(&atom_node).unwrap();
+            let mut parents= HashSet::new();
+            for vert_id in atom_assoc_vert_list {
+                for parent in &DAG[*vert_id].parents {
+                    parents.insert(parent);
+                }
+            }
+            let parent_len = parents.len();
             let atom_str = mol_graph[atom_node].get_element();
             let atom_order_str = format!("{}{}", atom_str, parent_len);
             order_str_set.insert(atom_order_str.clone());
-            extended_molg_atom_map.insert(atom_node, MolAtomNode::new(0, 0, atom_order_str));
+            extended_molg_atom_map.insert(atom_node, MolAtomNode::new(0, 0, atom_order_str, parent_len as u32));
         }
 
         // lexico-sort
@@ -233,13 +247,20 @@ pub fn canonize(m: &Molecule) -> String {
             extended_molg_atom_map.entry(atom_node).and_modify(|ext_molg_atom| ext_molg_atom.inv = *order_idx.get(&ext_molg_atom.order).unwrap());
         }
 
+        // println!("{:?}", extended_molg_atom_map);
+
         // get the canonized string for current root atom
         let canon_string = canonize_signature(&mol_graph, &mut DAG, &mut extended_molg_atom_map, &dag_level_list, &mol_g_dag_vertex_map,  max_level, 1, "".to_string());
 
+        println!("{:?}", canon_string);
+
+        break;
         // lexico-compare strings to save the max one.
         if lexical_cmp(&max_string, &canon_string).is_lt() {
             max_string = canon_string
         }
+
+        break;
     }
     return max_string;
 }
@@ -249,7 +270,7 @@ fn canonize_signature(
     mut DAG: &mut Graph::<DAGVert, &str>,
     mut extended_molg_atom_map: &mut HashMap<NodeIndex, MolAtomNode>,
     dag_level_list: &HashMap<u32, Vec<NodeIndex>>,
-    mol_g_dag_vertex_map: &HashMap<NodeIndex, NodeIndex>,
+    mol_g_dag_vertex_map: &HashMap<NodeIndex, Vec<NodeIndex>>,
     max_level: u32,
     color_c: u32,
     s_max: String,
@@ -257,12 +278,14 @@ fn canonize_signature(
     // 1. get the invariants for each atom
     invariant_atom(&mol_graph, &mut DAG, &mut extended_molg_atom_map, &dag_level_list, max_level);
 
+    // return "".to_string();
     // 2. generate orbits based on atom's invariant values
     let mut orbits: HashMap<u32, Vec<NodeIndex>> = HashMap::new();
 
     for atom in mol_graph.node_indices() {
-        let atom_inv = extended_molg_atom_map.get(&atom).unwrap().inv;
-        let parent_len = DAG[*mol_g_dag_vertex_map.get(&atom).unwrap()].parents.len() as u32;
+        let extended_atom = extended_molg_atom_map.get(&atom).unwrap();
+        let atom_inv = extended_atom.inv;
+        let parent_len = extended_atom.num_parents;
         // only add atoms which have 2 or more parents in DAG
         if parent_len >= 2 {
             orbits.entry(atom_inv).and_modify(|atom_list| atom_list.push(atom)).or_insert([atom].to_vec());
@@ -279,21 +302,25 @@ fn canonize_signature(
         //  if multiple then use orbit with min value
         let min_orbit = (if (&max_orbits.len()).clone() > 1 {max_orbits.iter().min()} else {max_orbits.first()}).unwrap();
         
-        let mut local_smax = String::new();
+        // let mut local_smax = String::new();
+        let mut local_smax = s_max.clone();
+        
+        println!("Max Orbit: {:?}", orbits.get(&min_orbit).unwrap());
         // recurse further for each of the atom in such a orbit and generate a canonized signature by diff. the atoms in same orbit
         for atom in orbits.get(&min_orbit).unwrap() {
             extended_molg_atom_map.entry(*atom).and_modify(|atom_node| atom_node.color = color_c as u32);
-            local_smax = canonize_signature(&mol_graph, &mut DAG, &mut extended_molg_atom_map, &dag_level_list, &mol_g_dag_vertex_map,  max_level, color_c+1, s_max.clone());
+            local_smax = canonize_signature(&mol_graph, &mut DAG, &mut extended_molg_atom_map, &dag_level_list, &mol_g_dag_vertex_map,  max_level, color_c+1, local_smax);
             extended_molg_atom_map.entry(*atom).and_modify(|atom_node| atom_node.color = 0);
         }
         return local_smax;
     }
     else {
-        // not need to recurse further and print the signature-string
+        // no need to recurse further and print the signature-string
         for atom in mol_graph.node_indices() {
-            let atom_inv = extended_molg_atom_map.get(&atom).unwrap().inv;
-            let atom_color = extended_molg_atom_map.get(&atom).unwrap().color;
-            let parent_len = DAG[*mol_g_dag_vertex_map.get(&atom).unwrap()].parents.len() as u32;
+            let extended_atom = extended_molg_atom_map.get(&atom).unwrap();
+            let atom_inv = extended_atom.inv;
+            let atom_color = extended_atom.color;
+            let parent_len = extended_atom.num_parents;
             // first update any atom without a color to be same as its invariant value
             if (atom_color == 0) && (parent_len >= 2) {
                 extended_molg_atom_map.entry(atom).and_modify(|atom_node| atom_node.color = atom_inv);
@@ -362,15 +389,17 @@ fn invariant_atom(
     max_level: u32,
 ) {
     let mut count = 0;
+    let mut initial = true;
     loop {
-        // let start_inv_atoms = HashSet::<u32>::from_iter(mol_graph.node_indices()
-        // .into_iter()
-        // .map(|atom_idx| extended_molg_atom_map.get(&atom_idx).unwrap().inv)).len();
+        // Unique invariant values
+        let start_inv_atoms = HashSet::<u32>::from_iter(mol_graph.node_indices()
+        .into_iter()
+        .map(|atom_idx| extended_molg_atom_map.get(&atom_idx).unwrap().inv)).len();
 
         // Better stopping condition ??
-        let start_inv_atoms = mol_graph.node_indices()
-        .into_iter()
-        .filter(|atom_idx| extended_molg_atom_map.get(&atom_idx).unwrap().inv == 0).count();
+        // let start_inv_atoms = mol_graph.node_indices()
+        // .into_iter()
+        // .filter(|atom_idx| extended_molg_atom_map.get(&atom_idx).unwrap().inv == 0).count();
         // println!("Begin Atom Invariants: {}", start_inv_atoms);
 
         /*
@@ -378,25 +407,31 @@ fn invariant_atom(
          */
 
         // first bottom-up
-        invariant_dag_vert(&mut DAG, &extended_molg_atom_map, &dag_level_list, max_level, true);
+        invariant_dag_vert(&mut DAG, &extended_molg_atom_map, &dag_level_list, max_level, true, initial);
 
         // println!("DAG after bottom invariants");
         // println!("{:?}", Dot::with_config(&*DAG, &[Config::EdgeNoLabel]));
 
+        initial = false;
         // then top-down
-        invariant_dag_vert(&mut DAG, &extended_molg_atom_map, &dag_level_list, max_level, false);
+        invariant_dag_vert(&mut DAG, &extended_molg_atom_map, &dag_level_list, max_level, false, initial);
 
         // println!("DAG after top invariants");
         // println!("{:?}", Dot::with_config(&*DAG, &[Config::EdgeNoLabel]));
-
+        
         // Create a vector for each atom in molecule graph based on associated vertex in  
         let mut order_map_vert_atom: HashMap<NodeIndex, Vec<u32>> = HashMap::new();
         for atom in mol_graph.node_indices() {
             order_map_vert_atom.insert(atom, vec![0;(max_level+1).try_into().unwrap()]);
         }
 
+        // sort the vectors correctly
+        // for vert in DAG.node_indices() {
+        //     order_map_vert_atom.entry(DAG[vert].atom_idx).and_modify(|order_vec| order_vec[DAG[vert].level as usize] = DAG[vert].inv);
+        // }
+        //for reverse sorting max_level - DAG[vert].level as per paper
         for vert in DAG.node_indices() {
-            order_map_vert_atom.entry(DAG[vert].atom_idx).and_modify(|order_vec| order_vec[DAG[vert].level as usize] = DAG[vert].inv);
+            order_map_vert_atom.entry(DAG[vert].atom_idx).and_modify(|order_vec| order_vec[(max_level - DAG[vert].level) as usize] = DAG[vert].inv);
         }
 
         let mut order_to_atom: HashMap<String, Vec<NodeIndex>> = HashMap::new();
@@ -410,6 +445,14 @@ fn invariant_atom(
         // lexico-sort the vectors-strings
         let mut atom_ordered_vec: Vec<_> = order_to_atom.keys().into_iter().collect();
         atom_ordered_vec.string_sort_unstable(lexical_only_alnum_cmp);
+        // atom_ordered_vec.string_sort_unstable(natural_cmp);
+        // descend sort
+        atom_ordered_vec.reverse();
+
+        // println!("Order vector to Atom");
+        // println!("{:?}",order_to_atom);
+        // println!("Order vector string to index");
+        // println!("{:?}",atom_ordered_vec);
 
         // assign the invariant of atom as the order of vectors-strings
         for (idx, order) in atom_ordered_vec.iter().enumerate() {
@@ -419,20 +462,31 @@ fn invariant_atom(
         }
 
 
-        // let end_inv_atoms = HashSet::<u32>::from_iter(mol_graph.node_indices()
-        // .into_iter()
-        // .map(|atom_idx| extended_molg_atom_map.get(&atom_idx).unwrap().inv)).len();
+        let end_inv_atoms = HashSet::<u32>::from_iter(mol_graph.node_indices()
+        .into_iter()
+        .map(|atom_idx| extended_molg_atom_map.get(&atom_idx).unwrap().inv)).len();
 
         // Better stopping condition ??
-        let end_inv_atoms = mol_graph.node_indices()
-        .into_iter()
-        .filter(|atom_idx| extended_molg_atom_map.get(&atom_idx).unwrap().inv == 0).count();
+        // let end_inv_atoms = mol_graph.node_indices()
+        // .into_iter()
+        // .filter(|atom_idx| extended_molg_atom_map.get(&atom_idx).unwrap().inv == 0).count();
 
 
         // println!("End Atom Invariants: {}", end_inv_atoms);
 
         // compare the no. of invariants of all the atoms with the one's they started from
-        if start_inv_atoms == end_inv_atoms {break;}
+        if start_inv_atoms == end_inv_atoms {
+            println!("breaking out because no. of invariant values don't change");
+
+            println!("Atom Invariants");
+            // println!("{:?}", Dot::with_config(&*DAG, &[Config::EdgeNoLabel]));
+            // println!("{:?}", extended_molg_atom_map);
+
+            for (node_id, atom_node) in extended_molg_atom_map {
+                println!("{:?} Inv:{:?} Ord:{:?}", node_id, atom_node.inv, order_map_vert_atom.get(node_id).unwrap())
+            }
+            break;
+        }
 
         // Naive way of stopping
         if count > mol_graph.node_count() {
@@ -451,7 +505,8 @@ fn invariant_dag_vert(
     extended_molg_atom_map: &HashMap<NodeIndex, MolAtomNode>,
     dag_level_list: &HashMap<u32, Vec<NodeIndex>>,
     max_level: u32,
-    bottom: bool) {
+    bottom: bool,
+    initial: bool) {
         // top-down or bottom-up calculation of invariants for each vertex in DAG
         let mut curr_lvl_range = if bottom {max_level} else {0};
         loop {
@@ -461,18 +516,25 @@ fn invariant_dag_vert(
                 let atom_idx_for_vert = DAG[*vert].atom_idx;
                 let atom_node = extended_molg_atom_map.get(&atom_idx_for_vert).unwrap();
                 let (atom_color, atom_inv) = (atom_node.color, atom_node.inv);
-                let mut vert_order = format!("{}{}", atom_color, atom_inv);
+                let vert_inv = DAG[*vert].inv;
+                let mut vert_order;
                 let mut child_inv_set: Vec<u32> = Vec::new();
-
+                vert_order = if initial { format!("{}{}", atom_color, atom_inv) } else { format!("{}{}", atom_color, vert_inv) };
                 if bottom {
+                    // vert_order = format!("{}{}", atom_color, atom_inv);          
                     for vert_neigh in DAG.neighbors_directed(*vert, Outgoing) {
                         child_inv_set.push(DAG[vert_neigh].inv);
                     }
                 }
                 else {
+                    // vert_order = format!("{}{}", atom_color, vert_inv);
                     for vert_neigh in DAG.neighbors_directed(*vert, Incoming) {
                         child_inv_set.push(DAG[vert_neigh].inv);
                     }
+                }
+
+                while child_inv_set.len() < 10 {
+                    child_inv_set.push(0);
                 }
 
                 child_inv_set.sort();
