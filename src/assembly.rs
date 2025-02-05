@@ -321,15 +321,16 @@ mod tests {
     use super::*;
 
     // Read Master CSV
-    fn read_master() -> HashMap<String, u32> {
+    fn read_dataset_index(dataset: &str) -> HashMap<String, u32> {
+        let path = format!("./data/{dataset}/ma-index.csv");
         let mut reader = ReaderBuilder::new()
-            .from_path("./tests/master.csv")
-            .expect("data/master.csv does not exist.");
-        let mut master_records = HashMap::new();
+            .from_path(path)
+            .expect("ma-index.csv does not exist.");
+        let mut index_records = HashMap::new();
         for result in reader.records() {
-            let record = result.expect("master.csv is malformed.");
+            let record = result.expect("ma-index.csv is malformed.");
             let record = record.iter().collect::<Vec<_>>();
-            master_records.insert(
+            index_records.insert(
                 record[0].to_string(),
                 record[1]
                     .to_string()
@@ -337,52 +338,54 @@ mod tests {
                     .expect("Assembly index is not an integer."),
             );
         }
-        master_records
+        index_records
     }
 
     // Read Test CSV
-    fn test_suite<F>(function: F, filename: &str)
+    fn test_molecule<F>(function: F, dataset: &str, filename: &str)
     where
         F: Fn(&Molecule) -> u32,
     {
-        let mut reader = ReaderBuilder::new()
-            .from_path(filename)
-            .expect("Test file does not exist.");
-        let mut molecule_names: Vec<String> = Vec::new();
-        for result in reader.records() {
-            let record = result.expect("Cannot read test file.");
-            for field in &record {
-                molecule_names.push(field.to_string());
-            }
-        }
-        let master_dataset: HashMap<String, u32> = read_master();
-        for name in molecule_names {
-            let path = PathBuf::from(format!("./tests/inputs/{}", name));
-            let molecule = loader::parse(&path).unwrap_or_else(|_| {
-                panic!("Cannot generate assembly index for molecule: {}.", name)
-            });
-            let index = function(&molecule);
-            assert_eq!(index, *master_dataset.get(&name).unwrap());
-        }
+        let path = PathBuf::from(format!("./data/{dataset}/{filename}"));
+        let molecule = loader::parse(&path)
+            .unwrap_or_else(|_| panic!("Cannot parse molecule: {}.", path.display()));
+        let dataset = read_dataset_index(dataset);
+        let ground_truth = dataset
+            .get(filename)
+            .expect("Index dataset has no ground truth value");
+        let index = function(&molecule);
+        assert_eq!(index, *ground_truth);
     }
 
     #[test]
-    fn bound_test_small() {
-        test_suite(index, "./tests/suite1.csv");
+    fn all_bounds_benzene() {
+        test_molecule(index, "checks", "benzene.mol");
     }
 
     #[test]
-    fn bound_test_medium() {
-        test_suite(index, "./tests/suite2.csv");
+    fn all_bounds_aspirin() {
+        test_molecule(index, "checks", "aspirin.mol");
     }
 
     #[test]
-    fn naive_test_small() {
-        test_suite(naive_index, "./tests/suite1.csv");
+    #[ignore = "expensive test"]
+    fn all_bounds_morphine() {
+        test_molecule(index, "checks", "morphine.mol");
     }
 
     #[test]
-    fn naive_test_medium() {
-        test_suite(naive_index, "./tests/suite2.csv");
+    fn naive_method_benzene() {
+        test_molecule(naive_index, "checks", "benzene.mol");
+    }
+
+    #[test]
+    fn naive_method_aspirin() {
+        test_molecule(naive_index, "checks", "aspirin.mol");
+    }
+
+    #[test]
+    #[ignore = "expensive test"]
+    fn naive_method_morphine() {
+        test_molecule(naive_index, "checks", "morphine.mol");
     }
 }
