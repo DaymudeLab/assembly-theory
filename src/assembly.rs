@@ -269,7 +269,7 @@ fn unique_edges(fragment: &BitSet, mol: &Molecule) -> Vec<EdgeType> {
     let g = mol.graph();
     let mut nodes: Vec<Element> = Vec::new();
     for v in g.node_weights() {
-        nodes.push(v.element);
+        nodes.push(v.element());
     }
     let edges: Vec<petgraph::prelude::EdgeIndex> = g.edge_indices().collect();
     let weights: Vec<Bond> = g.edge_weights().copied().collect();

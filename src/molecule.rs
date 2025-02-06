@@ -46,7 +46,7 @@ macro_rules! periodic_table {
     };
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct ParseElementError;
 
 periodic_table!(
@@ -172,7 +172,7 @@ periodic_table!(
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Atom {
-    pub element: Element,
+    element: Element,
     capacity: u32,
 }
 
@@ -183,17 +183,33 @@ pub enum Bond {
     Triple,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct ParseBondError;
+
+impl TryFrom<usize> for Bond {
+    type Error = ParseBondError;
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        match value {
+            1 => Ok(Bond::Single),
+            2 => Ok(Bond::Double),
+            3 => Ok(Bond::Triple),
+            _ => Err(ParseBondError),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Molecule {
     graph: MGraph,
 }
 
 impl Atom {
-    pub fn new(element: Element) -> Self {
-        Self {
-            element,
-            capacity: 0,
-        }
+    pub fn new(element: Element, capacity: u32) -> Self {
+        Self { element, capacity }
+    }
+
+    pub fn element(&self) -> Element {
+        self.element
     }
 }
 
