@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, collections::BTreeSet};
+use std::collections::BTreeSet;
 
 use bit_set::BitSet;
 
@@ -9,7 +9,7 @@ use crate::{
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct EdgeType {
     bond: Bond,
-    ends: (Element, Element)
+    ends: (Element, Element),
 }
 
 pub enum Bound {
@@ -17,7 +17,6 @@ pub enum Bound {
     Addition(fn(&[BitSet], usize) -> usize),
     Vector(fn(&[BitSet], usize, &Molecule) -> usize),
 }
-
 
 fn top_down_search(mol: &Molecule) -> u32 {
     let mut ix = u32::MAX;
@@ -98,6 +97,7 @@ fn naive_search(mol: &Molecule) -> u32 {
 }
 
 fn remnant_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32) {
+    #[allow(clippy::too_many_arguments)]
     fn recurse(
         mol: &Molecule,
         matches: &[(BitSet, BitSet)],
@@ -183,11 +183,7 @@ fn remnant_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32) {
 
     // Create and sort matches array
     let mut matches: Vec<(BitSet, BitSet)> = mol.matches().collect();
-    matches.sort_by(my_sort);
-
-    fn my_sort(e1: &(BitSet, BitSet), e2: &(BitSet, BitSet)) -> Ordering {
-        e2.0.len().cmp(&e1.0.len())
-    }
+    matches.sort_by(|e1, e2| e2.0.len().cmp(&e1.0.len()));
 
     let mut total_search = 0;
 
@@ -211,7 +207,15 @@ pub fn index_and_states(m: &Molecule, bounds: &[Bound]) -> (u32, u32) {
 }
 
 pub fn index(m: &Molecule) -> u32 {
-    remnant_search(m, &[Bound::Addition(addition_bound), Bound::Vector(vec_bound_simple), Bound::Vector(vec_bound_small_frags)]).0
+    remnant_search(
+        m,
+        &[
+            Bound::Addition(addition_bound),
+            Bound::Vector(vec_bound_simple),
+            Bound::Vector(vec_bound_small_frags),
+        ],
+    )
+    .0
 }
 
 pub fn naive_index(m: &Molecule) -> u32 {
@@ -280,10 +284,7 @@ fn unique_edges(fragment: &BitSet, mol: &Molecule) -> Vec<EdgeType> {
         let e2 = nodes[e2.index()];
         let ends = if e1 < e2 { (e1, e2) } else { (e2, e1) };
 
-        let edge_type = EdgeType{
-            bond,
-            ends
-        };
+        let edge_type = EdgeType { bond, ends };
 
         if types.iter().any(|&t| t == edge_type) {
             continue;
@@ -308,13 +309,13 @@ pub fn vec_bound_simple(fragments: &[BitSet], m: usize, mol: &Molecule) -> usize
         union_set.union_with(f);
     }
     let z = unique_edges(&union_set, mol).len();
-    
-    (s - z) - ((s-z) as f32 / m as f32).ceil() as usize
+
+    (s - z) - ((s - z) as f32 / m as f32).ceil() as usize
 }
 
 pub fn vec_bound_small_frags(fragments: &[BitSet], m: usize, mol: &Molecule) -> usize {
     let mut size_two_fragments: Vec<BitSet> = Vec::new();
-    let mut large_fragments: Vec<BitSet>  = fragments.to_owned();
+    let mut large_fragments: Vec<BitSet> = fragments.to_owned();
     let mut indices_to_remove: Vec<usize> = Vec::new();
 
     // Find and remove fragments of size 2
@@ -337,8 +338,8 @@ pub fn vec_bound_small_frags(fragments: &[BitSet], m: usize, mol: &Molecule) -> 
     for f in size_two_fragments.iter() {
         size_two_fragments_union.union_with(f);
     }
-    let z = unique_edges(&fragments_union, mol).len() 
-                - unique_edges(&size_two_fragments_union, mol).len();
+    let z = unique_edges(&fragments_union, mol).len()
+        - unique_edges(&size_two_fragments_union, mol).len();
 
     // Compute s = total number of edges in fragments
     // Compute sl = total number of edges in large fragments
@@ -358,15 +359,15 @@ pub fn vec_bound_small_frags(fragments: &[BitSet], m: usize, mol: &Molecule) -> 
         types.sort();
         if types.len() == 1 {
             size_two_types.push((types[0], types[0]));
-        }
-        else {
+        } else {
             size_two_types.push((types[0], types[1]));
         }
     }
     size_two_types.sort();
     size_two_types.dedup();
 
-    s - (z + size_two_types.len() + size_two_fragments.len()) - ((sl-z) as f32 / m as f32).ceil() as usize
+    s - (z + size_two_types.len() + size_two_fragments.len())
+        - ((sl - z) as f32 / m as f32).ceil() as usize
 }
 
 #[cfg(test)]
