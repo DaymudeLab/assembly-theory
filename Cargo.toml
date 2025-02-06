@@ -20,7 +20,7 @@ python = []
 [lib]
 name = "orca"
 path = "src/lib.rs"
-crate-type = ["cdylib"]
+crate-type = ["rlib","cdylib"]
 
 [[bench]]
 name = "benchmark"
