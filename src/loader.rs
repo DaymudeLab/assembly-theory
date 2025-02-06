@@ -21,7 +21,7 @@ pub fn parse_sdfile_str(_input: &str) -> Result<Molecule, ParserError> {
 
 pub fn parse_molfile_str(input: &str) -> Result<Molecule, ParserError> {
     let mut lines = input.lines().enumerate().skip(3); // Skip the header block, 3 lines
-    let (ix, counts_line) = lines.next().ok_or_else(|| ParserError::NotEnoughLines)?;
+    let (ix, counts_line) = lines.next().ok_or(ParserError::NotEnoughLines)?;
     let (n_atoms, n_bonds) = parse_counts_line(ix, counts_line)?;
 
     let mut graph = MGraph::new_undirected();
