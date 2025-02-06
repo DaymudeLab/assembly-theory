@@ -268,7 +268,7 @@ fn unique_edges(fragment: &BitSet, mol: &Molecule) -> Vec<EdgeType> {
         nodes.push(v.element);
     }
     let edges: Vec<petgraph::prelude::EdgeIndex> = g.edge_indices().collect();
-    let weights: Vec<Bond> = g.edge_weights().map(|b| b.clone()).collect();
+    let weights: Vec<Bond> = g.edge_weights().copied().collect();
 
     let mut types: Vec<EdgeType> = Vec::new();
     for idx in fragment.iter() {
@@ -318,8 +318,8 @@ pub fn vec_bound_small_frags(fragments: &[BitSet], m: usize, mol: &Molecule) -> 
     let mut indices_to_remove: Vec<usize> = Vec::new();
 
     // Find and remove fragments of size 2
-    for i in 0..fragments.len() {
-        if fragments[i].len() == 2 {
+    for (i, frag) in fragments.iter().enumerate() {
+        if frag.len() == 2 {
             indices_to_remove.push(i);
         }
     }
@@ -366,8 +366,7 @@ pub fn vec_bound_small_frags(fragments: &[BitSet], m: usize, mol: &Molecule) -> 
     size_two_types.sort();
     size_two_types.dedup();
 
-    let ans = s - (z + size_two_types.len() + size_two_fragments.len()) - ((sl-z) as f32 / m as f32).ceil() as usize;
-    return ans;
+    s - (z + size_two_types.len() + size_two_fragments.len()) - ((sl-z) as f32 / m as f32).ceil() as usize
 }
 
 #[cfg(test)]
