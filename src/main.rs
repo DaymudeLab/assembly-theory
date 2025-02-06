@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::PathBuf;
 
 use clap::{Parser, ValueEnum};
@@ -30,7 +31,8 @@ struct Cli {
 
 fn main() -> std::io::Result<()> {
     let cli = Cli::parse();
-    let molecule = loader::parse(&cli.path)?;
+    let molfile = fs::read_to_string(&cli.path).expect("Cannot read input file.");
+    let molecule = loader::parse_molfile_str(&molfile).expect("Cannot parse molfile.");
     if molecule.is_malformed() {
         panic!("Bad input! Molecule has self-loops or doubled edges")
     }
