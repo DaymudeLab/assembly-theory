@@ -1,112 +1,129 @@
-use crate::molecule::{self, Atom, Bond, Element, MGraph, Molecule};
-use petgraph::graph::NodeIndex;
+use crate::molecule::{Atom, Bond, MGraph, Molecule};
+use clap::error::Result;
+use std::fmt::Display;
 
-use std::{
-    fs::{self},
-    io::{self, Error},
-    num::ParseIntError,
-    path::PathBuf,
-};
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ParserError {
+    AtomCountNotInt(usize),
+    BondCountNotInt(usize),
+    FileVersionIsNotV2000(usize),
+    BadElementSymbol(usize, String),
+    BadBondNumber(usize),
+    BondTypeNotInt(usize),
+    BondTypeOutOfBounds(usize),
+    ThisShouldNotHappen,
+    NotEnoughLines,
+}
 
-pub fn parse(p: &PathBuf) -> io::Result<molecule::Molecule> {
-    let mut curr: Vec<String> = Vec::new();
-    let mut graph = None;
+pub fn parse_sdfile_str(_input: &str) -> Result<Molecule, ParserError> {
+    todo!("SDfile parser unimplemented!")
+}
 
-    let contents = fs::read_to_string(p)?;
+pub fn parse_molfile_str(input: &str) -> Result<Molecule, ParserError> {
+    let mut lines = input.lines().enumerate().skip(3); // Skip the header block, 3 lines
+    let (ix, counts_line) = lines.next().ok_or(ParserError::NotEnoughLines)?;
+    let (n_atoms, n_bonds) = parse_counts_line(ix, counts_line)?;
 
-    for line in contents.lines() {
-        if let "$$$$" | "M  END" = line {
-            if curr.is_empty() {
-                curr.clear();
-                continue;
-            }
-            graph = parse_one_molecule(&curr).ok();
-        } else {
-            curr.push(line.to_string())
-        }
-    }
-    if let Some(g) = graph {
-        Ok(Molecule::from_graph(g))
+    let mut graph = MGraph::new_undirected();
+    let mut atom_indices = Vec::new();
+
+    lines
+        .by_ref()
+        .take(n_atoms)
+        .try_fold(&mut graph, |g, (i, l)| {
+            parse_atom_line(i, l).map(|atom| {
+                atom_indices.push(g.add_node(atom));
+                g
+            })
+        })?;
+
+    lines
+        .by_ref()
+        .take(n_bonds)
+        .try_fold(&mut graph, |g, (i, l)| {
+            parse_bond_line(i, l).map(|(first, second, bond)| {
+                g.add_edge(atom_indices[first - 1], atom_indices[second - 1], bond);
+                g
+            })
+        })?;
+
+    Ok(Molecule::from_graph(graph))
+}
+
+fn parse_counts_line(line_ix: usize, counts_line: &str) -> Result<(usize, usize), ParserError> {
+    let n_atoms = counts_line[0..3]
+        .trim()
+        .parse()
+        .map_err(|_| ParserError::AtomCountNotInt(line_ix))?;
+    let n_bonds = counts_line[3..6]
+        .trim()
+        .parse()
+        .map_err(|_| ParserError::BondCountNotInt(line_ix))?;
+    let version_number = counts_line[33..39].trim().to_uppercase();
+    if version_number != "V2000" {
+        Err(ParserError::FileVersionIsNotV2000(line_ix))
     } else {
-        Err(Error::new(
-            io::ErrorKind::InvalidData,
-            "Something broke while parsing",
-        ))
+        Ok((n_atoms, n_bonds))
     }
 }
 
-pub fn parse_one_molecule(mol_data: &[String]) -> Result<MGraph, ParseIntError> {
-    let mut mol_graph = MGraph::default();
+fn parse_atom_line(line_ix: usize, atom_line: &str) -> Result<Atom, ParserError> {
+    let elem_str = atom_line[31..34].trim();
+    let element = elem_str
+        .parse()
+        .map_err(|_| ParserError::BadElementSymbol(line_ix, elem_str.to_owned()))?;
+    let capacity = atom_line[44..47].trim().parse::<u32>().unwrap_or(0);
+    Ok(Atom::new(element, capacity))
+}
 
-    let (num_atoms, num_bonds) = parse_counts_line(&mol_data[3])?;
+fn parse_bond_line(line_ix: usize, bond_line: &str) -> Result<(usize, usize, Bond), ParserError> {
+    let first_atom = bond_line[0..3]
+        .trim()
+        .parse()
+        .map_err(|_| ParserError::BadBondNumber(line_ix))?;
+    let second_atom = bond_line[3..6]
+        .trim()
+        .parse()
+        .map_err(|_| ParserError::BadBondNumber(line_ix))?;
+    let bond = bond_line[6..9]
+        .trim()
+        .parse::<usize>()
+        .map_err(|_| ParserError::BondTypeNotInt(line_ix))?
+        .try_into()
+        .map_err(|_| ParserError::BondTypeOutOfBounds(line_ix))?;
+    Ok((first_atom, second_atom, bond))
+}
 
-    let atom_start = 4 + num_atoms;
-    let bond_start = 4 + num_atoms + num_bonds;
-
-    let mut atoms = Vec::with_capacity(num_atoms);
-    let mut atom_node_ids = Vec::new();
-    // Atoms block parse
-    for atom_line in mol_data[4..atom_start].iter() {
-        let atom = parse_atom_line(atom_line);
-        atoms.push(atom);
-        if let "H" = atom {
-            // ignore Hydrogen for now
-            atom_node_ids.push(NodeIndex::default())
-        } else {
-            atom_node_ids.push(mol_graph.add_node(Atom::new(get_element(atom))));
+impl Display for ParserError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::AtomCountNotInt(line) => {
+                write!(f, "Line {line}: Atom count is not an integer")
+            }
+            Self::BondCountNotInt(line) => {
+                write!(f, "Line {line}: Bond count is not an integer")
+            }
+            Self::FileVersionIsNotV2000(line) => {
+                write!(f, "Line {line}: File version is not V2000")
+            }
+            Self::BondTypeNotInt(line) => {
+                write!(f, "Line {line}: Bond type is not an integer")
+            }
+            Self::BondTypeOutOfBounds(line) => {
+                write!(f, "Line {line}: Bond type is not 1, 2, or 3")
+            }
+            Self::BadElementSymbol(line, sym) => {
+                write!(f, "Line {line}: Bad element symbol {sym}")
+            }
+            Self::BadBondNumber(line) => {
+                write!(f, "Line {line}: Bad bond number")
+            }
+            Self::NotEnoughLines => {
+                write!(f, "File does not have enough lines")
+            }
+            Self::ThisShouldNotHappen => {
+                write!(f, "This should not happen, report it as a bug")
+            }
         }
-    }
-
-    // Bonds block parse
-    for bond_line in mol_data[atom_start..bond_start].iter() {
-        let (atom_one, atom_two, bond_type) = parse_bond_line(bond_line)?;
-        let atom_one_idx = atom_one - 1;
-        let atom_two_idx = atom_two - 1;
-        // ignore Hydrogen for now
-        if (atoms[atom_one_idx] == "H") && (atoms[atom_two_idx] == "H") {
-            continue;
-        }
-        mol_graph.add_edge(
-            atom_node_ids[atom_one_idx],
-            atom_node_ids[atom_two_idx],
-            get_bond(bond_type),
-        );
-    }
-    Ok(mol_graph)
-}
-
-fn parse_counts_line(counts_line: &str) -> Result<(usize, usize), ParseIntError> {
-    Ok((
-        counts_line[0..3].trim().parse()?,
-        counts_line[3..6].trim().parse()?,
-    ))
-}
-
-fn parse_atom_line(atom_line: &str) -> &str {
-    atom_line[31..34].trim()
-}
-
-fn parse_bond_line(bond_line: &str) -> Result<(usize, usize, usize), ParseIntError> {
-    Ok((
-        bond_line[0..3].trim().parse()?,
-        bond_line[3..6].trim().parse()?,
-        bond_line[6..9].trim().parse()?,
-    ))
-}
-
-fn get_element(atom: &str) -> Element {
-    match atom {
-        "O" => Element::Oxygen,
-        "N" => Element::Nitrogen,
-        "C" => Element::Carbon,
-        &_ => Element::Hydrogen,
-    }
-}
-
-fn get_bond(bond_type: usize) -> Bond {
-    match bond_type {
-        1 => Bond::Single,
-        2 => Bond::Double,
-        _ => Bond::Single,
     }
 }
