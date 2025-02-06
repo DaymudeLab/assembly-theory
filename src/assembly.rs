@@ -372,7 +372,7 @@ pub fn vec_bound_small_frags(fragments: &[BitSet], m: usize, mol: &Molecule) -> 
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, path::PathBuf};
+    use std::{collections::HashMap, fs, path::PathBuf};
 
     use csv::ReaderBuilder;
 
@@ -407,8 +407,8 @@ mod tests {
         F: Fn(&Molecule) -> u32,
     {
         let path = PathBuf::from(format!("./data/{dataset}/{filename}"));
-        let molecule = loader::parse(&path)
-            .unwrap_or_else(|_| panic!("Cannot parse molecule: {}.", path.display()));
+        let molfile = fs::read_to_string(path).expect("Cannot read file");
+        let molecule = loader::parse_molfile_str(&molfile).expect("Cannot parse molecule");
         let dataset = read_dataset_index(dataset);
         let ground_truth = dataset
             .get(filename)
