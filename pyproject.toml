@@ -11,21 +11,23 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = {file = "LICENSE-MIT"}
 authors = [
-  {email = "cole.mathis@asu.edu"},
-  {name = "Cole Mathis"}
+  {name = "Devansh Vimal", email = "dvpatel5@asu.edu"},
+  {name = "Cole Mathis", email = "cole.mathis@asu.edu"},
+  {name = "Joshua Daymude", email = "jdaymude@asu.edu"},
 ]
 maintainers = [
   {name = "Devansh Vimal", email = "dvpatel5@asu.edu"},
-  {name = "Cole Mathis", email = "cole.mathis@asu.edu"}
+  {name = "Cole Mathis", email = "cole.mathis@asu.edu"},
+  {name = "Joshua Daymude", email = "jdaymude@asu.edu"},
 ]
 
-dependencies = ["cffi"]
+dependencies = []
 
 [project.urls]
-homepage = "https://github.com/DaymudeLab/ORCA"
 repository = "https://github.com/DaymudeLab/ORCA"
 
 [tool.maturin]
 python-source = "python"
 module-name = "orca._lib"
-bindings = "cffi"
+bindings = "pyo3"
+features = ["pyo3/extension-module"]
