@@ -2,7 +2,7 @@ use std::collections::{btree_set::Range, HashMap, HashSet, VecDeque};
 use lexical_sort::{cmp, lexical_cmp, lexical_only_alnum_cmp, natural_cmp, StringSort};
 
 use crate::molecule::{Atom, Bond, Molecule, Element};
-use petgraph::{adj::Neighbors, dot::{Config, Dot}, graph::NodeIndex, visit::DfsPostOrder, Directed, Direction::{self, Incoming, Outgoing}, Graph, Undirected};
+use petgraph::{adj::Neighbors, dot::{Config, Dot}, graph::{EdgeIndex, NodeIndex}, visit::DfsPostOrder, Directed, Direction::{self, Incoming, Outgoing}, Graph, Undirected};
 
 #[derive(Debug, Clone)]
 struct DAGVert {
@@ -40,12 +40,37 @@ impl MolAtomNode {
 }
 
 // Compute the assembly index of a molecule
-pub fn canonize(m: &Molecule) -> String {
-    let mol_graph = m.get_graph();
+pub fn canonize(molecule: &Molecule) -> String {
+    let mut m = molecule.clone();
+    let mut mol_graph = m.get_mut_graph();
 
-    // /*
+    // Update the molecule so that canonization works to handle bond types
+    let bonds_iter = mol_graph.edge_indices().clone();
+    for bond in bonds_iter {
+        let bond_type = mol_graph[bond];
+        let (start_atom, end_atom) = mol_graph.edge_endpoints(bond).unwrap();
+        match bond_type {
+            Bond::Single => {},
+            Bond::Double => { // Handle Triple bonds as well
+                // Add an atom of type Double for the bond
+                let new_node_id = mol_graph.add_node(Atom::new(Element::Double));
+                
+                mol_graph.add_edge(start_atom, new_node_id, Bond::Single);
+                mol_graph.add_edge(new_node_id, end_atom, Bond::Single);
+                mol_graph.remove_edge(bond);
+            },
+        }
+    }
+
+    // println!("Og Molecule:");
+    // println!("{:?}", molecule);
+
+    // println!("Upended Molecule:");
+    // println!("{:?}", m);
+
+    // return "".to_string();
     // Dummy Molecule for testing
-
+    /*
     let mut mol_graph: Graph<Atom, Bond, Undirected> = Graph::<Atom, Bond, Undirected>::new_undirected();
 
     let mut vec_nodes: Vec<NodeIndex> = Vec::new();
@@ -82,11 +107,11 @@ pub fn canonize(m: &Molecule) -> String {
     mol_graph.add_edge(vec_nodes[6],vec_nodes[5],Bond::Single);
     mol_graph.add_edge(vec_nodes[8],vec_nodes[7],Bond::Single);
     mol_graph.add_edge(vec_nodes[10],vec_nodes[9],Bond::Single);
-    //  */
+    */
 
     let mut max_string = String::new();
     for root in mol_graph.node_indices() {
-        let root = vec_nodes[1];
+        // let root = vec_nodes[1];
         // for each node in the molecule graph create a signature
         /*
         1. create a DAG from each start node
@@ -252,15 +277,15 @@ pub fn canonize(m: &Molecule) -> String {
         // get the canonized string for current root atom
         let canon_string = canonize_signature(&mol_graph, &mut DAG, &mut extended_molg_atom_map, &dag_level_list, &mol_g_dag_vertex_map,  max_level, 1, "".to_string());
 
-        println!("{:?}", canon_string);
+        // println!("{:?}", canon_string);
 
-        break;
+        // break;
         // lexico-compare strings to save the max one.
         if lexical_cmp(&max_string, &canon_string).is_lt() {
             max_string = canon_string
         }
 
-        break;
+        // break;
     }
     return max_string;
 }
@@ -302,10 +327,9 @@ fn canonize_signature(
         //  if multiple then use orbit with min value
         let min_orbit = (if (&max_orbits.len()).clone() > 1 {max_orbits.iter().min()} else {max_orbits.first()}).unwrap();
         
+        // println!("Max Orbit: {:?}", orbits.get(&min_orbit).unwrap());
         // let mut local_smax = String::new();
         let mut local_smax = s_max.clone();
-        
-        println!("Max Orbit: {:?}", orbits.get(&min_orbit).unwrap());
         // recurse further for each of the atom in such a orbit and generate a canonized signature by diff. the atoms in same orbit
         for atom in orbits.get(&min_orbit).unwrap() {
             extended_molg_atom_map.entry(*atom).and_modify(|atom_node| atom_node.color = color_c as u32);
@@ -364,16 +388,21 @@ fn print_signature_string(
         // let child_vec = dag_childs;
         child_vec.sort_by(|vert_a, vert_b| DAG[*vert_b].inv.cmp(&DAG[*vert_a].inv));
         
-        print_sign.push('(');
+        let mut sub_print_sign = String::new();
+        
         for child in child_vec {
             if let Some(_edge) = edges.iter().find(|egde| (egde.0 == vertex) && (egde.1 == child)) {}
             else {
                 // if the edge is not already seen then add it to seen and generate signature-string for the child
                 edges.push((vertex, child));
-                print_sign.push_str(&print_signature_string(child, &DAG, &mol_graph, &extended_molg_atom_map, edges)); 
+                sub_print_sign.push_str(&print_signature_string(child, &DAG, &mol_graph, &extended_molg_atom_map, edges)); 
             }
         }
-        print_sign.push(')');
+        if sub_print_sign.len() > 0 {
+            print_sign.push('(');
+            print_sign.push_str(&sub_print_sign);
+            print_sign.push(')');
+        }
         return print_sign;
     }
 }
@@ -476,15 +505,14 @@ fn invariant_atom(
 
         // compare the no. of invariants of all the atoms with the one's they started from
         if start_inv_atoms == end_inv_atoms {
-            println!("breaking out because no. of invariant values don't change");
-
-            println!("Atom Invariants");
+            // println!("breaking out because no. of invariant values don't change");
+            // println!("Atom Invariants");
             // println!("{:?}", Dot::with_config(&*DAG, &[Config::EdgeNoLabel]));
             // println!("{:?}", extended_molg_atom_map);
 
-            for (node_id, atom_node) in extended_molg_atom_map {
-                println!("{:?} Inv:{:?} Ord:{:?}", node_id, atom_node.inv, order_map_vert_atom.get(node_id).unwrap())
-            }
+            // for (node_id, atom_node) in extended_molg_atom_map {
+            //     println!("{:?} Inv:{:?} Ord:{:?}", node_id, atom_node.inv, order_map_vert_atom.get(node_id).unwrap())
+            // }
             break;
         }
 

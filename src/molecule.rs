@@ -21,6 +21,10 @@ pub enum Element {
     Carbon,
     Nitrogen,
     Oxygen,
+
+    // Adding New Elements to handle bond type expansion of molecule graph
+    Double,
+    Triple,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -53,6 +57,8 @@ impl Atom {
             Element::Nitrogen => "N",
             Element::Carbon => "C",
             Element::Hydrogen => "H",
+            Element::Double => "2",
+            Element::Triple => "3",
         }).to_string()
     }
 }
@@ -236,6 +242,10 @@ impl Molecule {
 
     pub fn get_graph(&self) -> &MGraph {
         &self.graph
+    }
+
+    pub fn get_mut_graph(&mut self) -> &mut MGraph {
+        &mut self.graph
     }
 
     pub fn single_bond() -> Self {
