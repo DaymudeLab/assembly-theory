@@ -268,7 +268,7 @@ pub fn addition_bound(fragments: &[BitSet], m: usize) -> usize {
             aux_sum += (len / max) + (len % max != 0) as usize
         }
 
-        max_s = std::cmp::max(max_s, size_sum - log as usize - aux_sum);
+        max_s = max_s.max(size_sum - log as usize - aux_sum);
     }
 
     max_s

@@ -2,7 +2,10 @@ use std::fs;
 use std::path::PathBuf;
 
 use clap::{Parser, ValueEnum};
-use orca::assembly::{depth, index, index_and_states, naive_index, search_space, log_bound, addition_bound, vec_bound_simple, vec_bound_small_frags, Bound};
+use orca::assembly::{
+    addition_bound, depth, index, index_and_states, log_bound, naive_index, search_space,
+    vec_bound_simple, vec_bound_small_frags, Bound,
+};
 use orca::loader;
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
@@ -52,8 +55,14 @@ fn main() -> std::io::Result<()> {
             Measure::NoBounds => format!("{:?}", index_and_states(&molecule, &[])),
             Measure::LogBound => format!("{:?}", index_and_states(&molecule, &[log_bound])),
             Measure::AdditionBound => format!("{:?}", index_and_states(&molecule, &[add_bound])),
-            Measure::VectorBound => format!("{:?}", index_and_states(&molecule, &[vec_simple, vec_small])),
-            Measure::AllBounds => format!("{:?}", index_and_states(&molecule, &[add_bound, vec_simple, vec_small])),
+            Measure::VectorBound => format!(
+                "{:?}",
+                index_and_states(&molecule, &[vec_simple, vec_small])
+            ),
+            Measure::AllBounds => format!(
+                "{:?}",
+                index_and_states(&molecule, &[add_bound, vec_simple, vec_small])
+            ),
         }
     } else {
         format!("{:?}", index(&molecule))
