@@ -38,57 +38,64 @@ fn top_down_search(mol: &Molecule) -> u32 {
     ix
 }
 
-fn naive_search(mol: &Molecule) -> u32 {
-    fn recurse(
-        mol: &Molecule,
-        matches: &BTreeSet<(BitSet, BitSet)>,
-        fragments: &[BitSet],
-        ix: usize,
-    ) -> usize {
-        let mut cx = ix;
-        for (h1, h2) in matches {
-            let mut fractures = fragments.to_owned();
-            let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
-            let f2 = fragments.iter().enumerate().find(|(_, c)| h2.is_subset(c));
+fn recurse_naive_index_search(
+    mol: &Molecule,
+    matches: &BTreeSet<(BitSet, BitSet)>,
+    fragments: &[BitSet],
+    ix: usize,
+) -> usize {
+    let mut cx = ix;
+    for (h1, h2) in matches {
+        let mut fractures = fragments.to_owned();
+        let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
+        let f2 = fragments.iter().enumerate().find(|(_, c)| h2.is_subset(c));
 
-            // All of these clones are on bitsets and cheap enough
-            if let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) {
-                if i1 == i2 {
-                    let mut union = h1.clone();
-                    union.union_with(h2);
-                    let mut difference = f1.clone();
-                    difference.difference_with(&union);
-                    let c = connected_components_under_edges(mol.graph(), &difference);
-                    fractures.extend(c);
-                    fractures.swap_remove(i1);
-                    fractures.push(h1.clone());
-                } else {
-                    let mut f1r = f1.clone();
-                    f1r.difference_with(h1);
-                    let mut f2r = f2.clone();
-                    f2r.difference_with(h2);
+        let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) else {
+            continue;
+        };
 
-                    let c1 = connected_components_under_edges(mol.graph(), &f1r);
-                    let c2 = connected_components_under_edges(mol.graph(), &f2r);
+        // All of these clones are on bitsets and cheap enough
+        if i1 == i2 {
+            let mut union = h1.clone();
+            union.union_with(h2);
+            let mut difference = f1.clone();
+            difference.difference_with(&union);
+            let c = connected_components_under_edges(mol.graph(), &difference);
+            fractures.extend(c);
+            fractures.swap_remove(i1);
+            fractures.push(h1.clone());
+        } else {
+            let mut f1r = f1.clone();
+            f1r.difference_with(h1);
+            let mut f2r = f2.clone();
+            f2r.difference_with(h2);
 
-                    fractures.extend(c1);
-                    fractures.extend(c2);
+            let c1 = connected_components_under_edges(mol.graph(), &f1r);
+            let c2 = connected_components_under_edges(mol.graph(), &f2r);
 
-                    fractures.swap_remove(i1.max(i2));
-                    fractures.swap_remove(i1.min(i2));
+            fractures.extend(c1);
+            fractures.extend(c2);
 
-                    fractures.push(h1.clone());
-                }
-                cx = cx.min(recurse(mol, matches, &fractures, ix - h1.len() + 1));
-            }
+            fractures.swap_remove(i1.max(i2));
+            fractures.swap_remove(i1.min(i2));
+
+            fractures.push(h1.clone());
         }
-        cx
+        cx = cx.min(recurse_naive_index_search(
+            mol,
+            matches,
+            &fractures,
+            ix - h1.len() + 1,
+        ));
     }
+    cx
+}
 
+fn naive_index_search(mol: &Molecule) -> u32 {
     let mut init = BitSet::new();
     init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
 
-    recurse(
+    recurse_naive_index_search(
         mol,
         &mol.matches().collect(),
         &[init],
@@ -96,88 +103,90 @@ fn naive_search(mol: &Molecule) -> u32 {
     ) as u32
 }
 
-fn remnant_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32) {
-    #[allow(clippy::too_many_arguments)]
-    fn recurse(
-        mol: &Molecule,
-        matches: &[(BitSet, BitSet)],
-        fragments: &[BitSet],
-        ix: usize,
-        largest_remove: usize,
-        mut best: usize,
-        bounds: &[Bound],
-        states_searched: &mut u32,
-    ) -> usize {
-        let mut cx = ix;
+#[allow(clippy::too_many_arguments)]
+fn recurse_index_search(
+    mol: &Molecule,
+    matches: &[(BitSet, BitSet)],
+    fragments: &[BitSet],
+    ix: usize,
+    largest_remove: usize,
+    mut best: usize,
+    bounds: &[Bound],
+    states_searched: &mut u32,
+) -> usize {
+    let mut cx = ix;
 
-        *states_searched += 1;
+    *states_searched += 1;
 
-        // Branch and Bound
-        for bound_type in bounds {
-            let exceeds = match bound_type {
-                Bound::Log(func) => ix - func(fragments) >= best,
-                Bound::Addition(func) => ix - func(fragments, largest_remove) >= best,
-                Bound::Vector(func) => ix - func(fragments, largest_remove, mol) >= best,
-            };
-            if exceeds {
-                return ix;
-            }
+    // Branch and Bound
+    for bound_type in bounds {
+        let exceeds = match bound_type {
+            Bound::Log(func) => ix - func(fragments) >= best,
+            Bound::Addition(func) => ix - func(fragments, largest_remove) >= best,
+            Bound::Vector(func) => ix - func(fragments, largest_remove, mol) >= best,
+        };
+        if exceeds {
+            return ix;
         }
-
-        // Search for duplicatable fragment
-        for (i, (h1, h2)) in matches.iter().enumerate() {
-            let mut fractures = fragments.to_owned();
-            let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
-            let f2 = fragments.iter().enumerate().find(|(_, c)| h2.is_subset(c));
-
-            let largest_remove = h1.len();
-
-            // All of these clones are on bitsets and cheap enough
-            if let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) {
-                if i1 == i2 {
-                    let mut union = h1.clone();
-                    union.union_with(h2);
-                    let mut difference = f1.clone();
-                    difference.difference_with(&union);
-                    let c = connected_components_under_edges(mol.graph(), &difference);
-                    fractures.extend(c);
-                    fractures.swap_remove(i1);
-                } else {
-                    let mut f1r = f1.clone();
-                    f1r.difference_with(h1);
-                    let mut f2r = f2.clone();
-                    f2r.difference_with(h2);
-
-                    let c1 = connected_components_under_edges(mol.graph(), &f1r);
-                    let c2 = connected_components_under_edges(mol.graph(), &f2r);
-
-                    fractures.extend(c1);
-                    fractures.extend(c2);
-
-                    fractures.swap_remove(i1.max(i2));
-                    fractures.swap_remove(i1.min(i2));
-                }
-
-                fractures.retain(|i| i.len() > 1);
-                fractures.push(h1.clone());
-
-                cx = cx.min(recurse(
-                    mol,
-                    &matches[i + 1..],
-                    &fractures,
-                    ix - h1.len() + 1,
-                    largest_remove,
-                    best,
-                    bounds,
-                    states_searched,
-                ));
-                best = best.min(cx);
-            }
-        }
-
-        cx
     }
 
+    // Search for duplicatable fragment
+    for (i, (h1, h2)) in matches.iter().enumerate() {
+        let mut fractures = fragments.to_owned();
+        let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
+        let f2 = fragments.iter().enumerate().find(|(_, c)| h2.is_subset(c));
+
+        let largest_remove = h1.len();
+
+        let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) else {
+            continue;
+        };
+
+        // All of these clones are on bitsets and cheap enough
+        if i1 == i2 {
+            let mut union = h1.clone();
+            union.union_with(h2);
+            let mut difference = f1.clone();
+            difference.difference_with(&union);
+            let c = connected_components_under_edges(mol.graph(), &difference);
+            fractures.extend(c);
+            fractures.swap_remove(i1);
+        } else {
+            let mut f1r = f1.clone();
+            f1r.difference_with(h1);
+            let mut f2r = f2.clone();
+            f2r.difference_with(h2);
+
+            let c1 = connected_components_under_edges(mol.graph(), &f1r);
+            let c2 = connected_components_under_edges(mol.graph(), &f2r);
+
+            fractures.extend(c1);
+            fractures.extend(c2);
+
+            fractures.swap_remove(i1.max(i2));
+            fractures.swap_remove(i1.min(i2));
+        }
+
+        fractures.retain(|i| i.len() > 1);
+        fractures.push(h1.clone());
+
+        cx = cx.min(recurse_index_search(
+            mol,
+            &matches[i + 1..],
+            &fractures,
+            ix - h1.len() + 1,
+            largest_remove,
+            best,
+            bounds,
+            states_searched,
+        ));
+        best = best.min(cx);
+    }
+
+    cx
+}
+
+fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32) {
     let mut init = BitSet::new();
     init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
 
@@ -186,14 +195,15 @@ fn remnant_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32) {
     matches.sort_by(|e1, e2| e2.0.len().cmp(&e1.0.len()));
 
     let mut total_search = 0;
+    let edge_count = mol.graph().edge_count();
 
-    let ans = recurse(
+    let ans = recurse_index_search(
         mol,
         &matches,
         &[init],
-        mol.graph().edge_count() - 1,
-        mol.graph().edge_count(),
-        mol.graph().edge_count() - 1,
+        edge_count - 1,
+        edge_count,
+        edge_count - 1,
         bounds,
         &mut total_search,
     ) as u32;
@@ -203,11 +213,11 @@ fn remnant_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32) {
 
 // Compute the assembly index of a molecule
 pub fn index_and_states(m: &Molecule, bounds: &[Bound]) -> (u32, u32) {
-    remnant_search(m, bounds)
+    index_search(m, bounds)
 }
 
 pub fn index(m: &Molecule) -> u32 {
-    remnant_search(
+    index_search(
         m,
         &[
             Bound::Addition(addition_bound),
@@ -219,7 +229,7 @@ pub fn index(m: &Molecule) -> u32 {
 }
 
 pub fn naive_index(m: &Molecule) -> u32 {
-    naive_search(m)
+    naive_index_search(m)
 }
 
 pub fn depth(m: &Molecule) -> u32 {
