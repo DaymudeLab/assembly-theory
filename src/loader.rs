@@ -35,6 +35,34 @@ pub fn parse(p: &PathBuf) -> io::Result<molecule::Molecule> {
     }
 }
 
+pub fn parse_mol_block(mol_block: String) -> io::Result<molecule::Molecule> {
+    let mut curr: Vec<String> = Vec::new();
+    let mut graph = None;
+
+    //let contents = fs::read_to_string(p)?;
+
+    for line in mol_block.lines() {
+        if let "$$$$" | "M  END" = line {
+            if curr.is_empty() {
+                curr.clear();
+                continue;
+            }
+            graph = parse_one_molecule(&curr).ok();
+        } else {
+            curr.push(line.to_string())
+        }
+    }
+    if let Some(g) = graph {
+        Ok(Molecule::from_graph(g))
+    } else {
+        Err(Error::new(
+            io::ErrorKind::InvalidData,
+            "Something broke while parsing",
+        ))
+    }
+}
+
+
 pub fn parse_one_molecule(mol_data: &[String]) -> Result<MGraph, ParseIntError> {
     let mut mol_graph = MGraph::default();
 

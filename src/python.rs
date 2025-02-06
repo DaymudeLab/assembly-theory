@@ -1,47 +1,29 @@
+
+
 use pyo3::prelude::*;
-use rand::Rng;
-use std::cmp::Ordering;
-use std::io;
+use crate::loader::parse_mol_block;
+use crate::assembly::index;
+//use pyo3::types::PyString;
 
 #[pyfunction]
-fn guess_the_number() {
-    println!("Guess the number!");
+fn assembly_index(mol_block: String) -> PyResult<u32> {
 
-    let secret_number = rand::thread_rng().gen_range(1..101);
-
-    loop {
-        println!("Please input your guess.");
-
-        let mut guess = String::new();
-
-        io::stdin()
-            .read_line(&mut guess)
-            .expect("Failed to read line");
-
-        let guess: u32 = match guess.trim().parse() {
-            Ok(num) => num,
-            Err(_) => continue,
-        };
-
-        println!("You guessed: {}", guess);
-
-        match guess.cmp(&secret_number) {
-            Ordering::Less => println!("Too small!"),
-            Ordering::Greater => println!("Too big!"),
-            Ordering::Equal => {
-                println!("You win!");
-                break;
-            }
-        }
+    let mol = parse_mol_block(mol_block)?;
+    if mol.is_malformed() {
+        panic!("Bad input! Molecule has self-loops or doubled edges")
     }
+    let ix = index(&mol);
+
+    Ok(ix)
 }
 
 /// A Python module implemented in Rust. The name of this function must match
 /// the `lib.name` setting in the `Cargo.toml`, else Python will not be able to
 /// import the module.
 #[pymodule]
-fn _lib(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(guess_the_number, m)?)?;
+#[pyo3(name = "orca")]
+fn _orca(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(assembly_index, m)?)?;
 
     Ok(())
 }
