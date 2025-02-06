@@ -13,8 +13,8 @@ use petgraph::{
 
 use crate::utils::{edge_induced_subgraph, edges_contained_within, is_subset_connected};
 
-pub type Index = u32;
-pub type MGraph = Graph<Atom, Bond, Undirected, Index>;
+pub(crate) type Index = u32;
+pub(crate) type MGraph = Graph<Atom, Bond, Undirected, Index>;
 type MSubgraph = Graph<Atom, Option<Bond>, Undirected, Index>;
 type EdgeSet = BTreeSet<EdgeIndex<Index>>;
 type NodeSet = BTreeSet<NodeIndex<Index>>;
