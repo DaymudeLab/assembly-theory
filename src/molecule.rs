@@ -452,16 +452,25 @@ impl Molecule {
 
     pub fn info(&self) -> String {
         let mut info = String::new();
-        let g = self.graph(); 
+        let g = self.graph();
         let mut nodes: Vec<Element> = Vec::new();
-        for (i,w) in  g.node_weights().enumerate() {
+        for (i, w) in g.node_weights().enumerate() {
             info.write_str(&format!("{i}: {:?}\n", w.element)).unwrap();
             nodes.push(w.element);
         }
         info.write_str("\n").unwrap();
         for idx in g.edge_indices().zip(g.edge_weights()) {
             let (e1, e2) = self.graph().edge_endpoints(idx.0).expect("bad");
-            info.write_str(&format!("{}: {:?}, ({}, {}), ({:?}, {:?})\n", idx.0.index(), idx.1, e1.index(), e2.index(), nodes[e1.index()], nodes[e2.index()])).unwrap();
+            info.write_str(&format!(
+                "{}: {:?}, ({}, {}), ({:?}, {:?})\n",
+                idx.0.index(),
+                idx.1,
+                e1.index(),
+                e2.index(),
+                nodes[e1.index()],
+                nodes[e2.index()]
+            ))
+            .unwrap();
         }
 
         info
