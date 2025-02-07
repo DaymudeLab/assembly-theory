@@ -1,5 +1,6 @@
 use crate::molecule::{Atom, Bond, MGraph, Molecule};
 use clap::error::Result;
+use std::error::Error;
 use std::fmt::Display;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -14,6 +15,8 @@ pub enum ParserError {
     ThisShouldNotHappen,
     NotEnoughLines,
 }
+
+impl Error for ParserError {}
 
 pub fn parse_sdfile_str(_input: &str) -> Result<Molecule, ParserError> {
     todo!("SDfile parser unimplemented!")
