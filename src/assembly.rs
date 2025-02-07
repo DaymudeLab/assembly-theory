@@ -188,7 +188,7 @@ fn recurse_index_search(
 }
 
 // Compute the assembly index of a molecule
-fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, u32) {
+pub fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, u32) {
     let mut init = BitSet::new();
     init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
 
