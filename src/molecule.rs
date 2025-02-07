@@ -470,13 +470,13 @@ impl Molecule {
         let g = self.graph();
         let mut nodes: Vec<Element> = Vec::new();
         for (i, w) in g.node_weights().enumerate() {
-            info.write_str(&format!("{i}: {:?}\n", w.element)).unwrap();
+            info.push_str(&format!("{i}: {:?}\n", w.element));
             nodes.push(w.element);
         }
-        info.write_str("\n").unwrap();
+        info.push('\n');
         for idx in g.edge_indices().zip(g.edge_weights()) {
             let (e1, e2) = self.graph().edge_endpoints(idx.0).expect("bad");
-            info.write_str(&format!(
+            info.push_str(&format!(
                 "{}: {:?}, ({}, {}), ({:?}, {:?})\n",
                 idx.0.index(),
                 idx.1,
@@ -484,8 +484,7 @@ impl Molecule {
                 e2.index(),
                 nodes[e1.index()],
                 nodes[e2.index()]
-            ))
-            .unwrap();
+            ));
         }
 
         info
