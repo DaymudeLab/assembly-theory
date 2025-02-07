@@ -43,7 +43,7 @@ struct BoundGroup {
 fn make_boundlist(u: &[Bounds]) -> Vec<Bound> {
     let mut boundlist = u
         .iter()
-        .map(|b| match b {
+        .flat_map(|b| match b {
             Bounds::Log => vec![Bound::Log(log_bound)],
             Bounds::Addition => vec![Bound::Addition(addition_bound)],
             Bounds::Vector => vec![
@@ -51,7 +51,6 @@ fn make_boundlist(u: &[Bounds]) -> Vec<Bound> {
                 Bound::Vector(vec_bound_small_frags),
             ],
         })
-        .flatten()
         .collect::<Vec<_>>();
     boundlist.dedup();
     boundlist
