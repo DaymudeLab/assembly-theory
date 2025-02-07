@@ -12,25 +12,26 @@ pub struct EdgeType {
     ends: (Element, Element),
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Bound {
     Log(fn(&[BitSet]) -> usize),
     Addition(fn(&[BitSet], usize) -> usize),
     Vector(fn(&[BitSet], usize, &Molecule) -> usize),
 }
 
-fn top_down_search(mol: &Molecule) -> u32 {
+pub fn naive_assembly_depth(mol: &Molecule) -> u32 {
     let mut ix = u32::MAX;
     for (left, right) in mol.partitions().unwrap() {
         let l = if left.is_basic_unit() {
             0
         } else {
-            top_down_search(&left)
+            naive_assembly_depth(&left)
         };
 
         let r = if right.is_basic_unit() {
             0
         } else {
-            top_down_search(&right)
+            naive_assembly_depth(&right)
         };
 
         ix = ix.min(l.max(r) + 1)
@@ -91,7 +92,7 @@ fn recurse_naive_index_search(
     cx
 }
 
-fn naive_index_search(mol: &Molecule) -> u32 {
+pub fn naive_index_search(mol: &Molecule) -> u32 {
     let mut init = BitSet::new();
     init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
 
@@ -186,7 +187,8 @@ fn recurse_index_search(
     cx
 }
 
-fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32) {
+// Compute the assembly index of a molecule
+pub fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, u32) {
     let mut init = BitSet::new();
     init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
 
@@ -197,7 +199,7 @@ fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32) {
     let mut total_search = 0;
     let edge_count = mol.graph().edge_count();
 
-    let ans = recurse_index_search(
+    let index = recurse_index_search(
         mol,
         &matches,
         &[init],
@@ -208,36 +210,7 @@ fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32) {
         &mut total_search,
     ) as u32;
 
-    (ans, total_search)
-}
-
-// Compute the assembly index of a molecule
-pub fn index_and_states(m: &Molecule, bounds: &[Bound]) -> (u32, u32) {
-    index_search(m, bounds)
-}
-
-pub fn index(m: &Molecule) -> u32 {
-    index_search(
-        m,
-        &[
-            Bound::Addition(addition_bound),
-            Bound::Vector(vec_bound_simple),
-            Bound::Vector(vec_bound_small_frags),
-        ],
-    )
-    .0
-}
-
-pub fn naive_index(m: &Molecule) -> u32 {
-    naive_index_search(m)
-}
-
-pub fn depth(m: &Molecule) -> u32 {
-    top_down_search(m)
-}
-
-pub fn search_space(m: &Molecule) -> u32 {
-    m.matches().count() as u32
+    (index, matches.len() as u32, total_search)
 }
 
 // Bounds
@@ -380,6 +353,18 @@ pub fn vec_bound_small_frags(fragments: &[BitSet], m: usize, mol: &Molecule) -> 
         - ((sl - z) as f32 / m as f32).ceil() as usize
 }
 
+pub fn index(m: &Molecule) -> u32 {
+    index_search(
+        m,
+        &[
+            Bound::Addition(addition_bound),
+            Bound::Vector(vec_bound_simple),
+            Bound::Vector(vec_bound_small_frags),
+        ],
+    )
+    .0
+}
+
 #[cfg(test)]
 mod tests {
     use std::{collections::HashMap, fs, path::PathBuf};
@@ -445,17 +430,17 @@ mod tests {
 
     #[test]
     fn naive_method_benzene() {
-        test_molecule(naive_index, "checks", "benzene.mol");
+        test_molecule(naive_index_search, "checks", "benzene.mol");
     }
 
     #[test]
     fn naive_method_aspirin() {
-        test_molecule(naive_index, "checks", "aspirin.mol");
+        test_molecule(naive_index_search, "checks", "aspirin.mol");
     }
 
     #[test]
     #[ignore = "expensive test"]
     fn naive_method_morphine() {
-        test_molecule(naive_index, "checks", "morphine.mol");
+        test_molecule(naive_index_search, "checks", "morphine.mol");
     }
 }
