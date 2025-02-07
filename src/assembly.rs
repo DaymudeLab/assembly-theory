@@ -12,6 +12,7 @@ pub struct EdgeType {
     ends: (Element, Element),
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Bound {
     Log(fn(&[BitSet]) -> usize),
     Addition(fn(&[BitSet], usize) -> usize),
