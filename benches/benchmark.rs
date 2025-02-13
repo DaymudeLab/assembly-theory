@@ -1,31 +1,31 @@
 use std::fs;
 use std::path::PathBuf;
 
-use orca::assembly::{index, naive_index};
+use orca::assembly::{index, naive_index_search};
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use orca::loader;
 
 pub fn criterion_benchmark(c: &mut Criterion) {
-    for str in ["aspartic", "benzene", "cubane", "aspirin", "morphine"] {
-        let path = PathBuf::from(format!("./data/checks/{str}.sdf"));
+    for str in ["aspartic", "benzene", "aspirin", "morphine"] {
+        let path = PathBuf::from(format!("./data/checks/{str}.mol"));
         let molfile = fs::read_to_string(path).expect("Cannot read file");
         let molecule = loader::parse_molfile_str(&molfile).expect("Cannot parse molecule");
         c.bench_function(str, |b| b.iter(|| index(&molecule)));
     }
 
     for str in ["aspartic", "benzene", "aspirin"] {
-        let path = PathBuf::from(format!("./data/checks/{str}.sdf"));
+        let path = PathBuf::from(format!("./data/checks/{str}.mol"));
         let molfile = fs::read_to_string(path).expect("Cannot read file");
         let molecule = loader::parse_molfile_str(&molfile).expect("Cannot parse molecule");
         c.bench_function(&format!("naive-{str}"), |b| {
-            b.iter(|| naive_index(&molecule))
+            b.iter(|| naive_index_search(&molecule))
         });
     }
 }
 
 pub fn gdb13_benchmark(c: &mut Criterion) {
-    let paths = fs::read_dir("data/gdb13").unwrap();
+    let paths = fs::read_dir("data/gdb13_1201").unwrap();
 
     for path in paths {
         let name = path.unwrap().path();
