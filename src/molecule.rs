@@ -4,7 +4,7 @@ use std::{
     str::FromStr,
 };
 
-use bit_set::BitSet;
+use fixedbitset::FixedBitSet;
 use petgraph::{
     algo::{is_isomorphic, is_isomorphic_subgraph, subgraph_isomorphisms_iter},
     graph::{EdgeIndex, Graph, NodeIndex},
@@ -316,7 +316,7 @@ impl Molecule {
         }
     }
 
-    pub fn matches(&self) -> impl Iterator<Item = (BitSet, BitSet)> {
+    pub fn matches(&self) -> impl Iterator<Item = (FixedBitSet, FixedBitSet)> {
         let mut matches = BTreeSet::new();
         for subgraph in self.enumerate_subgraphs() {
             let mut h = self.graph().clone();
@@ -333,10 +333,10 @@ impl Molecule {
             for cert in isomorphic_subgraphs_of(&h, &h_prime) {
                 let cert = BTreeSet::from_iter(cert);
 
-                let mut c = BitSet::new();
+                let mut c = FixedBitSet::new();
                 c.extend(edges_contained_within(&self.graph, &cert).map(|e| e.index()));
 
-                let mut h = BitSet::new();
+                let mut h = FixedBitSet::new();
                 h.extend(edges_contained_within(&self.graph, &subgraph).map(|e| e.index()));
 
                 matches.insert(if c < h { (c, h) } else { (h, c) });

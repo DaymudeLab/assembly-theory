@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use bit_set::BitSet;
+use fixedbitset::FixedBitSet;
 
 use crate::{
     molecule::Bond, molecule::Element, molecule::Molecule, utils::connected_components_under_edges,
@@ -14,9 +14,9 @@ pub struct EdgeType {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Bound {
-    Log(fn(&[BitSet]) -> usize),
-    Addition(fn(&[BitSet], usize) -> usize),
-    Vector(fn(&[BitSet], usize, &Molecule) -> usize),
+    Log(fn(&[FixedBitSet]) -> usize),
+    Addition(fn(&[FixedBitSet], usize) -> usize),
+    Vector(fn(&[FixedBitSet], usize, &Molecule) -> usize),
 }
 
 pub fn naive_assembly_depth(mol: &Molecule) -> u32 {
@@ -41,8 +41,8 @@ pub fn naive_assembly_depth(mol: &Molecule) -> u32 {
 
 fn recurse_naive_index_search(
     mol: &Molecule,
-    matches: &BTreeSet<(BitSet, BitSet)>,
-    fragments: &[BitSet],
+    matches: &BTreeSet<(FixedBitSet, FixedBitSet)>,
+    fragments: &[FixedBitSet],
     ix: usize,
 ) -> usize {
     let mut cx = ix;
@@ -86,14 +86,14 @@ fn recurse_naive_index_search(
             mol,
             matches,
             &fractures,
-            ix - h1.len() + 1,
+            ix - h1.count_ones(..) + 1,
         ));
     }
     cx
 }
 
 pub fn naive_index_search(mol: &Molecule) -> u32 {
-    let mut init = BitSet::new();
+    let mut init = FixedBitSet::new();
     init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
 
     recurse_naive_index_search(
@@ -107,8 +107,8 @@ pub fn naive_index_search(mol: &Molecule) -> u32 {
 #[allow(clippy::too_many_arguments)]
 fn recurse_index_search(
     mol: &Molecule,
-    matches: &[(BitSet, BitSet)],
-    fragments: &[BitSet],
+    matches: &[(FixedBitSet, FixedBitSet)],
+    fragments: &[FixedBitSet],
     ix: usize,
     largest_remove: usize,
     mut best: usize,
@@ -137,7 +137,7 @@ fn recurse_index_search(
         let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
         let f2 = fragments.iter().enumerate().find(|(_, c)| h2.is_subset(c));
 
-        let largest_remove = h1.len();
+        let largest_remove = h1.count_ones(..);
 
         let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) else {
             continue;
@@ -168,14 +168,14 @@ fn recurse_index_search(
             fractures.swap_remove(i1.min(i2));
         }
 
-        fractures.retain(|i| i.len() > 1);
+        fractures.retain(|i| !i.is_clear());
         fractures.push(h1.clone());
 
         cx = cx.min(recurse_index_search(
             mol,
             &matches[i + 1..],
             &fractures,
-            ix - h1.len() + 1,
+            ix - h1.count_ones(..) + 1,
             largest_remove,
             best,
             bounds,
@@ -189,11 +189,11 @@ fn recurse_index_search(
 
 // Compute the assembly index of a molecule
 pub fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, u32) {
-    let mut init = BitSet::new();
+    let mut init = FixedBitSet::new();
     init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
 
     // Create and sort matches array
-    let mut matches: Vec<(BitSet, BitSet)> = mol.matches().collect();
+    let mut matches = mol.matches().collect::<Vec<_>>();
     matches.sort_by(|e1, e2| e2.0.len().cmp(&e1.0.len()));
 
     let mut total_search = 0;
@@ -214,21 +214,17 @@ pub fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, u32) {
 }
 
 // Bounds
-pub fn log_bound(fragments: &[BitSet]) -> usize {
-    let mut size = 0;
-    for f in fragments {
-        size += f.len();
-    }
-
+pub fn log_bound(fragments: &[FixedBitSet]) -> usize {
+    let size: usize = fragments.iter().map(|f| f.count_ones(..)).sum();
     size - (size as f32).log2().ceil() as usize
 }
 
-pub fn addition_bound(fragments: &[BitSet], m: usize) -> usize {
+pub fn addition_bound(fragments: &[FixedBitSet], m: usize) -> usize {
     let mut max_s: usize = 0;
-    let mut frag_sizes: Vec<usize> = Vec::new();
+    let mut frag_sizes = Vec::<usize>::new();
 
     for f in fragments {
-        frag_sizes.push(f.len());
+        frag_sizes.push(f.count_ones(..));
     }
 
     let size_sum: usize = frag_sizes.iter().sum();
@@ -248,17 +244,17 @@ pub fn addition_bound(fragments: &[BitSet], m: usize) -> usize {
 }
 
 // Count number of unique edges in a fragment
-fn unique_edges(fragment: &BitSet, mol: &Molecule) -> Vec<EdgeType> {
+fn unique_edges(fragment: &FixedBitSet, mol: &Molecule) -> Vec<EdgeType> {
     let g = mol.graph();
     let mut nodes: Vec<Element> = Vec::new();
     for v in g.node_weights() {
         nodes.push(v.element());
     }
-    let edges: Vec<petgraph::prelude::EdgeIndex> = g.edge_indices().collect();
+    let edges = g.edge_indices().collect::<Vec<_>>();
     let weights: Vec<Bond> = g.edge_weights().copied().collect();
 
     let mut types: Vec<EdgeType> = Vec::new();
-    for idx in fragment.iter() {
+    for idx in fragment.ones() {
         let bond = weights[idx];
         let e = edges[idx];
 
@@ -279,15 +275,15 @@ fn unique_edges(fragment: &BitSet, mol: &Molecule) -> Vec<EdgeType> {
     types
 }
 
-pub fn vec_bound_simple(fragments: &[BitSet], m: usize, mol: &Molecule) -> usize {
+pub fn vec_bound_simple(fragments: &[FixedBitSet], m: usize, mol: &Molecule) -> usize {
     // Calculate s (total number of edges)
     // Calculate z (number of unique edges)
     let mut s = 0;
     for f in fragments {
-        s += f.len();
+        s += f.count_ones(..);
     }
 
-    let mut union_set = BitSet::new();
+    let mut union_set = FixedBitSet::new();
     for f in fragments {
         union_set.union_with(f);
     }
@@ -296,14 +292,14 @@ pub fn vec_bound_simple(fragments: &[BitSet], m: usize, mol: &Molecule) -> usize
     (s - z) - ((s - z) as f32 / m as f32).ceil() as usize
 }
 
-pub fn vec_bound_small_frags(fragments: &[BitSet], m: usize, mol: &Molecule) -> usize {
-    let mut size_two_fragments: Vec<BitSet> = Vec::new();
-    let mut large_fragments: Vec<BitSet> = fragments.to_owned();
+pub fn vec_bound_small_frags(fragments: &[FixedBitSet], m: usize, mol: &Molecule) -> usize {
+    let mut size_two_fragments: Vec<FixedBitSet> = Vec::new();
+    let mut large_fragments: Vec<FixedBitSet> = fragments.to_owned();
     let mut indices_to_remove: Vec<usize> = Vec::new();
 
     // Find and remove fragments of size 2
     for (i, frag) in fragments.iter().enumerate() {
-        if frag.len() == 2 {
+        if frag.count_ones(..) == 2 {
             indices_to_remove.push(i);
         }
     }
@@ -313,8 +309,8 @@ pub fn vec_bound_small_frags(fragments: &[BitSet], m: usize, mol: &Molecule) -> 
     }
 
     // Compute z = num unique edges of large_fragments NOT also in size_two_fragments
-    let mut fragments_union = BitSet::new();
-    let mut size_two_fragments_union = BitSet::new();
+    let mut fragments_union = FixedBitSet::new();
+    let mut size_two_fragments_union = FixedBitSet::new();
     for f in fragments {
         fragments_union.union_with(f);
     }
@@ -329,10 +325,10 @@ pub fn vec_bound_small_frags(fragments: &[BitSet], m: usize, mol: &Molecule) -> 
     let mut s = 0;
     let mut sl = 0;
     for f in fragments {
-        s += f.len();
+        s += f.count_ones(..);
     }
     for f in large_fragments {
-        sl += f.len();
+        sl += f.count_ones(..);
     }
 
     // Find number of unique and duplicate size two fragments

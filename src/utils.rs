@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use bit_set::BitSet;
+use fixedbitset::FixedBitSet;
 use petgraph::{
     graph::{EdgeIndex, Graph, IndexType, NodeIndex},
     EdgeType,
@@ -101,23 +101,22 @@ where
 
 pub fn connected_components_under_edges<N, E, Ty, Ix>(
     g: &Graph<N, E, Ty, Ix>,
-    s: &BitSet,
-) -> impl Iterator<Item = BitSet>
+    s: &FixedBitSet,
+) -> impl Iterator<Item = FixedBitSet>
 where
     Ty: EdgeType,
     Ix: IndexType,
 {
     let mut remainder = s.clone();
     let mut components = Vec::new();
-    while let Some(c) = remainder.iter().next() {
-        let mut queue = BitSet::new();
-        queue.reserve_len(s.len());
+    while let Some(c) = remainder.ones().next() {
+        let mut queue = FixedBitSet::with_capacity(s.len());
         queue.insert(c);
 
-        let mut visited = BitSet::new();
-        visited.reserve_len(s.len());
+        let mut visited = FixedBitSet::with_capacity(s.len());
+        visited.grow(s.len());
 
-        while let Some(e) = queue.iter().next() {
+        while let Some(e) = queue.ones().next() {
             queue.remove(e);
             visited.insert(e);
             let (src, dst) = g.edge_endpoints(EdgeIndex::new(e)).unwrap();
