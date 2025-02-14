@@ -27,7 +27,7 @@ impl FromStr for PyBounds {
             "log" => Ok(PyBounds::Log),
             "addition" => Ok(PyBounds::Addition),
             "vector" => Ok(PyBounds::Vector),
-            _ => Err(PyValueError::new_err(format!("Invalid bound: {}", s)).into()),
+            _ => Err(PyValueError::new_err(format!("Invalid bound: {}", s))),
         }
     }
 }
