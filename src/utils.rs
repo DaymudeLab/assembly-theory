@@ -110,11 +110,9 @@ where
     let mut remainder = s.clone();
     let mut components = Vec::new();
     while let Some(c) = remainder.ones().next() {
+        let mut visited = FixedBitSet::with_capacity(s.len());
         let mut queue = FixedBitSet::with_capacity(s.len());
         queue.insert(c);
-
-        let mut visited = FixedBitSet::with_capacity(s.len());
-        visited.grow(s.len());
 
         while let Some(e) = queue.ones().next() {
             queue.remove(e);
