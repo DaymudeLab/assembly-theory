@@ -8,13 +8,17 @@ from .orca import __doc__
 def compute_ma(mol, bounds=None, no_bounds=False):
 
     mol_block = rdkit.Chem.MolToMolBlock(mol)
-    ma = compute_index(mol_block)
+    if not bounds:
+        bounds = set()
+    ma = compute_index(mol_block, bounds)
 
     return ma
 
 def compute_ma_verbose(mol, bounds=None, no_bounds=False):
     mol_block = rdkit.Chem.MolToMolBlock(mol)
-    data = compute_verbose_index(mol_block)
+    if not bounds:
+        bounds = set()
+    data = compute_verbose_index(mol_block, bounds)
 
     return data
 
