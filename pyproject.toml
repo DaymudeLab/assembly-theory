@@ -28,6 +28,6 @@ repository = "https://github.com/DaymudeLab/ORCA"
 
 [tool.maturin]
 python-source = "python"
-module-name = "orca"
+module-name = "orca.orca"
 bindings = "pyo3"
 features = ["pyo3/extension-module"]

@@ -1,4 +1,8 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::{
+    collections::{BTreeSet, HashMap, HashSet},
+    fmt::Display,
+    str::FromStr,
+};
 
 use bit_set::BitSet;
 use petgraph::{
@@ -9,30 +13,189 @@ use petgraph::{
 
 use crate::utils::{edge_induced_subgraph, edges_contained_within, is_subset_connected};
 
-pub type Index = u32;
-pub type MGraph = Graph<Atom, Bond, Undirected, Index>;
+pub(crate) type Index = u32;
+pub(crate) type MGraph = Graph<Atom, Bond, Undirected, Index>;
 type MSubgraph = Graph<Atom, Option<Bond>, Undirected, Index>;
 type EdgeSet = BTreeSet<EdgeIndex<Index>>;
 type NodeSet = BTreeSet<NodeIndex<Index>>;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd)]
-pub enum Element {
-    Hydrogen,
-    Carbon,
-    Nitrogen,
-    Oxygen,
+macro_rules! periodic_table {
+    ( $(($element:ident, $name:literal),)* ) => {
+        #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+        pub enum Element {
+            $( $element, )*
+        }
+
+        impl Display for Element {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                match &self {
+                    $( Element::$element => write!(f, "{}", $name), )*
+                }
+            }
+        }
+
+        impl FromStr for Element {
+            type Err = ParseElementError;
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                match s {
+                    $( $name => Ok(Element::$element), )*
+                    _ => Err(ParseElementError),
+                }
+            }
+        }
+    };
 }
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct ParseElementError;
+
+periodic_table!(
+    (Hydrogen, "H"),
+    (Helium, "He"),
+    (Lithium, "Li"),
+    (Beryllium, "Be"),
+    (Boron, "B"),
+    (Carbon, "C"),
+    (Nitrogen, "N"),
+    (Oxygen, "O"),
+    (Fluorine, "F"),
+    (Neon, "Ne"),
+    (Sodium, "Na"),
+    (Magnesium, "Mg"),
+    (Aluminum, "Al"),
+    (Silicon, "Si"),
+    (Phosphorus, "P"),
+    (Sulfur, "S"),
+    (Chlorine, "Cl"),
+    (Argon, "Ar"),
+    (Potassium, "K"),
+    (Calcium, "Ca"),
+    (Scandium, "Sc"),
+    (Titanium, "Ti"),
+    (Vanadium, "V"),
+    (Chromium, "Cr"),
+    (Manganese, "Mn"),
+    (Iron, "Fe"),
+    (Cobalt, "Co"),
+    (Nickel, "Ni"),
+    (Copper, "Cu"),
+    (Zinc, "Zn"),
+    (Gallium, "Ga"),
+    (Germanium, "Ge"),
+    (Arsenic, "As"),
+    (Selenium, "Se"),
+    (Bromine, "Br"),
+    (Krypton, "Kr"),
+    (Rubidium, "Rb"),
+    (Strontium, "Sr"),
+    (Yttrium, "Y"),
+    (Zirconium, "Zr"),
+    (Niobium, "Nb"),
+    (Molybdenum, "Mo"),
+    (Technetium, "Tc"),
+    (Ruthenium, "Ru"),
+    (Rhodium, "Rh"),
+    (Palladium, "Pd"),
+    (Silver, "Ag"),
+    (Cadmium, "Cd"),
+    (Indium, "In"),
+    (Tin, "Sn"),
+    (Antimony, "Sb"),
+    (Tellurium, "Te"),
+    (Iodine, "I"),
+    (Xenon, "Xe"),
+    (Cesium, "Cs"),
+    (Barium, "Ba"),
+    (Lanthanum, "La"),
+    (Cerium, "Ce"),
+    (Praseodymium, "Pr"),
+    (Neodymium, "Nd"),
+    (Promethium, "Pm"),
+    (Samarium, "Sm"),
+    (Europium, "Eu"),
+    (Gadolinium, "Gd"),
+    (Terbium, "Tb"),
+    (Dysprosium, "Dy"),
+    (Holmium, "Ho"),
+    (Erbium, "Er"),
+    (Thulium, "Tm"),
+    (Ytterbium, "Yb"),
+    (Lutetium, "Lu"),
+    (Hafnium, "Hf"),
+    (Tantalum, "Ta"),
+    (Wolfram, "W"),
+    (Rhenium, "Re"),
+    (Osmium, "Os"),
+    (Iridium, "Ir"),
+    (Platinum, "Pt"),
+    (Gold, "Au"),
+    (Mercury, "Hg"),
+    (Thallium, "Tl"),
+    (Lead, "Pb"),
+    (Bismuth, "Bi"),
+    (Polonium, "Po"),
+    (Astatine, "At"),
+    (Radon, "Rn"),
+    (Francium, "Fr"),
+    (Radium, "Ra"),
+    (Actinium, "Ac"),
+    (Thorium, "Th"),
+    (Protactinium, "Pa"),
+    (Uranium, "U"),
+    (Neptunium, "Np"),
+    (Plutonium, "Pu"),
+    (Americium, "Am"),
+    (Curium, "Cm"),
+    (Berkelium, "Bk"),
+    (Californium, "Cf"),
+    (Einsteinium, "Es"),
+    (Fermium, "Fm"),
+    (Mendelevium, "Md"),
+    (Nobelium, "No"),
+    (Lawrencium, "Lr"),
+    (Rutherfordium, "Rf"),
+    (Dubnium, "Db"),
+    (Seaborgium, "Sg"),
+    (Bohrium, "Bh"),
+    (Hassium, "Hs"),
+    (Meitnerium, "Mt"),
+    (Darmstadtium, "Ds"),
+    (Roentgenium, "Rg"),
+    (Copernicium, "Cn"),
+    (Nihonium, "Nh"),
+    (Flerovium, "Fl"),
+    (Moscovium, "Mc"),
+    (Livermorium, "Lv"),
+    (Tennessine, "Ts"),
+    (Oganesson, "Og"),
+);
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Atom {
-    pub element: Element,
+    element: Element,
     capacity: u32,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Bond {
     Single,
     Double,
+    Triple,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct ParseBondError;
+
+impl TryFrom<usize> for Bond {
+    type Error = ParseBondError;
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        match value {
+            1 => Ok(Bond::Single),
+            2 => Ok(Bond::Double),
+            3 => Ok(Bond::Triple),
+            _ => Err(ParseBondError),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -41,11 +204,12 @@ pub struct Molecule {
 }
 
 impl Atom {
-    pub fn new(element: Element) -> Self {
-        Self {
-            element,
-            capacity: 0,
-        }
+    pub fn new(element: Element, capacity: u32) -> Self {
+        Self { element, capacity }
+    }
+
+    pub fn element(&self) -> Element {
+        self.element
     }
 }
 
@@ -300,6 +464,31 @@ impl Molecule {
     pub fn graph(&self) -> &MGraph {
         &self.graph
     }
+
+    pub fn info(&self) -> String {
+        let mut info = String::new();
+        let g = self.graph();
+        let mut nodes: Vec<Element> = Vec::new();
+        for (i, w) in g.node_weights().enumerate() {
+            info.push_str(&format!("{i}: {:?}\n", w.element));
+            nodes.push(w.element);
+        }
+        info.push('\n');
+        for idx in g.edge_indices().zip(g.edge_weights()) {
+            let (e1, e2) = self.graph().edge_endpoints(idx.0).expect("bad");
+            info.push_str(&format!(
+                "{}: {:?}, ({}, {}), ({:?}, {:?})\n",
+                idx.0.index(),
+                idx.1,
+                e1.index(),
+                e2.index(),
+                nodes[e1.index()],
+                nodes[e2.index()]
+            ));
+        }
+
+        info
+    }
 }
 
 // This is bad, BIG TODO: replace with handwritten vf3
@@ -345,5 +534,16 @@ mod tests {
         g.add_edge(u, w, Bond::Double);
 
         assert!(j.is_isomorphic_to(&Molecule { graph: g }));
+    }
+
+    #[test]
+    fn element_to_string() {
+        assert!(Element::Hydrogen.to_string() == "H")
+    }
+
+    #[test]
+    fn element_from_string() {
+        assert!(str::parse("H") == Ok(Element::Hydrogen));
+        assert!(str::parse::<Element>("Foo").is_err());
     }
 }
