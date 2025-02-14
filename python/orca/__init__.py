@@ -22,14 +22,9 @@ def compute_ma(mol: Chem.Mol, bounds: Optional[Set[str]] = None, no_bounds: bool
     """
     mol_block: str = Chem.MolToMolBlock(mol)  # Convert molecule to MolBlock format (string representation).
     
-    if (bounds is None) and no_bounds:
-        bounds = set()  # Initialize an empty set if no bounds are provided.
-    elif (bounds is None) and not no_bounds:
-        bounds = set(["addition", "vector"])
-    elif (bounds is not None) and not no_bounds:
-        raise ValueError("bounds specified but `no_bound` is True.")
+    bounds = _validate_bounds(bounds, no_bounds)
     
-    ma = compute_index(mol_block, bounds)  # Compute the molecular index using the given bounds.
+    ma = _compute_index(mol_block, bounds)  # Compute the molecular index using the given bounds.
     
     return ma
 
@@ -48,13 +43,9 @@ def compute_ma_verbose(mol: Chem.Mol, bounds: Optional[Set[str]] = None, no_boun
     """
     mol_block: str = Chem.MolToMolBlock(mol)  # Convert molecule to MolBlock format (string representation).
 
-    if (bounds is None) and no_bounds:
-        bounds = set()  # Initialize an empty set if no bounds are provided.
-    elif (bounds is None) and not no_bounds:
-        bounds = set(["addition", "vector"])
-    elif (bounds is not None) and not no_bounds:
-        raise ValueError("bounds specified but `no_bound` is True.")
-    data = compute_verbose_index(mol_block, bounds)  # Compute verbose molecular index.
+    bounds = _validate_bounds(bounds, no_bounds)
+
+    data = _compute_verbose_index(mol_block, bounds)  # Compute verbose molecular index.
 
     return data
 
@@ -71,7 +62,30 @@ def get_molecule_info(mol: Chem.Mol) -> str:
     """
     mol_block: str = Chem.MolToMolBlock(mol)  # Convert molecule to MolBlock format.
 
-    info = molecule_info(mol_block)  # Extract molecular information.
+    info = _molecule_info(mol_block)  # Extract molecular information.
     
     return info
 
+def _validate_bounds(bounds: Optional[Set[str]], no_bounds: bool) -> Set[str]:
+    """
+    Validates and initializes the `bounds` variable based on `no_bounds` flag.
+
+    Args:
+        bounds (Optional[Set[str]]): The initial bounds, if any.
+        no_bounds (bool): Flag indicating whether bounds should be absent.
+
+    Returns:
+        Set[str]: A set containing bounds if applicable.
+
+    Raises:
+        ValueError: If `bounds` is specified but `no_bounds` is True.
+    """
+    if bounds is None:
+        if no_bounds:
+            return set()  # Initialize an empty set if no bounds are provided.
+        else:
+            return {"addition", "vector"}
+    elif (bounds is not None) and no_bounds:
+        raise ValueError("bounds specified but `no_bounds` is True.")
+    
+    return bounds

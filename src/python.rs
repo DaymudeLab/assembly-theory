@@ -65,7 +65,7 @@ fn process_bound_set(bound_set: HashSet<String>) -> PyResult<Vec<PyBounds>> {
 /// # Returns
 /// - The computed molecular index as a `u32`.
 #[pyfunction]
-pub fn compute_index(mol_block: String, bound_set: HashSet<String>) -> PyResult<u32> {
+pub fn _compute_index(mol_block: String, bound_set: HashSet<String>) -> PyResult<u32> {
     let mol_result = parse_molfile_str(&mol_block);
     let py_bounds = process_bound_set(bound_set)?;
 
@@ -91,7 +91,7 @@ pub fn compute_index(mol_block: String, bound_set: HashSet<String>) -> PyResult<
 ///   - `"duplicates"`: Duplicate count.
 ///   - `"space"`: Space calculation.
 #[pyfunction]
-pub fn compute_verbose_index(mol_block: String, bound_set: HashSet<String>) -> PyResult<HashMap<String, u32>> {
+pub fn _compute_verbose_index(mol_block: String, bound_set: HashSet<String>) -> PyResult<HashMap<String, u32>> {
     let mol_result = parse_molfile_str(&mol_block);
     let py_bounds = process_bound_set(bound_set)?;
 
@@ -118,7 +118,7 @@ pub fn compute_verbose_index(mol_block: String, bound_set: HashSet<String>) -> P
 /// # Returns
 /// - A `String` containing molecular information.
 #[pyfunction]
-pub fn molecule_info(mol_block: String) -> PyResult<String> {
+pub fn _molecule_info(mol_block: String) -> PyResult<String> {
     let mol_result = parse_molfile_str(&mol_block);
 
     let mol = match mol_result {
@@ -135,8 +135,8 @@ pub fn molecule_info(mol_block: String) -> PyResult<String> {
 // otherwise, Python will not be able to import the module.
 #[pymodule]
 fn orca(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(compute_index, m)?)?;
-    m.add_function(wrap_pyfunction!(compute_verbose_index, m)?)?;
-    m.add_function(wrap_pyfunction!(molecule_info, m)?)?;
+    m.add_function(wrap_pyfunction!(_compute_index, m)?)?;
+    m.add_function(wrap_pyfunction!(_compute_verbose_index, m)?)?;
+    m.add_function(wrap_pyfunction!(_molecule_info, m)?)?;
     Ok(())
 }

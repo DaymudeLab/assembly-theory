@@ -4,8 +4,8 @@ requires = ["setuptools", "maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "ORCA"
-version = "0.0.0"
+name = "orca"
+version = "0.1.0"
 description = "Open, Reproducible Assembly index Calculations"
 readme = "README.md"
 requires-python = ">=3.10"
