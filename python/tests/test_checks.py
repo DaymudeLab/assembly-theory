@@ -9,7 +9,7 @@ def test_aspirin_index():
 def test_aspirin_verbose():
     aspirin_smi = "O=C(C)Oc1ccccc1C(=O)O"
     mol = rdkit.Chem.MolFromSmiles(aspirin_smi)
-    assert orca.compute_ma_verbose(mol) == {'duplicates': 20, 'index': 8, 'space': 35}
+    assert orca.compute_ma_verbose(mol) == {'duplicates': 20, 'index': 8, 'space': 36}
 
     assert orca.compute_ma_verbose(mol, no_bounds=True) == {'duplicates': 20, 'index': 8, 'space': 96}
 
