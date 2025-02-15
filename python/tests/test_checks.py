@@ -2,13 +2,13 @@ import orca
 import rdkit.Chem
 
 def test_aspirin_index():
-    aspirin_fname = "data/checks/aspirin.mol"
-    mol = rdkit.Chem.MolFromMolFile(aspirin_fname)
+    aspirin_smi = "O=C(C)Oc1ccccc1C(=O)O"
+    mol = rdkit.Chem.MolFromSmiles(aspirin_smi)
     assert orca.compute_ma(mol) == 8
 
 def test_aspirin_verbose():
-    aspirin_fname = "data/checks/aspirin.mol"
-    mol = rdkit.Chem.MolFromMolFile(aspirin_fname)
+    aspirin_smi = "O=C(C)Oc1ccccc1C(=O)O"
+    mol = rdkit.Chem.MolFromSmiles(aspirin_smi)
     assert orca.compute_ma_verbose(mol) == {'duplicates': 20, 'index': 8, 'space': 35}
 
     assert orca.compute_ma_verbose(mol, no_bounds=True) == {'duplicates': 20, 'index': 8, 'space': 96}
