@@ -27,35 +27,20 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Create and activate virtual environment (Linux/macOS)
-        if: runner.os != 'Windows'
+      - name: Create and activate virtual environment
         run: |
           python -m venv orca-env
           echo "VIRTUAL_ENV=$PWD/orca-env" >> $GITHUB_ENV
           echo "$PWD/orca-env/bin" >> $GITHUB_PATH
         shell: bash
 
-      - name: Create and activate virtual environment (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          python -m venv orca-env
-          echo "VIRTUAL_ENV=$PWD/orca-env" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          echo "$PWD/orca-env/Scripts" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-        shell: pwsh
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install maturin pytest rdkit
 
-      - name: Build ORCA (Linux/macOS)
-        if: runner.os != 'Windows'
-        run: maturin develop
-
-      - name: Build ORCA (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          maturin develop --interpreter=orca-env\Scripts\python.exe
+      - name: Build ORCA
+        run: maturin develop --no-default-features
 
       - name: Run tests
         run: pytest python/tests
