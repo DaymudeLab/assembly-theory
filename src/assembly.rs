@@ -1,6 +1,13 @@
-use std::collections::BTreeSet;
+use std::{
+    collections::BTreeSet,
+    sync::{
+        atomic::{AtomicUsize, Ordering::Relaxed},
+        Arc,
+    },
+};
 
 use bit_set::BitSet;
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
     molecule::Bond, molecule::Element, molecule::Molecule, utils::connected_components_under_edges,
@@ -111,20 +118,20 @@ fn recurse_index_search(
     fragments: &[BitSet],
     ix: usize,
     largest_remove: usize,
-    mut best: usize,
+    best: AtomicUsize,
     bounds: &[Bound],
-    states_searched: &mut u32,
+    states_searched: Arc<AtomicUsize>,
 ) -> usize {
-    let mut cx = ix;
+    let cx = AtomicUsize::from(ix);
 
-    *states_searched += 1;
+    states_searched.fetch_add(1, Relaxed);
 
     // Branch and Bound
     for bound_type in bounds {
         let exceeds = match bound_type {
-            Bound::Log(func) => ix - func(fragments) >= best,
-            Bound::Addition(func) => ix - func(fragments, largest_remove) >= best,
-            Bound::Vector(func) => ix - func(fragments, largest_remove, mol) >= best,
+            Bound::Log(func) => ix - func(fragments) >= best.load(Relaxed),
+            Bound::Addition(func) => ix - func(fragments, largest_remove) >= best.load(Relaxed),
+            Bound::Vector(func) => ix - func(fragments, largest_remove, mol) >= best.load(Relaxed),
         };
         if exceeds {
             return ix;
@@ -132,7 +139,7 @@ fn recurse_index_search(
     }
 
     // Search for duplicatable fragment
-    for (i, (h1, h2)) in matches.iter().enumerate() {
+    matches.par_iter().enumerate().for_each(|(i, (h1, h2))| {
         let mut fractures = fragments.to_owned();
         let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
         let f2 = fragments.iter().enumerate().find(|(_, c)| h2.is_subset(c));
@@ -140,7 +147,7 @@ fn recurse_index_search(
         let largest_remove = h1.len();
 
         let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) else {
-            continue;
+            return;
         };
 
         // All of these clones are on bitsets and cheap enough
@@ -171,20 +178,22 @@ fn recurse_index_search(
         fractures.retain(|i| i.len() > 1);
         fractures.push(h1.clone());
 
-        cx = cx.min(recurse_index_search(
+        let output = recurse_index_search(
             mol,
             &matches[i + 1..],
             &fractures,
             ix - h1.len() + 1,
             largest_remove,
-            best,
+            best.load(Relaxed).into(),
             bounds,
-            states_searched,
-        ));
-        best = best.min(cx);
-    }
+            states_searched.clone(),
+        );
+        cx.fetch_min(output, Relaxed);
 
-    cx
+        best.fetch_min(cx.load(Relaxed), Relaxed);
+    });
+
+    cx.load(Relaxed)
 }
 
 // Compute the assembly index of a molecule
@@ -196,7 +205,7 @@ pub fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, u32) {
     let mut matches: Vec<(BitSet, BitSet)> = mol.matches().collect();
     matches.sort_by(|e1, e2| e2.0.len().cmp(&e1.0.len()));
 
-    let mut total_search = 0;
+    let total_search = Arc::new(AtomicUsize::from(0));
     let edge_count = mol.graph().edge_count();
 
     let index = recurse_index_search(
@@ -205,12 +214,16 @@ pub fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, u32) {
         &[init],
         edge_count - 1,
         edge_count,
-        edge_count - 1,
+        (edge_count - 1).into(),
         bounds,
-        &mut total_search,
+        total_search.clone(),
     ) as u32;
 
-    (index, matches.len() as u32, total_search)
+    (
+        index,
+        matches.len() as u32,
+        total_search.load(Relaxed).try_into().unwrap(),
+    )
 }
 
 // Bounds
