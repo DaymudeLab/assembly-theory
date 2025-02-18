@@ -19,6 +19,8 @@ pub struct EdgeType {
     ends: (Element, Element),
 }
 
+static PARALLEL_MATCH_SIZE_THRESHOLD: usize = 100;
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Bound {
     Log(fn(&[BitSet]) -> usize),
@@ -111,8 +113,92 @@ pub fn naive_index_search(mol: &Molecule) -> u32 {
     ) as u32
 }
 
+
 #[allow(clippy::too_many_arguments)]
 fn recurse_index_search(
+    mol: &Molecule,
+    matches: &[(BitSet, BitSet)],
+    fragments: &[BitSet],
+    ix: usize,
+    largest_remove: usize,
+    mut best: usize,
+    bounds: &[Bound],
+    states_searched: &mut u32,
+) -> usize {
+    let mut cx = ix;
+
+    *states_searched += 1;
+
+    // Branch and Bound
+    for bound_type in bounds {
+        let exceeds = match bound_type {
+            Bound::Log(func) => ix - func(fragments) >= best,
+            Bound::Addition(func) => ix - func(fragments, largest_remove) >= best,
+            Bound::Vector(func) => ix - func(fragments, largest_remove, mol) >= best,
+        };
+        if exceeds {
+            return ix;
+        }
+    }
+
+    // Search for duplicatable fragment
+    for (i, (h1, h2)) in matches.iter().enumerate() {
+        let mut fractures = fragments.to_owned();
+        let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
+        let f2 = fragments.iter().enumerate().find(|(_, c)| h2.is_subset(c));
+
+        let largest_remove = h1.len();
+
+        let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) else {
+            continue;
+        };
+
+        // All of these clones are on bitsets and cheap enough
+        if i1 == i2 {
+            let mut union = h1.clone();
+            union.union_with(h2);
+            let mut difference = f1.clone();
+            difference.difference_with(&union);
+            let c = connected_components_under_edges(mol.graph(), &difference);
+            fractures.extend(c);
+            fractures.swap_remove(i1);
+        } else {
+            let mut f1r = f1.clone();
+            f1r.difference_with(h1);
+            let mut f2r = f2.clone();
+            f2r.difference_with(h2);
+
+            let c1 = connected_components_under_edges(mol.graph(), &f1r);
+            let c2 = connected_components_under_edges(mol.graph(), &f2r);
+
+            fractures.extend(c1);
+            fractures.extend(c2);
+
+            fractures.swap_remove(i1.max(i2));
+            fractures.swap_remove(i1.min(i2));
+        }
+
+        fractures.retain(|i| i.len() > 1);
+        fractures.push(h1.clone());
+
+        cx = cx.min(recurse_index_search(
+            mol,
+            &matches[i + 1..],
+            &fractures,
+            ix - h1.len() + 1,
+            largest_remove,
+            best,
+            bounds,
+            states_searched,
+        ));
+        best = best.min(cx);
+    }
+
+    cx
+}
+
+#[allow(clippy::too_many_arguments)]
+fn parallel_recurse_index_search(
     mol: &Molecule,
     matches: &[(BitSet, BitSet)],
     fragments: &[BitSet],
@@ -178,7 +264,7 @@ fn recurse_index_search(
         fractures.retain(|i| i.len() > 1);
         fractures.push(h1.clone());
 
-        let output = recurse_index_search(
+        let output = parallel_recurse_index_search(
             mol,
             &matches[i + 1..],
             &fractures,
@@ -205,24 +291,41 @@ pub fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, u32) {
     let mut matches: Vec<(BitSet, BitSet)> = mol.matches().collect();
     matches.sort_by(|e1, e2| e2.0.len().cmp(&e1.0.len()));
 
-    let total_search = Arc::new(AtomicUsize::from(0));
     let edge_count = mol.graph().edge_count();
 
-    let index = recurse_index_search(
-        mol,
-        &matches,
-        &[init],
-        edge_count - 1,
-        edge_count,
-        (edge_count - 1).into(),
-        bounds,
-        total_search.clone(),
-    ) as u32;
+    let (index, total_search) = if matches.len() < PARALLEL_MATCH_SIZE_THRESHOLD {
+        let total_search = Arc::new(AtomicUsize::from(0));
+        let index = parallel_recurse_index_search(
+            mol,
+            &matches,
+            &[init],
+            edge_count - 1,
+            edge_count,
+            (edge_count - 1).into(),
+            bounds,
+            total_search.clone(),
+        );
+        let total_search = total_search.load(Relaxed).try_into().unwrap();
+        (index as u32, total_search)
+    } else {
+        let mut total_search = 0;
+        let index = recurse_index_search(
+            mol,
+            &matches,
+            &[init],
+            edge_count - 1,
+            edge_count,
+            (edge_count - 1).into(),
+            bounds,
+            &mut total_search,
+        );
+        (index as u32, total_search)
+    };
 
     (
         index,
         matches.len() as u32,
-        total_search.load(Relaxed).try_into().unwrap(),
+        total_search
     )
 }
 
