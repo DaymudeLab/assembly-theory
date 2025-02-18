@@ -315,7 +315,7 @@ pub fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, u32) {
             &[init],
             edge_count - 1,
             edge_count,
-            (edge_count - 1).into(),
+            edge_count - 1,
             bounds,
             &mut total_search,
         );
