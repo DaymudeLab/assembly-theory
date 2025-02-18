@@ -293,7 +293,7 @@ pub fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, u32) {
 
     let edge_count = mol.graph().edge_count();
 
-    let (index, total_search) = if matches.len() < PARALLEL_MATCH_SIZE_THRESHOLD {
+    let (index, total_search) = if matches.len() > PARALLEL_MATCH_SIZE_THRESHOLD {
         let total_search = Arc::new(AtomicUsize::from(0));
         let index = parallel_recurse_index_search(
             mol,
