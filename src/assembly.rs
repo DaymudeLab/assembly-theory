@@ -23,9 +23,10 @@ static PARALLEL_MATCH_SIZE_THRESHOLD: usize = 100;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Bound {
-    Log(fn(&[BitSet]) -> usize),
-    Addition(fn(&[BitSet], usize) -> usize),
-    Vector(fn(&[BitSet], usize, &Molecule) -> usize),
+    Log,
+    IntChain,
+    VecChainSimple,
+    VecChainSmallFrags,
 }
 
 pub fn naive_assembly_depth(mol: &Molecule) -> u32 {
@@ -113,7 +114,6 @@ pub fn naive_index_search(mol: &Molecule) -> u32 {
     ) as u32
 }
 
-
 #[allow(clippy::too_many_arguments)]
 fn recurse_index_search(
     mol: &Molecule,
@@ -132,9 +132,12 @@ fn recurse_index_search(
     // Branch and Bound
     for bound_type in bounds {
         let exceeds = match bound_type {
-            Bound::Log(func) => ix - func(fragments) >= best,
-            Bound::Addition(func) => ix - func(fragments, largest_remove) >= best,
-            Bound::Vector(func) => ix - func(fragments, largest_remove, mol) >= best,
+            Bound::Log => ix - log_bound(fragments) >= best,
+            Bound::IntChain => ix - addition_bound(fragments, largest_remove) >= best,
+            Bound::VecChainSimple => ix - vec_bound_simple(fragments, largest_remove, mol) >= best,
+            Bound::VecChainSmallFrags => {
+                ix - vec_bound_small_frags(fragments, largest_remove, mol) >= best
+            }
         };
         if exceeds {
             return ix;
@@ -214,10 +217,14 @@ fn parallel_recurse_index_search(
 
     // Branch and Bound
     for bound_type in bounds {
+        let best = best.load(Relaxed);
         let exceeds = match bound_type {
-            Bound::Log(func) => ix - func(fragments) >= best.load(Relaxed),
-            Bound::Addition(func) => ix - func(fragments, largest_remove) >= best.load(Relaxed),
-            Bound::Vector(func) => ix - func(fragments, largest_remove, mol) >= best.load(Relaxed),
+            Bound::Log => ix - log_bound(fragments) >= best,
+            Bound::IntChain => ix - addition_bound(fragments, largest_remove) >= best,
+            Bound::VecChainSimple => ix - vec_bound_simple(fragments, largest_remove, mol) >= best,
+            Bound::VecChainSmallFrags => {
+                ix - vec_bound_small_frags(fragments, largest_remove, mol) >= best
+            }
         };
         if exceeds {
             return ix;
@@ -322,15 +329,11 @@ pub fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, u32) {
         (index as u32, total_search)
     };
 
-    (
-        index,
-        matches.len() as u32,
-        total_search
-    )
+    (index, matches.len() as u32, total_search)
 }
 
 // Bounds
-pub fn log_bound(fragments: &[BitSet]) -> usize {
+fn log_bound(fragments: &[BitSet]) -> usize {
     let mut size = 0;
     for f in fragments {
         size += f.len();
@@ -339,7 +342,7 @@ pub fn log_bound(fragments: &[BitSet]) -> usize {
     size - (size as f32).log2().ceil() as usize
 }
 
-pub fn addition_bound(fragments: &[BitSet], m: usize) -> usize {
+fn addition_bound(fragments: &[BitSet], m: usize) -> usize {
     let mut max_s: usize = 0;
     let mut frag_sizes: Vec<usize> = Vec::new();
 
@@ -395,7 +398,7 @@ fn unique_edges(fragment: &BitSet, mol: &Molecule) -> Vec<EdgeType> {
     types
 }
 
-pub fn vec_bound_simple(fragments: &[BitSet], m: usize, mol: &Molecule) -> usize {
+fn vec_bound_simple(fragments: &[BitSet], m: usize, mol: &Molecule) -> usize {
     // Calculate s (total number of edges)
     // Calculate z (number of unique edges)
     let mut s = 0;
@@ -412,7 +415,7 @@ pub fn vec_bound_simple(fragments: &[BitSet], m: usize, mol: &Molecule) -> usize
     (s - z) - ((s - z) as f32 / m as f32).ceil() as usize
 }
 
-pub fn vec_bound_small_frags(fragments: &[BitSet], m: usize, mol: &Molecule) -> usize {
+fn vec_bound_small_frags(fragments: &[BitSet], m: usize, mol: &Molecule) -> usize {
     let mut size_two_fragments: Vec<BitSet> = Vec::new();
     let mut large_fragments: Vec<BitSet> = fragments.to_owned();
     let mut indices_to_remove: Vec<usize> = Vec::new();
@@ -473,9 +476,9 @@ pub fn index(m: &Molecule) -> u32 {
     index_search(
         m,
         &[
-            Bound::Addition(addition_bound),
-            Bound::Vector(vec_bound_simple),
-            Bound::Vector(vec_bound_small_frags),
+            Bound::IntChain,
+            Bound::VecChainSimple,
+            Bound::VecChainSmallFrags,
         ],
     )
     .0
