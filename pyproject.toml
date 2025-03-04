@@ -1,6 +1,6 @@
 # pyproject.toml
 [build-system]
-requires = ["setuptools", "maturin>=1.0,<2.0"]
+requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
@@ -21,7 +21,7 @@ maintainers = [
   {name = "Joshua Daymude", email = "jdaymude@asu.edu"},
 ]
 
-dependencies = ["rdkit"]
+dependencies = ["rdkit~=2024.9"]
 
 [project.urls]
 repository = "https://github.com/DaymudeLab/ORCA"

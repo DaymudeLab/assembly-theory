@@ -27,3 +27,4 @@ crate-type = ["rlib","cdylib"]
 [[bench]]
 name = "benchmark"
 harness = false
+
