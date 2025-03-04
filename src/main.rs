@@ -3,16 +3,14 @@ use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
 use clap::{Args, Parser, ValueEnum};
-use orca::assembly::{
-    addition_bound, index, index_search, log_bound, vec_bound_simple, vec_bound_small_frags, Bound,
-};
+use orca::assembly::{index, index_search, Bound};
 use orca::{loader, molecule::Molecule};
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
 enum Bounds {
     Log,
-    Addition,
-    Vector,
+    IntChain,
+    VecChain,
 }
 
 #[derive(Parser, Debug)]
@@ -21,12 +19,14 @@ struct Cli {
     path: PathBuf,
 
     #[arg(short, long)]
+    /// Print out search space, duplicate subgraphs, and assembly index
     verbose: bool,
 
     #[command(flatten)]
     boundgroup: Option<BoundGroup>,
 
     #[arg(long)]
+    /// Dump out molecule graph
     molecule_info: bool,
 }
 
@@ -34,9 +34,11 @@ struct Cli {
 #[group(required = false, multiple = false)]
 struct BoundGroup {
     #[arg(long)]
+    /// Run branch-and-bound index search with no bounds
     no_bounds: bool,
 
-    #[arg(long)]
+    #[arg(long, num_args = 1..)]
+    /// Run branch-and-bound index search with only specified bounds
     bounds: Vec<Bounds>,
 }
 
@@ -44,12 +46,9 @@ fn make_boundlist(u: &[Bounds]) -> Vec<Bound> {
     let mut boundlist = u
         .iter()
         .flat_map(|b| match b {
-            Bounds::Log => vec![Bound::Log(log_bound)],
-            Bounds::Addition => vec![Bound::Addition(addition_bound)],
-            Bounds::Vector => vec![
-                Bound::Vector(vec_bound_simple),
-                Bound::Vector(vec_bound_small_frags),
-            ],
+            Bounds::Log => vec![Bound::Log],
+            Bounds::IntChain => vec![Bound::IntChain],
+            Bounds::VecChain => vec![Bound::VecChainSimple, Bound::VecChainSmallFrags],
         })
         .collect::<Vec<_>>();
     boundlist.dedup();
@@ -97,7 +96,7 @@ fn main() -> Result<()> {
             .to_string(),
         (true, None) => verbose_index(
             &molecule,
-            &make_boundlist(&[Bounds::Addition, Bounds::Vector]),
+            &make_boundlist(&[Bounds::IntChain, Bounds::VecChain]),
         ),
         (
             true,
