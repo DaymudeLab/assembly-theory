@@ -9,10 +9,10 @@ on:
   push:
     branches:
       - main
-      - python_api
+      - master
+    tags:
+      - '*'
   pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
@@ -60,7 +60,7 @@ jobs:
           set -e
           python3 -m venv .venv
           source .venv/bin/activate
-          pip install orca --find-links dist --force-reinstall
+          pip install pyorca --find-links dist --force-reinstall
           pip install pytest
           pytest
       - name: pytest
@@ -76,8 +76,8 @@ jobs:
             pip3 install -U pip pytest
           run: |
             set -e
-            pip3 install orca --find-links dist --force-reinstall
-            pytest 
+            pip3 install pyorca --find-links dist --force-reinstall
+            pytest
 
   musllinux:
     runs-on: ${{ matrix.platform.runner }}
@@ -120,7 +120,7 @@ jobs:
             apk add py3-pip py3-virtualenv
             python3 -m virtualenv .venv
             source .venv/bin/activate
-            pip install orca --no-index --find-links dist --force-reinstall
+            pip install pyorca --no-index --find-links dist --force-reinstall
             pip install pytest
             pytest
       - name: pytest
@@ -137,7 +137,7 @@ jobs:
             python3 -m virtualenv .venv
             source .venv/bin/activate
             pip install pytest
-            pip install orca --find-links dist --force-reinstall
+            pip install pyorca --find-links dist --force-reinstall
             pytest
 
   windows:
@@ -173,7 +173,7 @@ jobs:
           set -e
           python3 -m venv .venv
           source .venv/Scripts/activate
-          pip install orca --find-links dist --force-reinstall
+          pip install pyorca --find-links dist --force-reinstall
           pip install pytest
           pytest
 
@@ -207,7 +207,7 @@ jobs:
           set -e
           python3 -m venv .venv
           source .venv/bin/activate
-          pip install orca --find-links dist --force-reinstall
+          pip install pyorca --find-links dist --force-reinstall
           pip install pytest
           pytest
 
