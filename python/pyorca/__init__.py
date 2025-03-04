@@ -1,9 +1,9 @@
 import rdkit
 from rdkit import Chem
 
-from .orca import *
-from .orca import __all__
-from .orca import __doc__
+from .pyorca import *
+from .pyorca import __all__
+from .pyorca import __doc__
 
 from typing import Optional, Set, Dict, Any
 from rdkit import Chem
