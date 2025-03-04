@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use crate::loader::parse_molfile_str;
 use crate::assembly::{
-    index_search, log_bound, vec_bound_simple, vec_bound_small_frags, addition_bound,
+    index_search
 };
 use crate::assembly::Bound as AssemblyBound;
 
@@ -14,8 +14,8 @@ use crate::assembly::Bound as AssemblyBound;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum PyBounds {
     Log,
-    Addition,
-    Vector,
+    IntChain,
+    VecChain,
 }
 
 /// Implements conversion from `&str` to `PyBounds`
@@ -25,8 +25,8 @@ impl FromStr for PyBounds {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "log" => Ok(PyBounds::Log),
-            "addition" => Ok(PyBounds::Addition),
-            "vector" => Ok(PyBounds::Vector),
+            "intchain" => Ok(PyBounds::IntChain),
+            "vecchain" => Ok(PyBounds::VecChain),
             _ => Err(PyValueError::new_err(format!("Invalid bound: {}", s))),
         }
     }
@@ -37,11 +37,11 @@ fn make_boundlist(u: &[PyBounds]) -> Vec<AssemblyBound> {
     let mut boundlist = u
         .iter()
         .flat_map(|b| match b {
-            PyBounds::Log => vec![AssemblyBound::Log(log_bound)],
-            PyBounds::Addition => vec![AssemblyBound::Addition(addition_bound)],
-            PyBounds::Vector => vec![
-                AssemblyBound::Vector(vec_bound_simple),
-                AssemblyBound::Vector(vec_bound_small_frags),
+            PyBounds::Log => vec![AssemblyBound::Log],
+            PyBounds::IntChain => vec![AssemblyBound::IntChain],
+            PyBounds::VecChain => vec![
+                AssemblyBound::VecChainSimple,
+                AssemblyBound::VecChainSmallFrags,
             ],
         })
         .collect::<Vec<_>>();

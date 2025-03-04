@@ -84,7 +84,7 @@ def _validate_bounds(bounds: Optional[Set[str]], no_bounds: bool) -> Set[str]:
         if no_bounds:
             return set()  # Initialize an empty set if no bounds are provided.
         else:
-            return {"addition", "vector"}
+            return {"intchain", "vecchain"}
     elif (bounds is not None) and no_bounds:
         raise ValueError("bounds specified but `no_bounds` is True.")
     
