@@ -36,17 +36,17 @@ pytest python/tests
 ORCA can compute the assembly index of molecules using RDKit's Mol class. Below is a basic example:
 
 ```python
-import orca
+import pyorca
 from rdkit import Chem
 
 anthracene = Chem.MolFromSmiles("c1ccc2cc3ccccc3cc2c1")
-orca.compute_ma(anthracene) # 7
+pyorca.compute_ma(anthracene) # 6
 ```
 
 
 # Details
 
-ORCA provides three primary functions:
+`pyorca` provides three primary functions:
 
 * `compute_ma(mol: Chem.Mol, bounds: set[str] = None, no_bounds: bool = False) -> int`
 Computes the assembly index of a given molecule.
@@ -59,7 +59,7 @@ Provides a string representation of the molecule’s atom and bond structure, us
 Both compute_ma and compute_ma_verbose support optional parameters for controlling the search strategy in the branch-and-bound algorithm:
 
 * `bounds: set[str]` – Specifies the heuristic bounds used to optimize the search.
-* * Options: `{"log"}`, `{"addition"}`, or `{"log", "addition"}`.
+* * Options: `{"log"}`, `{"intchain"}`, or `{"log", "intchain"}`.
 * * Defaults to the best-performing option when not provided.
 * `no_bounds: bool` – If `True`, disables all bounds, forcing a complete search of all pathways.
 
@@ -67,21 +67,24 @@ The effect of these on the search space can be see using `compute_ma_verbose` fo
 
 ```python
 from rdkit import Chem
-import orca
+import pyorca
 anthra_smi = "c1ccc2cc3ccccc3cc2c1"
 mol = Chem.MolFromSmiles(anthra_smi)
-orca.compute_ma_verbose(mol, bounds={"log"})
-# {'index': 6, 'duplicates': 418, 'space': 39015}
-orca.compute_ma_verbose(mol, bounds={"addition"})
-# {'index': 6, 'duplicates': 418, 'space': 2784}
-orca.compute_ma_verbose(mol, bounds={"addition", "log"})
-# {'index': 6, 'duplicates': 418, 'space': 2784}
-orca.compute_ma_verbose(mol, no_bounds=True)
+pyorca.compute_ma_verbose(mol, bounds={"log"})
+# {'index': 6, 'duplicates': 418, 'space': 40507}
+pyorca.compute_ma_verbose(mol, bounds={"intchain"})
+# {'index': 6, 'duplicates': 418, 'space': 3484}
+pyorca.compute_ma_verbose(mol, bounds={"intchain", "log"})
+# {'index': 6, 'duplicates': 418, 'space': 3081}
+pyorca.compute_ma_verbose(mol, no_bounds=True)
 # {'index': 6, 'duplicates': 418, 'space': 129409}
 
 # Invalid combination
-orca.compute_ma_verbose(mol, no_bounds=True, bounds={"log"})
+pyorca.compute_ma_verbose(mol, no_bounds=True, bounds={"log"})
 # ValueError("bounds specified but `no_bounds` is True.")
 ```
 
 More details can be found in Ref JOSS and Ref Seet. TODO (add links)
+
+# Cross-platform support
+In general Rust, `maturin`, and `cargo` facilitate robust cross platform support for ORCA and `pyorca` requires `RDKit` as a dependency. Accordingly, `pyorca` is only available on those platforms that have `RDKit` support through PyPI. These include `windows-x64`, `macos-x86`, `macos-aarch64`, `ubuntu-x86`, and `ubuntu-aarch64`. If you're using a different platform and already have `RDKit` installed (for example through `conda`), then `pyorca` may work but we offer no promises.   
