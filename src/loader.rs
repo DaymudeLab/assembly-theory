@@ -3,12 +3,13 @@
 //! # Example
 //! ```
 //! # use std::fs;
-//! # 
+//! # use std::path::PathBuf;
 //! # use anyhow::{bail, Context, Result};
 //! # use orca::{loader, molecule::Molecule};
 //! # fn main() -> Result<()> {
+//! # let path = PathBuf::from(format!("./data/checks/benzene.mol"));
 //! // Read a molecule data file as a string of lines
-//! let molfile = fs::read_to_string("./data/checks/benzene.mol").context("Cannot read input file.")?;
+//! let molfile = fs::read_to_string(path).context("Cannot read input file.")?;
 //! 
 //! let molecule = loader::parse_molfile_str(&molfile).context("Cannot parse molfile.")?;
 //! # Ok(())
@@ -58,12 +59,13 @@ pub fn parse_sdfile_str(_input: &str) -> Result<Molecule, ParserError> {
 /// # Example
 /// ```
 /// # use std::fs;
-/// # 
+/// # use std::path::PathBuf;
 /// # use anyhow::{bail, Context, Result};
 /// # use orca::{loader, molecule::Molecule};
 /// # fn main() -> Result<()> {
+/// # let path = PathBuf::from(format!("./data/checks/benzene.mol"));
 /// // Read a molecule data file as a string of lines
-/// let molfile = fs::read_to_string("./data/checks/benzene.mol").context("Cannot read input file.")?;
+/// let molfile = fs::read_to_string(path).context("Cannot read input file.")?;
 /// 
 /// let molecule = loader::parse_molfile_str(&molfile).context("Cannot parse molfile.")?;
 /// # Ok(())
