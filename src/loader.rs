@@ -1,27 +1,66 @@
+//! A loader to parse molecules data files.
+//! 
+//! # Example
+//! ```
+//! # fn main() -> Result<()> {
+//! # let molfile_path = Cli::parse();
+//! // Read a molecule data file as a string of lines
+//! let molfile = fs::read_to_string(&molfile_path.path).context("Cannot read input file.")?;
+//! 
+//! let molecule = loader::parse_molfile_str(&molfile).context("Cannot parse molfile.")?;
+//! # }
+//! ``` 
 use crate::molecule::{Atom, Bond, MGraph, Molecule};
 use clap::error::Result;
 use std::error::Error;
 use std::fmt::Display;
 
+/// Error type thrown by the molecule data file parsing functions.
+/// 
+/// Specifies the line of the molecule data file at which the specific error occured while parsing. 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParserError {
+    /// Atom count in not an integer value, occurs while parsing the counts line.
     AtomCountNotInt(usize),
+    /// Bond count in not an integer value, occurs while parsing the counts line.
     BondCountNotInt(usize),
+    /// The version of the molecule data file is not V2000.
     FileVersionIsNotV2000(usize),
+    /// Cannot parse the atom's symbol as one of the exisiting [`crate::molecule::Atom`] symbols, occurs while parsing the atom line.
     BadElementSymbol(usize, String),
+    /// Cannot parse the Bond Number as an integer value, occurs while parsing the bond line.
     BadBondNumber(usize),
+    /// Cannot parse the Bond Type as an integer value, occurs while parsing the bond line.
     BondTypeNotInt(usize),
+    /// Cannot parse the Bond Type as one of the exisiting [`crate::molecule::Bond`] types, occurs while parsing the bond line.
     BondTypeOutOfBounds(usize),
+    /// Unknown error which if occured, should be reported to the maintainers of the crate.
     ThisShouldNotHappen,
+    /// The molecule data file does not have all the lines to reconstruct the molecule.
     NotEnoughLines,
 }
 
 impl Error for ParserError {}
 
+/// Parses a `.sdf` molecule data file and returns a [`crate::molecule::Molecule`] object. `To be implemented`
 pub fn parse_sdfile_str(_input: &str) -> Result<Molecule, ParserError> {
     todo!("SDfile parser unimplemented!")
 }
 
+/// Parses a `.mol` molecule data file and returns a [`crate::molecule::Molecule`] object.
+/// 
+/// Mol file is given as a string of lines. Incase of an error, a [`self::ParserError`] is thrown.
+/// 
+/// # Example
+/// ```
+/// # fn main() -> Result<()> {
+/// # let molfile_path = Cli::parse();
+/// // Read a molecule data file as a string of lines
+/// let molfile = fs::read_to_string(&molfile_path.path).context("Cannot read input file.")?;
+/// 
+/// let molecule = loader::parse_molfile_str(&molfile).context("Cannot parse molfile.")?;
+/// # }
+/// ``` 
 pub fn parse_molfile_str(input: &str) -> Result<Molecule, ParserError> {
     let mut lines = input.lines().enumerate().skip(3); // Skip the header block, 3 lines
     let (ix, counts_line) = lines.next().ok_or(ParserError::NotEnoughLines)?;
