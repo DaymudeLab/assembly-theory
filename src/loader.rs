@@ -2,14 +2,18 @@
 //! 
 //! # Example
 //! ```
+//! # use std::fs;
+//! # 
+//! # use anyhow::{bail, Context, Result};
+//! # use orca::{loader, molecule::Molecule};
 //! # fn main() -> Result<()> {
-//! # let molfile_path = Cli::parse();
 //! // Read a molecule data file as a string of lines
-//! let molfile = fs::read_to_string(&molfile_path.path).context("Cannot read input file.")?;
+//! let molfile = fs::read_to_string("./data/checks/benzene.mol").context("Cannot read input file.")?;
 //! 
 //! let molecule = loader::parse_molfile_str(&molfile).context("Cannot parse molfile.")?;
+//! # Ok(())
 //! # }
-//! ``` 
+//! ```
 use crate::molecule::{Atom, Bond, MGraph, Molecule};
 use clap::error::Result;
 use std::error::Error;
@@ -53,14 +57,18 @@ pub fn parse_sdfile_str(_input: &str) -> Result<Molecule, ParserError> {
 /// 
 /// # Example
 /// ```
+/// # use std::fs;
+/// # 
+/// # use anyhow::{bail, Context, Result};
+/// # use orca::{loader, molecule::Molecule};
 /// # fn main() -> Result<()> {
-/// # let molfile_path = Cli::parse();
 /// // Read a molecule data file as a string of lines
-/// let molfile = fs::read_to_string(&molfile_path.path).context("Cannot read input file.")?;
+/// let molfile = fs::read_to_string("./data/checks/benzene.mol").context("Cannot read input file.")?;
 /// 
 /// let molecule = loader::parse_molfile_str(&molfile).context("Cannot parse molfile.")?;
+/// # Ok(())
 /// # }
-/// ``` 
+/// ```
 pub fn parse_molfile_str(input: &str) -> Result<Molecule, ParserError> {
     let mut lines = input.lines().enumerate().skip(3); // Skip the header block, 3 lines
     let (ix, counts_line) = lines.next().ok_or(ParserError::NotEnoughLines)?;
