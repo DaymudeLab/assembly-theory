@@ -29,5 +29,3 @@ repository = "https://github.com/DaymudeLab/ORCA"
 [tool.maturin]
 python-source = "python"
 module-name = "pyorca._pyorca"
-bindings = "pyo3"
-features = ["pyo3/extension-module"]
