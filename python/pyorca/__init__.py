@@ -2,8 +2,6 @@ import rdkit
 from rdkit import Chem
 
 from . import _pyorca
-from ._pyorca import __all__
-from ._pyorca import __doc__
 from . import timer
 
 from typing import Optional, Set, Dict, Any
@@ -30,9 +28,9 @@ def compute_ma(mol: Chem.Mol,
     bounds = _validate_bounds(bounds, no_bounds)
     
     if timeout is None:
-        ma = _compute_index(mol_block, bounds)  # Compute the molecular index using the given bounds.
+        ma = _pyorca._compute_index(mol_block, bounds)  # Compute the molecular index using the given bounds.
     else:
-        ma = timer.run_with_timeout(_compute_index, timeout, mol_block, bounds)
+        ma = timer.run_with_timeout(_pyorca._compute_index, timeout, mol_block, bounds)
     
     return ma
 
@@ -58,9 +56,9 @@ def compute_ma_verbose(mol: Chem.Mol,
     bounds = _validate_bounds(bounds, no_bounds)
     
     if timeout is None:
-        data = _compute_verbose_index(mol_block, bounds)  # Compute the molecular index using the given bounds.
+        data = _pyorca._compute_verbose_index(mol_block, bounds)  # Compute the molecular index using the given bounds.
     else:
-        data = timer.run_with_timeout(_compute_verbose_index, timeout, mol_block, bounds)
+        data = timer.run_with_timeout(_pyorca._compute_verbose_index, timeout, mol_block, bounds)
     
     return data
 
@@ -77,7 +75,7 @@ def get_molecule_info(mol: Chem.Mol) -> str:
     """
     mol_block: str = Chem.MolToMolBlock(mol)  # Convert molecule to MolBlock format.
 
-    info = _molecule_info(mol_block)  # Extract molecular information.
+    info = _pyorca._molecule_info(mol_block)  # Extract molecular information.
     
     return info
 
