@@ -4,14 +4,13 @@
 //! ```
 //! # use std::fs;
 //! # use std::path::PathBuf;
-//! # use anyhow::{bail, Context, Result};
 //! # use orca::{loader, molecule::Molecule};
 //! # fn main() -> Result<()> {
 //! # let path = PathBuf::from(format!("./data/checks/benzene.mol"));
 //! // Read a molecule data file as a string of lines
-//! let molfile = fs::read_to_string(path).context("Cannot read input file.")?;
+//! let molfile = fs::read_to_string(path).expect("Cannot read input file.");
 //! 
-//! let molecule = loader::parse_molfile_str(&molfile).context("Cannot parse molfile.")?;
+//! let molecule = loader::parse_molfile_str(&molfile).expect("Cannot parse molfile.");
 //! # Ok(())
 //! # }
 //! ```
@@ -20,16 +19,16 @@ use clap::error::Result;
 use std::error::Error;
 use std::fmt::Display;
 
-/// Error type thrown by the molecule data file parsing functions.
+/// Molecule data file parsing functions return a `ParserError` type when an error occurs.
 /// 
-/// Specifies the line of the molecule data file at which the specific error occured while parsing. 
+/// Describe the specifc error type along with the line number of the molecule data file where error occured. 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParserError {
-    /// Atom count in not an integer value, occurs while parsing the counts line.
+    /// Atom count is not an integer value, occurs while parsing the counts line.
     AtomCountNotInt(usize),
-    /// Bond count in not an integer value, occurs while parsing the counts line.
+    /// Bond count is not an integer value, occurs while parsing the counts line.
     BondCountNotInt(usize),
-    /// The version of the molecule data file is not V2000.
+    /// The version of the molecule data file is not `V2000`.
     FileVersionIsNotV2000(usize),
     /// Cannot parse the atom's symbol as one of the exisiting [`crate::molecule::Atom`] symbols, occurs while parsing the atom line.
     BadElementSymbol(usize, String),
@@ -47,27 +46,26 @@ pub enum ParserError {
 
 impl Error for ParserError {}
 
-/// Parses a `.sdf` molecule data file and returns a [`crate::molecule::Molecule`] object. `To be implemented`
+/// Parse a `.sdf` molecule data file and return a [`crate::molecule::Molecule`] object. `To be implemented`
 pub fn parse_sdfile_str(_input: &str) -> Result<Molecule, ParserError> {
     todo!("SDfile parser unimplemented!")
 }
 
-/// Parses a `.mol` molecule data file and returns a [`crate::molecule::Molecule`] object.
+/// Parse a `.mol` molecule data file and return a [`crate::molecule::Molecule`] object.
 /// 
-/// Mol file is given as a string of lines. Incase of an error, a [`self::ParserError`] is thrown.
+/// Input the Mol file as a string of lines. Incase of an error, a [`self::ParserError`] is thrown.
 /// 
 /// # Example
 /// ```
 /// # use std::fs;
 /// # use std::path::PathBuf;
-/// # use anyhow::{bail, Context, Result};
 /// # use orca::{loader, molecule::Molecule};
 /// # fn main() -> Result<()> {
 /// # let path = PathBuf::from(format!("./data/checks/benzene.mol"));
 /// // Read a molecule data file as a string of lines
-/// let molfile = fs::read_to_string(path).context("Cannot read input file.")?;
+/// let molfile = fs::read_to_string(path).expect("Cannot read input file.");
 /// 
-/// let molecule = loader::parse_molfile_str(&molfile).context("Cannot parse molfile.")?;
+/// let molecule = loader::parse_molfile_str(&molfile).expect("Cannot parse molfile.");
 /// # Ok(())
 /// # }
 /// ```
