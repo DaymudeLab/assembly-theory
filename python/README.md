@@ -68,8 +68,9 @@ The effect of these on the search space can be see using `compute_ma_verbose` fo
 ```python
 from rdkit import Chem
 import pyorca
-anthra_smi = "c1ccc2cc3ccccc3cc2c1"
-mol = Chem.MolFromSmiles(anthra_smi)
+
+anthracene = Chem.MolFromSmiles("c1ccc2cc3ccccc3cc2c1")
+
 pyorca.compute_ma_verbose(mol, bounds={"log"})
 # {'index': 6, 'duplicates': 418, 'space': 40507}
 pyorca.compute_ma_verbose(mol, bounds={"intchain"})
