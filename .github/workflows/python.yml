@@ -80,8 +80,8 @@ jobs:
         platform:
           - runner: ubuntu-22.04
             target: x86
-          - runner: ubuntu-22.04
-            target: arm64v8
+          - runner: ubuntu-24.04
+            target: aarch64
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
