@@ -50,3 +50,4 @@ def test_anthracene_info():
 15: Single, (10, 5), (Carbon, Carbon)
 """
     assert pyorca.get_molecule_info(mol) == anthra_info
+
