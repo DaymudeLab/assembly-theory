@@ -85,7 +85,7 @@ pyorca.compute_ma_verbose(mol, no_bounds=True, bounds={"log"})
 # ValueError("bounds specified but `no_bounds` is True.")
 ```
 
-More details can be found in Ref JOSS and Ref Seet. TODO (add links)
+Note that due to the multiprocessing features of `orca` the `space` outputs may be slightly different. More details can be found in [Seet et al 2024](https://arxiv.org/abs/2410.09100), and *TODO* JOSS Link.
 
 # Cross-platform support
-In general Rust, `maturin`, and `cargo` facilitate robust cross platform support for ORCA and `pyorca` requires `RDKit` as a dependency. Accordingly, `pyorca` is only available on those platforms that have `RDKit` support through PyPI. These include `windows-x64`, `macos-x86`, `macos-aarch64`, `ubuntu-x86`, and `ubuntu-aarch64`. If you're using a different platform and already have `RDKit` installed (for example through `conda`), then `pyorca` may work but we offer no promises.   
+Rust, `maturin`, and `cargo` facilitate robust cross platform support for ORCA and `pyorca` requires `RDKit` as a dependency. Accordingly, `pyorca` is only available on those platforms that have `RDKit` support through PyPI. These include `windows-x64`, `macos-x86`, `macos-aarch64`, `ubuntu-x86`, and `ubuntu-aarch64`. If you're using a different platform and already have `RDKit` installed (for example through `conda`), then `pyorca` may work but we offer no promises.   
