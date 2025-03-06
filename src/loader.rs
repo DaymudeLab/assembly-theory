@@ -5,7 +5,7 @@
 //! # use std::fs;
 //! # use std::path::PathBuf;
 //! # use orca::{loader, molecule::Molecule};
-//! # fn main() -> Result<()> {
+//! # fn main() -> Result<(), std::io::Error> {
 //! # let path = PathBuf::from(format!("./data/checks/benzene.mol"));
 //! // Read a molecule data file as a string of lines
 //! let molfile = fs::read_to_string(path).expect("Cannot read input file.");
@@ -60,7 +60,7 @@ pub fn parse_sdfile_str(_input: &str) -> Result<Molecule, ParserError> {
 /// # use std::fs;
 /// # use std::path::PathBuf;
 /// # use orca::{loader, molecule::Molecule};
-/// # fn main() -> Result<()> {
+/// # fn main() -> Result<(), std::io::Error> {
 /// # let path = PathBuf::from(format!("./data/checks/benzene.mol"));
 /// // Read a molecule data file as a string of lines
 /// let molfile = fs::read_to_string(path).expect("Cannot read input file.");
