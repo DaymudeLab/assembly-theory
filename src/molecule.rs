@@ -1,3 +1,8 @@
+//! Graph-theoretic description of a molecule.
+//!
+//! This module provides functions for fragmenting and joining partial molecules. It is not
+//! possible to manually construct a molecule. You can only construct a molecule by parsing a
+//! `.mol` file
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     fmt::Display,
@@ -22,6 +27,7 @@ type NodeSet = BTreeSet<NodeIndex<Index>>;
 macro_rules! periodic_table {
     ( $(($element:ident, $name:literal),)* ) => {
         #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+        /// Represents a chemical element.
         pub enum Element {
             $( $element, )*
         }
@@ -46,6 +52,7 @@ macro_rules! periodic_table {
     };
 }
 
+/// Thrown by [`Element::from_str`] if the string does not represent a chemical element.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct ParseElementError;
 
@@ -170,12 +177,20 @@ periodic_table!(
     (Oganesson, "Og"),
 );
 
+/// Atoms are the vertices of a [`Molecule`] graph.
+///
+/// Atoms contain an element and have a (currently unused) `capacity` field.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Atom {
     element: Element,
     capacity: u32,
 }
 
+/// Bonds are the edges of a [`Molecule`] graph.
+///
+/// The `.mol` file spec describes seven types of bonds, but assembly theory literature
+/// only considers single, double, and triple bonds. Notably, aromatic rings are represented
+/// by alternating single and double bonds, instead of the aromatic bond type.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Bond {
     Single,
@@ -183,6 +198,7 @@ pub enum Bond {
     Triple,
 }
 
+/// Thrown when `from::<usize>()` does not recieve a 1, 2, or 3.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct ParseBondError;
 
@@ -198,6 +214,11 @@ impl TryFrom<usize> for Bond {
     }
 }
 
+/// A molecule is a simple, loopless graph where nodes are elements and edges are bonds.
+///
+/// Assembly theory literature ignores hydrogen atoms by default. Molecules can hydrogen atoms
+/// inserted into them, but by default are constructed without hydrogen atoms or bonds to hydrogen
+/// atoms.
 #[derive(Debug, Clone)]
 pub struct Molecule {
     graph: MGraph,
@@ -208,6 +229,7 @@ impl Atom {
     pub fn new(element: Element, capacity: u32) -> Self {
         Self { element, capacity }
     }
+
     /// Returns the element of a particular atom
     pub fn element(&self) -> Element {
         self.element
@@ -250,14 +272,17 @@ impl Molecule {
 
         Some(output_graph)
     }
-    /// Return true if self is isomorphic to other
+
+    /// Return `true` if self is isomorphic to other
     pub fn is_isomorphic_to(&self, other: &Molecule) -> bool {
         is_isomorphic(&self.graph, &other.graph)
     }
-    /// Return true if self is a subgraph of other
+
+    /// Return `true` if self is a subgraph of other
     pub fn is_subgraph_of(&self, other: &Molecule) -> bool {
         is_isomorphic_subgraph(&self.graph, &other.graph)
     }
+
     /// Return set of all subgraphs of self as an iterable data structure
     pub fn enumerate_subgraphs(&self) -> impl Iterator<Item = NodeSet> {
         let mut solutions = HashSet::new();
@@ -270,7 +295,8 @@ impl Molecule {
         );
         solutions.into_iter().filter(|s| !s.is_empty())
     }
-    /// Return true if self is formed in a valid way
+
+    /// Return `true` if self is not formed in a valid way
     ///
     /// In particular, a molecule is considered to be malformed if it contains
     /// multiple edges between the same source and destinations, or if there
@@ -320,6 +346,7 @@ impl Molecule {
             solutions.insert(subset);
         }
     }
+
     /// Return an iterator of bitsets from self containing all duplicate and
     /// non-overlapping pairs of isomorphic subgraphs
     pub fn matches(&self) -> impl Iterator<Item = (BitSet, BitSet)> {
@@ -350,6 +377,7 @@ impl Molecule {
         }
         matches.into_iter()
     }
+
     /// Returns all ways to partition self as an iterable data structure of
     /// molecule pairs
     pub fn partitions(&self) -> Option<impl Iterator<Item = (Molecule, Molecule)> + '_> {
@@ -400,10 +428,12 @@ impl Molecule {
             && is_subset_connected(&self.graph, left)
             && is_subset_connected(&self.graph, right)
     }
+
     /// Constructor for Molecule using an MGraph
-    pub fn from_graph(g: MGraph) -> Self {
+    pub(crate) fn from_graph(g: MGraph) -> Self {
         Self { graph: g }
     }
+
     /// Returns isolated single bond as a molecule.
     pub fn single_bond() -> Self {
         let mut g = Graph::default();
@@ -418,6 +448,7 @@ impl Molecule {
         g.add_edge(u, v, Bond::Single);
         Self { graph: g }
     }
+
     /// Returns isolated double bond as a molecule.
     pub fn double_bond() -> Self {
         let mut g = Graph::default();
@@ -432,16 +463,19 @@ impl Molecule {
         g.add_edge(u, v, Bond::Double);
         Self { graph: g }
     }
+
     /// Return true if and only if self is a single or double bond
     pub fn is_basic_unit(&self) -> bool {
-            self.is_isomorphic_to(&Molecule::single_bond())
+        self.is_isomorphic_to(&Molecule::single_bond())
             || self.is_isomorphic_to(&Molecule::double_bond())
     }
+
     /// Return the graph of self as an MGraph
-    pub fn graph(&self) -> &MGraph {
+    pub(crate) fn graph(&self) -> &MGraph {
         &self.graph
     }
-    /// Return a non-ambiguous string representation of self
+
+    /// Pretty-printable string representation of self
     pub fn info(&self) -> String {
         let mut info = String::new();
         let g = self.graph();

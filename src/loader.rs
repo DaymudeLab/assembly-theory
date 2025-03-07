@@ -1,4 +1,4 @@
-//! Parse molecule files in the `.mol` file format
+//! Parse molecule files in the `.mol` file format.
 //!
 //! # Example
 //! ```
