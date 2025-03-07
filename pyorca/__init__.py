@@ -7,10 +7,11 @@ from . import timer
 from typing import Optional, Set, Dict, Any
 from rdkit import Chem
 
-def compute_ma(mol: Chem.Mol, 
+def molecular_assembly(mol: Chem.Mol, 
                bounds: Optional[Set[str]] = None, 
                no_bounds: bool = False,
-               timeout: Optional[int] = None) -> int:
+               timeout: Optional[int] = None,
+               serial: bool = False) -> int:
     """
     Computes the molecular assembly index (MA) for a given RDKit molecule.
 
@@ -35,17 +36,18 @@ def compute_ma(mol: Chem.Mol,
 
     if timeout is None:
         # Compute the molecular assembly index with the given bounds.
-        ma = _pyorca._compute_index(mol_block, bounds)
+        ma = _pyorca._molecular_assembly(mol_block, bounds, serial)
     else:
         # Run the computation with a timeout to prevent excessive execution time.
-        ma = timer.run_with_timeout(_pyorca._compute_index, timeout, mol_block, bounds)
+        ma = timer.run_with_timeout(_pyorca._molecular_assembly, timeout, mol_block, bounds, serial)
     
     return ma
 
-def compute_ma_verbose(mol: Chem.Mol, 
+def molecular_assembly_verbose(mol: Chem.Mol, 
                        bounds: Optional[Set[str]] = None, 
                        no_bounds: bool = False, 
-                       timeout: Optional[int] = None) -> Dict[str, int]:
+                       timeout: Optional[int] = None,
+                       serial: bool = False) -> Dict[str, int]:
     """
     Computes a verbose molecular assembly index (MA) for a given RDKit molecule, 
     returning additional details about the computation.
@@ -74,14 +76,14 @@ def compute_ma_verbose(mol: Chem.Mol,
 
     if timeout is None:
         # Compute the verbose molecular assembly index with additional details.
-        data = _pyorca._compute_verbose_index(mol_block, bounds)
+        data = _pyorca._molecular_assembly_verbose(mol_block, bounds, serial)
     else:
         # Run the computation with a timeout to prevent excessive execution time.
-        data = timer.run_with_timeout(_pyorca._compute_verbose_index, timeout, mol_block, bounds)
+        data = timer.run_with_timeout(_pyorca._molecular_assembly_verbose, timeout, mol_block, bounds, serial)
     
     return data
 
-def get_molecule_info(mol: Chem.Mol) -> str:
+def molecule_info(mol: Chem.Mol) -> str:
     """
     Retrieve molecular information for a given RDKit molecule.
 
