@@ -3,16 +3,16 @@ ORCA is a Python library for computing the assembly index of molecules using Rus
 
 To install first create a virtual environment 
 
-`python -m venv orca-env`
+`python -m venv orca_env`
 
 Activate the environment:
 
 Windows:
-    `orca-env\Scripts\activate`
+    `orca_env\Scripts\activate`
 
 
 macOS \& Unix:
-    `source tutorial-env/bin/activate`
+    `source orc_env/bin/activate`
 
 Install maturin: 
 
@@ -25,10 +25,10 @@ Build the library:
 # Running Tests
 To run the test suite, install pytest and execute the tests from the top-level orca directory:
 
-```
+```shell
 pip install pytest
 
-pytest python/tests
+pytest test
 ```
 
 # Example usage
@@ -48,10 +48,10 @@ pyorca.compute_ma(anthracene) # 6
 
 `pyorca` provides three primary functions:
 
-* `compute_ma(mol: Chem.Mol, bounds: set[str] = None, no_bounds: bool = False) -> int`
+* `compute_ma(mol: Chem.Mol, bounds: set[str] = None, no_bounds: bool = False, timeout: int = None) -> int`
 Computes the assembly index of a given molecule.
-* `compute_ma_verbose(mol: Chem.Mol, bounds: set[str] = None, no_bounds: bool = False) -> dict`
-Returns additional details, including the number of duplicated isomorphic subgraphs (duplicates) and the size of the search space (space).
+* `compute_ma_verbose(mol: Chem.Mol, bounds: set[str] = None, no_bounds: bool = False, timeout: int = None) -> dict`
+Returns additional details, including the number of duplicated isomorphic subgraphs (duplicates) and the size of the search space (space). 
 * `get_molecule_info(mol: Chem.Mol) -> str`
 Provides a string representation of the molecule’s atom and bond structure, useful for debugging.
 

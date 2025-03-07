@@ -12,56 +12,74 @@ def compute_ma(mol: Chem.Mol,
                no_bounds: bool = False,
                timeout: Optional[int] = None) -> int:
     """
-    Compute the molecular index (MA) for a given RDKit molecule.
+    Computes the molecular assembly index (MA) for a given RDKit molecule.
 
     Parameters:
-    - mol (Chem.Mol): An RDKit molecule object.
-    - bounds (Optional[Set[str]]): A set of bounds to consider (default: None).
-    - no_bounds (bool): Flag to indicate whether bounds should be ignored (default: False).
-    - timeout: (Optional[int]): time in seconds to allow computation to proceed, if timeout is exceed function will be terminated and error will be raised.
-    
+    - mol (Chem.Mol): The RDKit molecule object to analyze.
+    - bounds (Optional[Set[str]], default=None): A set of bounds to consider. If None, defaults are assigned based on `no_bounds`.
+    - no_bounds (bool, default=False): If True, no bounds are used. If False and `bounds` is None, default bounds are applied.
+    - timeout (Optional[int], default=None): The time limit in seconds for computation. If exceeded, an error is raised.
+
     Returns:
-    - int: The computed assembly index.
+    - int: The computed molecular assembly index.
+
+    Raises:
+    - ValueError: If `bounds` is specified while `no_bounds` is True.
+    - TimeoutError: If computation exceeds the given `timeout`.
     """
-    mol_block: str = Chem.MolToMolBlock(mol)  # Convert molecule to MolBlock format (string representation).
-    
+    # Convert the molecule to MolBlock format (a string representation).
+    mol_block: str = Chem.MolToMolBlock(mol)  
+
+    # Validate and initialize bounds.
     bounds = _validate_bounds(bounds, no_bounds)
-    
+
     if timeout is None:
-        ma = _pyorca._compute_index(mol_block, bounds)  # Compute the molecular index using the given bounds.
+        # Compute the molecular assembly index with the given bounds.
+        ma = _pyorca._compute_index(mol_block, bounds)
     else:
+        # Run the computation with a timeout to prevent excessive execution time.
         ma = timer.run_with_timeout(_pyorca._compute_index, timeout, mol_block, bounds)
     
     return ma
-
 
 def compute_ma_verbose(mol: Chem.Mol, 
                        bounds: Optional[Set[str]] = None, 
                        no_bounds: bool = False, 
                        timeout: Optional[int] = None) -> Dict[str, int]:
     """
-    Compute the verbose molecular index, returning additional details.
+    Computes a verbose molecular assembly index (MA) for a given RDKit molecule, 
+    returning additional details about the computation.
 
     Parameters:
-    - mol (Chem.Mol): An RDKit molecule object.
-    - bounds (Optional[Set[str]]): A set of bounds to consider (default: None).
-    - no_bounds (bool): Flag to indicate whether bounds should be ignored (default: False).
-    - timeout: (Optional[int]): time in seconds to allow computation to proceed, if timeout is exceed function will be terminated and error will be raised.
-    
-    Returns:
-    - Dict[str, int]: A dictionary containing the assembly index, the number of duplicated isomorphic subgraphs, and the search space.
-    """
-    mol_block: str = Chem.MolToMolBlock(mol)  # Convert molecule to MolBlock format (string representation).
+    - mol (Chem.Mol): The RDKit molecule object to analyze.
+    - bounds (Optional[Set[str]], default=None): A set of bounds to consider. If None, defaults are assigned based on `no_bounds`.
+    - no_bounds (bool, default=False): If True, no bounds are used. If False and `bounds` is None, default bounds are applied.
+    - timeout (Optional[int], default=None): The time limit in seconds for computation. If exceeded, an error is raised.
 
+    Returns:
+    - Dict[str, int]: A dictionary containing:
+        - "ma": The computed molecular assembly index.
+        - "duplicated_isomorphic_subgraphs": The number of duplicated isomorphic subgraphs.
+        - "search_space": The total search space considered.
+
+    Raises:
+    - ValueError: If `bounds` is specified while `no_bounds` is True.
+    - TimeoutError: If computation exceeds the given `timeout`.
+    """
+    # Convert the molecule to MolBlock format (a string representation).
+    mol_block: str = Chem.MolToMolBlock(mol)  
+
+    # Validate and initialize bounds.
     bounds = _validate_bounds(bounds, no_bounds)
-    
+
     if timeout is None:
-        data = _pyorca._compute_verbose_index(mol_block, bounds)  # Compute the molecular index using the given bounds.
+        # Compute the verbose molecular assembly index with additional details.
+        data = _pyorca._compute_verbose_index(mol_block, bounds)
     else:
+        # Run the computation with a timeout to prevent excessive execution time.
         data = timer.run_with_timeout(_pyorca._compute_verbose_index, timeout, mol_block, bounds)
     
     return data
-
 
 def get_molecule_info(mol: Chem.Mol) -> str:
     """
