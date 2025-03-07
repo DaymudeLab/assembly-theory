@@ -1,7 +1,7 @@
 import rdkit
 from rdkit import Chem
 
-import _lib_pyorca as _pyorca
+import _pyorca
 from . import timer
 
 from typing import Optional, Set, Dict, Any
