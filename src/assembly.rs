@@ -25,9 +25,12 @@ static PARALLEL_MATCH_SIZE_THRESHOLD: usize = 100;
 /// Bounds are used by `index_search()` to speed up assembly index computations.
 /// 
 /// * `Log` bounds by the logarithm base 2 of remaining edges
-/// * `IntChain` bounds by the length of the smallest addition chain to create the remaining fragments
-/// * 'VecChainSimple' bounds using addition chain length with the information of the edge types in a molecule
-/// * 'VecChainSmallFrags' bounds using information on the number of fragments of size 2 in the molecule
+/// * `IntChain` bounds by the length of the smallest addition chain to create the remaining 
+/// fragments
+/// * 'VecChainSimple' bounds using addition chain length with the information of the edge types 
+/// in a molecule
+/// * 'VecChainSmallFrags' bounds using information on the number of fragments of size 2 in the 
+/// molecule
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Bound {
     Log,
@@ -109,15 +112,9 @@ fn recurse_naive_index_search(
     cx
 }
 
-/// Calculates the assembly index of a molecule without using any bounding strategy or parallelization.
-/// This function is very inefficient and should only be used as a performance benchmark against other strategies.
-/// 
-/// # Examples
-/// ```
-/// let molecule = loader::parse_molfile_str(&molfile);
-/// 
-/// assembly_index = naive_index_search(&molecule);
-/// ```
+/// Calculates the assembly index of a molecule without using any bounding strategy or 
+/// parallelization. This function is very inefficient and should only be used as a performance
+/// benchmark against other strategies.
 pub fn naive_index_search(mol: &Molecule) -> u32 {
     let mut init = BitSet::new();
     init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
@@ -308,23 +305,18 @@ fn parallel_recurse_index_search(
 
 /// Computes information related to the assebmly index of a molecule using the provided bounds
 /// 
-/// The first result in the returned tuple is the assembly index of the molecule
-/// The second result gives the number of duplicatable subgraphs (pairs of disjoint and isomorphic subgraphs) in the molecule
-/// The third result is the number of states searched where a new state is considered to be searched each time a duplicatable subgraph is removed.
+/// The first result in the returned tuple is the assembly index of the molecule.
+/// The second result gives the number of duplicatable subgraphs (pairs of disjoint and isomorphic
+/// subgraphs) in the molecule.
+/// The third result is the number of states searched where a new state is considered to be 
+/// searched each time a duplicatable subgraph is removed.
 /// 
 /// If the search space of the molecule is large (>100) parallelization will be used.
 /// 
 /// Bounds will be used in the order provided in the `bounds` slice.
-/// Execution along a search path will halt immediately after finding a bound that exceeds the current best assembly pathway.
+/// Execution along a search path will halt immediately after finding a bound that exceeds the 
+/// current best assembly pathway.
 /// It is generally better to provide bounds that are quick to compute first.
-/// 
-/// # Examples
-/// ```
-/// let molecule = loader::parse_molfile_str(&molfile);
-/// let bounds = &[Bound::Log, Bound::IntChain];
-/// 
-/// (index, duplicates, searched) = index_search(molecule, bounds)
-/// ```
 pub fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, u32) {
     let mut init = BitSet::new();
     init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
@@ -510,13 +502,6 @@ fn vec_bound_small_frags(fragments: &[BitSet], m: usize, mol: &Molecule) -> usiz
 }
 
 /// Computes the assembly index of a molecule using an effecient bounding strategy
-/// 
-/// # Examples
-/// ```
-/// let molecule = loader::parse_molfile_str(&molfile);
-/// 
-/// assembly_index = index(molecule)
-/// ```
 pub fn index(m: &Molecule) -> u32 {
     index_search(
         m,
