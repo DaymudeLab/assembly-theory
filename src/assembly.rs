@@ -1,3 +1,20 @@
+//! Compute assembly indices of molecules.
+//! # Example
+//! ```
+//! # use std::fs;
+//! # use std::path::PathBuf;
+//! # use orca::*;
+//! # fn main() -> Result<(), std::io::Error> {
+//! # let path = PathBuf::from(format!("./data/checks/benzene.mol"));
+//! // Read a molecule data file
+//! let molfile = fs::read_to_string(path).expect("Cannot read input file.");
+//! let benzene = loader::parse_molfile_str(&molfile).expect("Cannot parse molfile.");
+//!
+//! // Compute assembly index of benzene
+//! assert_eq!(assembly::index(&benzene), 3);
+//! # Ok(())
+//! # }
+//! ```
 use std::{
     collections::BTreeSet,
     sync::{
@@ -23,19 +40,19 @@ static PARALLEL_MATCH_SIZE_THRESHOLD: usize = 100;
 
 /// Enum to represent the different bounds avaible in ORCA.
 /// Bounds are used by `index_search()` to speed up assembly index computations.
-/// 
-/// * `Log` bounds by the logarithm base 2 of remaining edges
-/// * `IntChain` bounds by the length of the smallest addition chain to create the remaining 
-///    fragments
-/// * 'VecChainSimple' bounds using addition chain length with the information of the edge types 
-///    in a molecule
-/// * 'VecChainSmallFrags' bounds using information on the number of fragments of size 2 in the 
-///    molecule
+///
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Bound {
+    /// `Log` bounds by the logarithm base 2 of remaining edges
     Log,
+    /// `IntChain` bounds by the length of the smallest addition chain to create the remaining
+    /// fragments
     IntChain,
+    /// 'VecChainSimple' bounds using addition chain length with the information of the edge types
+    /// in a molecule
     VecChainSimple,
+    /// 'VecChainSmallFrags' bounds using information on the number of fragments of size 2 in the
+    /// molecule
     VecChainSmallFrags,
 }
 
@@ -112,7 +129,7 @@ fn recurse_naive_index_search(
     cx
 }
 
-/// Calculates the assembly index of a molecule without using any bounding strategy or 
+/// Calculates the assembly index of a molecule without using any bounding strategy or
 /// parallelization. This function is very inefficient and should only be used as a performance
 /// benchmark against other strategies.
 pub fn naive_index_search(mol: &Molecule) -> u32 {
@@ -126,7 +143,6 @@ pub fn naive_index_search(mol: &Molecule) -> u32 {
         mol.graph().edge_count() - 1,
     ) as u32
 }
-
 
 #[allow(clippy::too_many_arguments)]
 fn recurse_index_search(
@@ -304,17 +320,17 @@ fn parallel_recurse_index_search(
 }
 
 /// Computes information related to the assebmly index of a molecule using the provided bounds
-/// 
+///
 /// The first result in the returned tuple is the assembly index of the molecule.
 /// The second result gives the number of duplicatable subgraphs (pairs of disjoint and isomorphic
 /// subgraphs) in the molecule.
-/// The third result is the number of states searched where a new state is considered to be 
+/// The third result is the number of states searched where a new state is considered to be
 /// searched each time a duplicatable subgraph is removed.
-/// 
+///
 /// If the search space of the molecule is large (>100) parallelization will be used.
-/// 
+///
 /// Bounds will be used in the order provided in the `bounds` slice.
-/// Execution along a search path will halt immediately after finding a bound that exceeds the 
+/// Execution along a search path will halt immediately after finding a bound that exceeds the
 /// current best assembly pathway.
 /// It is generally better to provide bounds that are quick to compute first.
 pub fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, u32) {
