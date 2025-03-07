@@ -198,7 +198,7 @@ pub enum Bond {
     Triple,
 }
 
-/// Thrown when `from::<usize>()` does not
+/// Thrown when `from::<usize>()` does not recieve a 1, 2, or 3.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct ParseBondError;
 
