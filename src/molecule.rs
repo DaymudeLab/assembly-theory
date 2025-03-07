@@ -204,10 +204,11 @@ pub struct Molecule {
 }
 
 impl Atom {
+    /// Constructor function for an atom
     pub fn new(element: Element, capacity: u32) -> Self {
         Self { element, capacity }
     }
-
+    /// Returns the element of a particular atom
     pub fn element(&self) -> Element {
         self.element
     }
@@ -249,15 +250,15 @@ impl Molecule {
 
         Some(output_graph)
     }
-
+    /// Return true if self is isomorphic to other
     pub fn is_isomorphic_to(&self, other: &Molecule) -> bool {
         is_isomorphic(&self.graph, &other.graph)
     }
-
+    /// Return true if self is a subgraph of other
     pub fn is_subgraph_of(&self, other: &Molecule) -> bool {
         is_isomorphic_subgraph(&self.graph, &other.graph)
     }
-
+    /// Return set of all subgraphs of self as an iterable data structure
     pub fn enumerate_subgraphs(&self) -> impl Iterator<Item = NodeSet> {
         let mut solutions = HashSet::new();
         let remainder = BTreeSet::from_iter(self.graph.node_indices());
@@ -269,7 +270,11 @@ impl Molecule {
         );
         solutions.into_iter().filter(|s| !s.is_empty())
     }
-
+    /// Return true if self is formed in a valid way
+    ///
+    /// In particular, a molecule is considered to be malformed if it contains
+    /// multiple edges between the same source and destinations, or if there
+    /// are edges from a source to itself
     // Check if a molecule has self-loops or doubled edges
     pub fn is_malformed(&self) -> bool {
         let mut uniq = HashSet::new();
@@ -315,7 +320,8 @@ impl Molecule {
             solutions.insert(subset);
         }
     }
-
+    /// Return an iterator of bitsets from self containing all duplicate and
+    /// non-overlapping pairs of isomorphic subgraphs
     pub fn matches(&self) -> impl Iterator<Item = (BitSet, BitSet)> {
         let mut matches = BTreeSet::new();
         for subgraph in self.enumerate_subgraphs() {
@@ -344,7 +350,8 @@ impl Molecule {
         }
         matches.into_iter()
     }
-
+    /// Returns all ways to partition self as an iterable data structure of
+    /// molecule pairs
     pub fn partitions(&self) -> Option<impl Iterator<Item = (Molecule, Molecule)> + '_> {
         let mut solutions = HashSet::new();
         let remaining_edges = self.graph.edge_indices().collect();
@@ -393,11 +400,11 @@ impl Molecule {
             && is_subset_connected(&self.graph, left)
             && is_subset_connected(&self.graph, right)
     }
-
+    /// Constructor for Molecule using an MGraph
     pub fn from_graph(g: MGraph) -> Self {
         Self { graph: g }
     }
-
+    /// Returns isolated single bond as a molecule.
     pub fn single_bond() -> Self {
         let mut g = Graph::default();
         let u = g.add_node(Atom {
@@ -411,7 +418,7 @@ impl Molecule {
         g.add_edge(u, v, Bond::Single);
         Self { graph: g }
     }
-
+    /// Returns isolated double bond as a molecule.
     pub fn double_bond() -> Self {
         let mut g = Graph::default();
         let u = g.add_node(Atom {
@@ -425,46 +432,16 @@ impl Molecule {
         g.add_edge(u, v, Bond::Double);
         Self { graph: g }
     }
-
-    pub fn carbonyl() -> Self {
-        let mut g = Graph::default();
-        let u = g.add_node(Atom {
-            capacity: 4,
-            element: Element::Carbon,
-        });
-        let v = g.add_node(Atom {
-            capacity: 2,
-            element: Element::Oxygen,
-        });
-        g.add_edge(u, v, Bond::Double);
-        Self { graph: g }
-    }
-
-    pub fn hydroxyl() -> Self {
-        let mut g = Graph::default();
-        let u = g.add_node(Atom {
-            capacity: 4,
-            element: Element::Carbon,
-        });
-        let v = g.add_node(Atom {
-            capacity: 2,
-            element: Element::Oxygen,
-        });
-        g.add_edge(u, v, Bond::Single);
-        Self { graph: g }
-    }
-
+    /// Return true if and only if self is a single or double bond
     pub fn is_basic_unit(&self) -> bool {
-        self.is_isomorphic_to(&Molecule::hydroxyl())
-            || self.is_isomorphic_to(&Molecule::carbonyl())
-            || self.is_isomorphic_to(&Molecule::single_bond())
+            self.is_isomorphic_to(&Molecule::single_bond())
             || self.is_isomorphic_to(&Molecule::double_bond())
     }
-
+    /// Return the graph of self as an MGraph
     pub fn graph(&self) -> &MGraph {
         &self.graph
     }
-
+    /// Return a non-ambiguous string representation of self
     pub fn info(&self) -> String {
         let mut info = String::new();
         let g = self.graph();
@@ -491,7 +468,10 @@ impl Molecule {
     }
 }
 
-// This is bad, BIG TODO: replace with handwritten vf3
+// Performance improvement would likely happen if we switch from vf2 to vf3;
+// this is a TODO when there is more time
+/// Return vector containing isomorphic subgraphs if pattern is isomorphic to
+/// a subgraph of target
 pub fn isomorphic_subgraphs_of(pattern: &MGraph, target: &MSubgraph) -> Vec<Vec<NodeIndex<Index>>> {
     if let Some(iter) =
         subgraph_isomorphisms_iter(&pattern, &target, &mut |n0, n1| n1 == n0, &mut |e0, e1| {
@@ -508,33 +488,6 @@ pub fn isomorphic_subgraphs_of(pattern: &MGraph, target: &MSubgraph) -> Vec<Vec<
 mod tests {
     #![allow(unused_imports)]
     use super::*;
-
-    #[test]
-    fn join_carbonyl_hydroxyl() {
-        let c = Molecule::carbonyl();
-        let h = Molecule::hydroxyl();
-        let j = c
-            .join(&h, [(NodeIndex::new(0), NodeIndex::new(0))])
-            .unwrap();
-
-        let mut g = Graph::default();
-        let u = g.add_node(Atom {
-            capacity: 4,
-            element: Element::Carbon,
-        });
-        let v = g.add_node(Atom {
-            capacity: 2,
-            element: Element::Oxygen,
-        });
-        let w = g.add_node(Atom {
-            capacity: 2,
-            element: Element::Oxygen,
-        });
-        g.add_edge(u, v, Bond::Single);
-        g.add_edge(u, w, Bond::Double);
-
-        assert!(j.is_isomorphic_to(&Molecule { graph: g }));
-    }
 
     #[test]
     fn element_to_string() {
