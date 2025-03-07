@@ -1,6 +1,6 @@
 # ORCA: Open, Reproducible Calculation of Assembly Indices
 
-This (currently private) repository contains the Rust source code for a faster
+This repository contains the Rust source code for a faster
 calculation of molecular assembly indices. This is a collaboration in the
 Biodesign Center for Biocomputing, Security and Society at Arizona State
 University involving (in alphabetical order) Cole Mathis, Devansh Vimal,

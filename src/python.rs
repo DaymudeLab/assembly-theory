@@ -1,3 +1,6 @@
+//! Expose functionality to python library using pyo3.
+//!
+//! 
 use pyo3::prelude::*;
 use pyo3::exceptions::PyValueError;
 use std::collections::{HashMap, HashSet};
@@ -5,11 +8,11 @@ use std::str::FromStr;
 
 use crate::loader::parse_molfile_str;
 use crate::assembly::{
-    index_search
+    index_search, serial_index_search
 };
 use crate::assembly::Bound as AssemblyBound;
 
-// This needs to be combined with the Bounds Enum in main but I'm not sure the 
+// TODO This needs to be combined with the Bounds Enum in main but I'm not sure the 
 // best way to do that. Could move it to utils
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum PyBounds {
@@ -56,7 +59,7 @@ fn process_bound_set(bound_set: HashSet<String>) -> PyResult<Vec<PyBounds>> {
     bound_set.iter().map(|s| s.parse()).collect::<Result<_, _>>() // Try parsing each string
 }
 
-/// Computes the assembly index using specified bounds.
+/// Computes the molecular assembly index using specified bounds.
 ///
 /// # Parameters
 /// - `mol_block`: The contents of a .mol file as a string.
@@ -65,7 +68,7 @@ fn process_bound_set(bound_set: HashSet<String>) -> PyResult<Vec<PyBounds>> {
 /// # Returns
 /// - The computed molecular index as a `u32`.
 #[pyfunction]
-pub fn _compute_index(mol_block: String, bound_set: HashSet<String>) -> PyResult<u32> {
+pub fn _molecular_assembly(mol_block: String, bound_set: HashSet<String>, serial: bool) -> PyResult<u32> {
     let mol_result = parse_molfile_str(&mol_block);
     let py_bounds = process_bound_set(bound_set)?;
 
@@ -74,12 +77,18 @@ pub fn _compute_index(mol_block: String, bound_set: HashSet<String>) -> PyResult
         Err(e) => return Err(e.into()), // Convert the error to PyErr
     };
 
-    let (index, _duplicates, _space) = index_search(&mol, &make_boundlist(&py_bounds));
+    let (index, _, _) =
+    if serial {
+     serial_index_search(&mol, &make_boundlist(&py_bounds))
+    }
+    else {
+        index_search(&mol, &make_boundlist(&py_bounds))
+    };
 
     Ok(index)
 }
 
-/// Computes the assembly index with additional details.
+/// Computes the molecular assembly index with additional details.
 ///
 /// # Parameters
 /// - `mol_block`: The contents of a .mol file as a string.
@@ -91,7 +100,7 @@ pub fn _compute_index(mol_block: String, bound_set: HashSet<String>) -> PyResult
 ///   - `"duplicates"`: Duplicate count.
 ///   - `"space"`: Space calculation.
 #[pyfunction]
-pub fn _compute_verbose_index(mol_block: String, bound_set: HashSet<String>) -> PyResult<HashMap<String, u32>> {
+pub fn _molecular_assembly_verbose(mol_block: String, bound_set: HashSet<String>, serial: bool) -> PyResult<HashMap<String, u32>> {
     let mol_result = parse_molfile_str(&mol_block);
     let py_bounds = process_bound_set(bound_set)?;
 
@@ -100,7 +109,14 @@ pub fn _compute_verbose_index(mol_block: String, bound_set: HashSet<String>) -> 
         Err(e) => return Err(e.into()), // Convert error to PyErr
     };
 
-    let (ix, duplicates, space) = index_search(&mol, &make_boundlist(&py_bounds));
+    
+    let (ix, duplicates, space) =
+        if serial {
+         serial_index_search(&mol, &make_boundlist(&py_bounds))
+        }
+        else {
+            index_search(&mol, &make_boundlist(&py_bounds))
+        };
 
     let mut data = HashMap::new();
     data.insert("index".to_string(), ix);
@@ -135,8 +151,8 @@ pub fn _molecule_info(mol_block: String) -> PyResult<String> {
 // otherwise, Python will not be able to import the module.
 #[pymodule]
 fn _pyorca(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(_compute_index, m)?)?;
-    m.add_function(wrap_pyfunction!(_compute_verbose_index, m)?)?;
+    m.add_function(wrap_pyfunction!(_molecular_assembly, m)?)?;
+    m.add_function(wrap_pyfunction!(_molecular_assembly_verbose, m)?)?;
     m.add_function(wrap_pyfunction!(_molecule_info, m)?)?;
     Ok(())
 }

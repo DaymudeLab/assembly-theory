@@ -1,69 +1,79 @@
 # ORCA Python Library
-ORCA is a Python library for computing the assembly index of molecules using Rust for high-performance calculations. It integrates with `RDKit` and is built using `maturin`.
 
-To install first create a virtual environment 
+PyORCA is a Python library for computing the assembly index of molecules with high-performance Rust-based calculations. It integrates with `RDKit` and is built using `maturin`.
 
-`python -m venv orca_env`
+## Installation  
 
-Activate the environment:
+First, create and activate a virtual environment:  
 
-Windows:
-    `orca_env\Scripts\activate`
+### Windows:
+```shell
+python -m venv orca_env
+orca_env\Scripts\activate
+```
 
+### macOS & Unix:
+```shell
+python -m venv orca_env
+source orca_env/bin/activate
+```
 
-macOS \& Unix:
-    `source orc_env/bin/activate`
+Next, install `maturin` and build the library:
+```shell
+pip install maturin
+maturin develop
+```
 
-Install maturin: 
+## Running Tests
 
-`pip install maturin`
-
-Build the library:
-
-`maturin develop`
-
-# Running Tests
-To run the test suite, install pytest and execute the tests from the top-level orca directory:
+To run the test suite, install `pytest` and execute the tests from the top-level ORCA directory:
 
 ```shell
 pip install pytest
-
 pytest test
 ```
 
-# Example usage
+## Example Usage
 
-ORCA can compute the assembly index of molecules using RDKit's Mol class. Below is a basic example:
+PyORCA computes the assembly index of molecules using RDKit's `Mol` class. Here's a basic example:
 
 ```python
 import pyorca
 from rdkit import Chem
 
 anthracene = Chem.MolFromSmiles("c1ccc2cc3ccccc3cc2c1")
-pyorca.compute_ma(anthracene) # 6
+pyorca.molecular_assembly(anthracene)  # 6
 ```
 
+## Core Functions  
 
-# Details
+`pyorca` provides three main functions:
 
-`pyorca` provides three primary functions:
+- **`molecular_assembly(mol: Chem.Mol, bounds: set[str] = None, no_bounds: bool = False, timeout: int = None, serial: bool = False) -> int`**  
+  Computes the assembly index of a given molecule.
+  - `timeout` (in seconds) sets a limit on computation time, raising a `TimeoutError` if exceeded.  
+  - `serial=True` forces a serial execution mode, mainly useful for debugging.
 
-* `compute_ma(mol: Chem.Mol, bounds: set[str] = None, no_bounds: bool = False, timeout: int = None) -> int`
-Computes the assembly index of a given molecule.
-* `compute_ma_verbose(mol: Chem.Mol, bounds: set[str] = None, no_bounds: bool = False, timeout: int = None) -> dict`
-Returns additional details, including the number of duplicated isomorphic subgraphs (duplicates) and the size of the search space (space). 
-* `get_molecule_info(mol: Chem.Mol) -> str`
-Provides a string representation of the molecule’s atom and bond structure, useful for debugging.
 
-## Search Strategy Options
-Both compute_ma and compute_ma_verbose support optional parameters for controlling the search strategy in the branch-and-bound algorithm:
+- **`molecular_assembly_verbose(mol: Chem.Mol, bounds: set[str] = None, no_bounds: bool = False, timeout: int = None, serial: bool = False) -> dict`**  
+  Returns additional details, including the number of duplicated isomorphic subgraphs (`duplicates`) and the size of the search space (`space`).  
+  - `timeout` (in seconds) sets a limit on computation time, raising a `TimeoutError` if exceeded.  
+  - `serial=True` forces a serial execution mode, mainly useful for debugging.
 
-* `bounds: set[str]` – Specifies the heuristic bounds used to optimize the search.
-* * Options: `{"log"}`, `{"intchain"}`, or `{"log", "intchain"}`.
-* * Defaults to the best-performing option when not provided.
-* `no_bounds: bool` – If `True`, disables all bounds, forcing a complete search of all pathways.
+- **`molecule_info(mol: Chem.Mol) -> str`**  
+  Returns a string representation of the molecule’s atom and bond structure for debugging.
 
-The effect of these on the search space can be see using `compute_ma_verbose` for example:
+## Search Strategy Options  
+
+Both `molecular_assembly` and `molecular_assembly_verbose` support optional parameters for controlling the search strategy in the branch-and-bound algorithm:
+
+- **`bounds: set[str]`** – Specifies heuristic bounds used to optimize the search.  
+  - Options: `{"log"}`, `{"intchain"}`, or `{"log", "intchain"}`.  
+  - Defaults to the best-performing option when not specified.
+
+- **`no_bounds: bool`** – If `True`, disables all bounds, forcing an exhaustive search of all pathways.
+
+The effect of these options can be observed using `molecular_assembly_verbose`:
 
 ```python
 from rdkit import Chem
@@ -71,21 +81,29 @@ import pyorca
 
 anthracene = Chem.MolFromSmiles("c1ccc2cc3ccccc3cc2c1")
 
-pyorca.compute_ma_verbose(mol, bounds={"log"})
+pyorca.molecular_assembly_verbose(anthracene, bounds={"log"})
 # {'index': 6, 'duplicates': 418, 'space': 40507}
-pyorca.compute_ma_verbose(mol, bounds={"intchain"})
-# {'index': 6, 'duplicates': 418, 'space': 3484}
-pyorca.compute_ma_verbose(mol, bounds={"intchain", "log"})
-# {'index': 6, 'duplicates': 418, 'space': 3081}
-pyorca.compute_ma_verbose(mol, no_bounds=True)
-# {'index': 6, 'duplicates': 418, 'space': 129409}
 
-# Invalid combination
-pyorca.compute_ma_verbose(mol, no_bounds=True, bounds={"log"})
-# ValueError("bounds specified but `no_bounds` is True.")
+pyorca.molecular_assembly_verbose(anthracene, bounds={"intchain"})
+# {'index': 6, 'duplicates': 418, 'space': 3484}
+
+pyorca.molecular_assembly_verbose(anthracene, bounds={"intchain", "log"})
+# {'index': 6, 'duplicates': 418, 'space': 3081}
+
+pyorca.molecular_assembly_verbose(anthracene, no_bounds=True)
+# {'index': 6, 'duplicates': 418, 'space': 129409}
 ```
 
-Note that due to the multiprocessing features of `orca` the `space` outputs may be slightly different. More details can be found in [Seet et al 2024](https://arxiv.org/abs/2410.09100), and *TODO* JOSS Link.
+Due to multiprocessing, `space` outputs may vary slightly. More details can be found in [Seet et al. 2024](https://arxiv.org/abs/2410.09100) (*TODO: JOSS Link*).
 
-# Cross-platform support
-Rust, `maturin`, and `cargo` facilitate robust cross platform support for ORCA and `pyorca` requires `RDKit` as a dependency. Accordingly, `pyorca` is only available on those platforms that have `RDKit` support through PyPI. These include `windows-x64`, `macos-x86`, `macos-aarch64`, `ubuntu-x86`, and `ubuntu-aarch64`. If you're using a different platform and already have `RDKit` installed (for example through `conda`), then `pyorca` may work but we offer no promises.   
+## Cross-Platform Support  
+
+PyORCA leverages Rust, `maturin`, and `cargo` for robust cross-platform support. However, since `pyorca` depends on `RDKit`, it is only available on platforms where `RDKit` is supported via PyPI, including:  
+
+- `windows-x64`  
+- `macos-x86`  
+- `macos-aarch64`  
+- `ubuntu-x86`  
+- `ubuntu-aarch64`  
+
+If you are using a different platform and have `RDKit` installed (e.g., via `conda`), `pyorca` **may** work, but we do not guarantee compatibility.
