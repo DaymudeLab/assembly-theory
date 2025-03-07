@@ -9,3 +9,7 @@ pub mod assembly;
 
 // Utility functions
 mod utils;
+
+// Python library
+#[cfg(feature = "python")]
+pub mod python;

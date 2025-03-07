@@ -18,6 +18,8 @@ use crate::molecule::{Atom, Bond, MGraph, Molecule};
 use clap::error::Result;
 use std::error::Error;
 use std::fmt::Display;
+use pyo3::exceptions::PyOSError;
+use pyo3::PyErr;
 
 /// Molecule data file parsing functions return a `ParserError` type when an error occurs.
 ///
@@ -48,6 +50,13 @@ pub enum ParserError {
 }
 
 impl Error for ParserError {}
+
+// Needed for Python library
+impl From<ParserError> for PyErr {
+    fn from(err: ParserError) -> PyErr {
+        PyOSError::new_err(err.to_string())
+    }
+}
 
 /// Parse a `.sdf` molecule data file and return a [`crate::molecule::Molecule`] object. `To be
 /// implemented`

@@ -1,0 +1,31 @@
+# pyproject.toml
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "pyorca"
+version = "0.1.0"
+description = "Open, Reproducible Assembly index Calculations"
+readme = "pyorca/README.md"
+requires-python = ">=3.10"
+license = {file = "LICENSE-MIT"}
+authors = [
+  {name = "Devansh Vimal", email = "dvpatel5@asu.edu"},
+  {name = "Cole Mathis", email = "cole.mathis@asu.edu"},
+  {name = "Joshua Daymude", email = "jdaymude@asu.edu"},
+]
+maintainers = [
+  {name = "Devansh Vimal", email = "dvpatel5@asu.edu"},
+  {name = "Cole Mathis", email = "cole.mathis@asu.edu"},
+  {name = "Joshua Daymude", email = "jdaymude@asu.edu"},
+]
+
+dependencies = ["rdkit~=2024.9"]
+
+[project.urls]
+repository = "https://github.com/DaymudeLab/ORCA"
+
+[tool.maturin]
+module-name = "_pyorca"
+features = ["pyo3/extension-module"]
