@@ -15,7 +15,7 @@
 //! # Example
 //! ```
 //! # use std::fs;
-//! # use std::path::Pathbuf;
+//! # use std::path::PathBuf;
 //! use orca::*;
 //! # fn main() -> Result<(), std::io::Error> {
 //! # let path = PathBuf::from(format!("./data/checks/benzene.mol"));
@@ -24,7 +24,7 @@
 //! let benzene = loader::parse_molfile_str(&molfile).expect("Cannot parse molfile.");
 //!
 //! // Compute assembly index of benzene
-//! assert_eq!(index(&benzene), 3)
+//! assert_eq!(assembly::index(&benzene), 3);
 //! # Ok(())
 //! # }
 //! ```
