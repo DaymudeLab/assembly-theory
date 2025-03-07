@@ -319,20 +319,18 @@ fn parallel_recurse_index_search(
     cx.load(Relaxed)
 }
 
-/// Computes information related to the assebmly index of a molecule using the provided bounds
+/// Computes information related to the assembly index of a molecule using the provided bounds.
 ///
-/// The first result in the returned tuple is the assembly index of the molecule.
-/// The second result gives the number of duplicatable subgraphs (pairs of disjoint and isomorphic
-/// subgraphs) in the molecule.
-/// The third result is the number of states searched where a new state is considered to be
-/// searched each time a duplicatable subgraph is removed.
+/// The first result in the returned tuple is the assembly index of the molecule. The second result
+/// gives the number of duplicatable subgraphs (pairs of disjoint and isomorphic subgraphs) in the
+/// molecule. The third result is the number of states searched where a new state is considered to
+/// be searched each time a duplicatable subgraph is removed.
 ///
 /// If the search space of the molecule is large (>100) parallelization will be used.
 ///
-/// Bounds will be used in the order provided in the `bounds` slice.
-/// Execution along a search path will halt immediately after finding a bound that exceeds the
-/// current best assembly pathway.
-/// It is generally better to provide bounds that are quick to compute first.
+/// Bounds will be used in the order provided in the `bounds` slice. Execution along a search path
+/// will halt immediately after finding a bound that exceeds the current best assembly pathway. It
+/// is generally better to provide bounds that are quick to compute first.
 pub fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, u32) {
     let mut init = BitSet::new();
     init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
@@ -373,6 +371,30 @@ pub fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, u32) {
     };
 
     (index, matches.len() as u32, total_search)
+}
+
+/// Like [`index_search`], but no parallelism is used.
+pub fn serial_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, u32) {
+    let mut init = BitSet::new();
+    init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
+
+    // Create and sort matches array
+    let mut matches: Vec<(BitSet, BitSet)> = mol.matches().collect();
+    matches.sort_by(|e1, e2| e2.0.len().cmp(&e1.0.len()));
+
+    let edge_count = mol.graph().edge_count();
+    let mut total_search = 0;
+    let index = recurse_index_search(
+        mol,
+        &matches,
+        &[init],
+        edge_count - 1,
+        edge_count,
+        edge_count - 1,
+        bounds,
+        &mut total_search,
+    );
+    (index as u32, matches.len() as u32, total_search)
 }
 
 fn log_bound(fragments: &[BitSet]) -> usize {
