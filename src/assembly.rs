@@ -331,6 +331,30 @@ fn parallel_recurse_index_search(
 /// Bounds will be used in the order provided in the `bounds` slice. Execution along a search path
 /// will halt immediately after finding a bound that exceeds the current best assembly pathway. It
 /// is generally better to provide bounds that are quick to compute first.
+///
+/// # Example
+/// ```
+/// # use std::fs;
+/// # use std::path::PathBuf;
+/// # use orca::*;
+/// use orca::assembly::{Bound, index_search};
+/// # fn main() -> Result<(), std::io::Error> {
+/// # let path = PathBuf::from(format!("./data/checks/benzene.mol"));
+/// // Read a molecule data file
+/// let molfile = fs::read_to_string(path).expect("Cannot read input file.");
+/// let benzene = loader::parse_molfile_str(&molfile).expect("Cannot parse molfile.");
+///
+/// // Compute assembly index of benzene naively, with no bounds.
+/// let (slow_index, _, _) = index_search(&benzene, &[]);
+///
+/// // Compute assembly index of benzene with the log and integer chain bounds
+/// let (fast_index, _, _) = index_search(&benzene, &[Bound::Log, Bound::IntChain]);
+///
+/// assert_eq!(slow_index, 3);
+/// assert_eq!(fast_index, 3);
+/// # Ok(())
+/// # }
+/// ```
 pub fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, u32) {
     let mut init = BitSet::new();
     init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
@@ -374,6 +398,30 @@ pub fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, u32) {
 }
 
 /// Like [`index_search`], but no parallelism is used.
+///
+/// # Example
+/// ```
+/// # use std::fs;
+/// # use std::path::PathBuf;
+/// # use orca::*;
+/// use orca::assembly::{Bound, serial_index_search};
+/// # fn main() -> Result<(), std::io::Error> {
+/// # let path = PathBuf::from(format!("./data/checks/benzene.mol"));
+/// // Read a molecule data file
+/// let molfile = fs::read_to_string(path).expect("Cannot read input file.");
+/// let benzene = loader::parse_molfile_str(&molfile).expect("Cannot parse molfile.");
+///
+/// // Compute assembly index of benzene naively, with no bounds.
+/// let (slow_index, _, _) = serial_index_search(&benzene, &[]);
+///
+/// // Compute assembly index of benzene with the log and integer chain bounds
+/// let (fast_index, _, _) = serial_index_search(&benzene, &[Bound::Log, Bound::IntChain]);
+///
+/// assert_eq!(slow_index, 3);
+/// assert_eq!(fast_index, 3);
+/// # Ok(())
+/// # }
+/// ```
 pub fn serial_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, u32) {
     let mut init = BitSet::new();
     init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
@@ -540,6 +588,22 @@ fn vec_bound_small_frags(fragments: &[BitSet], m: usize, mol: &Molecule) -> usiz
 }
 
 /// Computes the assembly index of a molecule using an effecient bounding strategy
+/// # Example
+/// ```
+/// # use std::fs;
+/// # use std::path::PathBuf;
+/// # use orca::*;
+/// # fn main() -> Result<(), std::io::Error> {
+/// # let path = PathBuf::from(format!("./data/checks/benzene.mol"));
+/// // Read a molecule data file
+/// let molfile = fs::read_to_string(path).expect("Cannot read input file.");
+/// let benzene = loader::parse_molfile_str(&molfile).expect("Cannot parse molfile.");
+///
+/// // Compute assembly index of benzene
+/// assert_eq!(assembly::index(&benzene), 3);
+/// # Ok(())
+/// # }
+/// ```
 pub fn index(m: &Molecule) -> u32 {
     index_search(
         m,
