@@ -26,11 +26,11 @@ static PARALLEL_MATCH_SIZE_THRESHOLD: usize = 100;
 /// 
 /// * `Log` bounds by the logarithm base 2 of remaining edges
 /// * `IntChain` bounds by the length of the smallest addition chain to create the remaining 
-/// fragments
+///    fragments
 /// * 'VecChainSimple' bounds using addition chain length with the information of the edge types 
-/// in a molecule
+///    in a molecule
 /// * 'VecChainSmallFrags' bounds using information on the number of fragments of size 2 in the 
-/// molecule
+///    molecule
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Bound {
     Log,
