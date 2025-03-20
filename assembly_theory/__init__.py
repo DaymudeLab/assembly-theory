@@ -36,10 +36,10 @@ def molecular_assembly(mol: Chem.Mol,
 
     if timeout is None:
         # Compute the molecular assembly index with the given bounds.
-        ma = _pyorca._molecular_assembly(mol_block, bounds, serial)
+        ma = _pyat._molecular_assembly(mol_block, bounds, serial)
     else:
         # Run the computation with a timeout to prevent excessive execution time.
-        ma = timer.run_with_timeout(_pyorca._molecular_assembly, timeout, mol_block, bounds, serial)
+        ma = timer.run_with_timeout(_pyat._molecular_assembly, timeout, mol_block, bounds, serial)
     
     return ma
 
@@ -76,10 +76,10 @@ def molecular_assembly_verbose(mol: Chem.Mol,
 
     if timeout is None:
         # Compute the verbose molecular assembly index with additional details.
-        data = _pyorca._molecular_assembly_verbose(mol_block, bounds, serial)
+        data = _pyat._molecular_assembly_verbose(mol_block, bounds, serial)
     else:
         # Run the computation with a timeout to prevent excessive execution time.
-        data = timer.run_with_timeout(_pyorca._molecular_assembly_verbose, timeout, mol_block, bounds, serial)
+        data = timer.run_with_timeout(_pyat._molecular_assembly_verbose, timeout, mol_block, bounds, serial)
     
     return data
 
@@ -95,7 +95,7 @@ def molecule_info(mol: Chem.Mol) -> str:
     """
     mol_block: str = Chem.MolToMolBlock(mol)  # Convert molecule to MolBlock format.
 
-    info = _pyorca._molecule_info(mol_block)  # Extract molecular information.
+    info = _pyat._molecule_info(mol_block)  # Extract molecular information.
     
     return info
 
