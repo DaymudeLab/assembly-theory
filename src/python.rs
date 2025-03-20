@@ -150,7 +150,7 @@ pub fn _molecule_info(mol_block: String) -> PyResult<String> {
 // This function must match the `lib.name` setting in `Cargo.toml`,
 // otherwise, Python will not be able to import the module.
 #[pymodule]
-fn _pyorca(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _pyat(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_molecular_assembly, m)?)?;
     m.add_function(wrap_pyfunction!(_molecular_assembly_verbose, m)?)?;
     m.add_function(wrap_pyfunction!(_molecule_info, m)?)?;
