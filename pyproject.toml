@@ -4,10 +4,10 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "assembly-theory"
+name = "assembly_theory"
 version = "0.1.0"
 description = "Open, Reproducible Assembly index Calculations"
-readme = "assembly-theory/README.md"
+readme = "assembly_theory/README.md"
 requires-python = ">=3.10"
 license = {file = "LICENSE-MIT"}
 authors = [
