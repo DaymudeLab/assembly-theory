@@ -1,17 +1,17 @@
-import pyorca
+import assembly_theory as at
 import rdkit.Chem
 
 def test_aspirin_index():
     aspirin_smi = "O=C(C)Oc1ccccc1C(=O)O"
     mol = rdkit.Chem.MolFromSmiles(aspirin_smi)
-    assert pyorca.molecular_assembly(mol) == 8
+    assert at.molecular_assembly(mol) == 8
 
 def test_aspirin_verbose():
     aspirin_smi = "O=C(C)Oc1ccccc1C(=O)O"
     mol = rdkit.Chem.MolFromSmiles(aspirin_smi)
-    assert pyorca.molecular_assembly_verbose(mol) == {'duplicates': 20, 'index': 8, 'space': 36}
+    assert at.molecular_assembly_verbose(mol) == {'duplicates': 20, 'index': 8, 'space': 36}
 
-    assert pyorca.molecular_assembly_verbose(mol, no_bounds=True) == {'duplicates': 20, 'index': 8, 'space': 96}
+    assert at.molecular_assembly_verbose(mol, no_bounds=True) == {'duplicates': 20, 'index': 8, 'space': 96}
 
 def test_anthracene_info():
     anthra_smi = "c1ccc2cc3ccccc3cc2c1"
@@ -49,5 +49,5 @@ def test_anthracene_info():
 14: Single, (12, 3), (Carbon, Carbon)
 15: Single, (10, 5), (Carbon, Carbon)
 """
-    assert pyorca.molecule_info(mol) == anthra_info
+    assert at.molecule_info(mol) == anthra_info
 

@@ -1,5 +1,5 @@
 import pytest
-from pyorca import _validate_bounds
+from assembly_theory import _validate_bounds
 
 def test_validate_bounds():
     # Case 1: bounds is None and no_bounds is True → should return an empty set
