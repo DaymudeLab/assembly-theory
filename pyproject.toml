@@ -4,10 +4,10 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "pyorca"
+name = "assembly-theory"
 version = "0.1.0"
 description = "Open, Reproducible Assembly index Calculations"
-readme = "pyorca/README.md"
+readme = "assembly-theory/README.md"
 requires-python = ">=3.10"
 license = {file = "LICENSE-MIT"}
 authors = [
@@ -24,8 +24,8 @@ maintainers = [
 dependencies = ["rdkit~=2024.9"]
 
 [project.urls]
-repository = "https://github.com/DaymudeLab/ORCA"
+repository = "https://github.com/DaymudeLab/assembly-theory"
 
 [tool.maturin]
-module-name = "_pyorca"
+module-name = "_pyat"
 features = ["pyo3/extension-module"]

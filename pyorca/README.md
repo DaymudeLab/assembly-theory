@@ -1,6 +1,6 @@
-# ORCA Python Library
+# `assembly-theory` Python Library
 
-PyORCA is a Python library for computing the assembly index of molecules with high-performance Rust-based calculations. It integrates with `RDKit` and is built using `maturin`.
+This is a Python library for computing the assembly index of molecules with high-performance Rust-based calculations. It integrates with `RDKit` and is built using `maturin`.
 
 ## Installation  
 
@@ -8,14 +8,14 @@ First, create and activate a virtual environment:
 
 ### Windows:
 ```shell
-python -m venv orca_env
-orca_env\Scripts\activate
+python -m venv at_env
+at_env\Scripts\activate
 ```
 
 ### macOS & Unix:
 ```shell
-python -m venv orca_env
-source orca_env/bin/activate
+python -m venv at_env
+source at_env/bin/activate
 ```
 
 Next, install `maturin` and build the library:
@@ -26,7 +26,7 @@ maturin develop
 
 ## Running Tests
 
-To run the test suite, install `pytest` and execute the tests from the top-level ORCA directory:
+To run the test suite, install `pytest` and execute the tests from the top-level `assembly-theory` directory:
 
 ```shell
 pip install pytest
@@ -35,19 +35,19 @@ pytest test
 
 ## Example Usage
 
-PyORCA computes the assembly index of molecules using RDKit's `Mol` class. Here's a basic example:
+`assembly-theory` computes the assembly index of molecules using RDKit's `Mol` class. Here's a basic example:
 
 ```python
-import pyorca
+import assembly_theory as at
 from rdkit import Chem
 
 anthracene = Chem.MolFromSmiles("c1ccc2cc3ccccc3cc2c1")
-pyorca.molecular_assembly(anthracene)  # 6
+at.molecular_assembly(anthracene)  # 6
 ```
 
 ## Core Functions  
 
-`pyorca` provides three main functions:
+`assembly-theory` provides three main functions:
 
 - **`molecular_assembly(mol: Chem.Mol, bounds: set[str] = None, no_bounds: bool = False, timeout: int = None, serial: bool = False) -> int`**  
   Computes the assembly index of a given molecule.
@@ -77,20 +77,20 @@ The effect of these options can be observed using `molecular_assembly_verbose`:
 
 ```python
 from rdkit import Chem
-import pyorca
+import assembly_theory as at
 
 anthracene = Chem.MolFromSmiles("c1ccc2cc3ccccc3cc2c1")
 
-pyorca.molecular_assembly_verbose(anthracene, bounds={"log"})
+at.molecular_assembly_verbose(anthracene, bounds={"log"})
 # {'index': 6, 'duplicates': 418, 'space': 40507}
 
-pyorca.molecular_assembly_verbose(anthracene, bounds={"intchain"})
+at.molecular_assembly_verbose(anthracene, bounds={"intchain"})
 # {'index': 6, 'duplicates': 418, 'space': 3484}
 
-pyorca.molecular_assembly_verbose(anthracene, bounds={"intchain", "log"})
+at.molecular_assembly_verbose(anthracene, bounds={"intchain", "log"})
 # {'index': 6, 'duplicates': 418, 'space': 3081}
 
-pyorca.molecular_assembly_verbose(anthracene, no_bounds=True)
+at.molecular_assembly_verbose(anthracene, no_bounds=True)
 # {'index': 6, 'duplicates': 418, 'space': 129409}
 ```
 
@@ -98,7 +98,7 @@ Due to multiprocessing, `space` outputs may vary slightly. More details can be f
 
 ## Cross-Platform Support  
 
-PyORCA leverages Rust, `maturin`, and `cargo` for robust cross-platform support. However, since `pyorca` depends on `RDKit`, it is only available on platforms where `RDKit` is supported via PyPI, including:  
+`assembly-theory` leverages Rust, `maturin`, and `cargo` for robust cross-platform support. However, since `assembly-theory` depends on `RDKit`, it is only available on platforms where `RDKit` is supported via PyPI, including:  
 
 - `windows-x64`  
 - `macos-x86`  
@@ -106,4 +106,4 @@ PyORCA leverages Rust, `maturin`, and `cargo` for robust cross-platform support.
 - `ubuntu-x86`  
 - `ubuntu-aarch64`  
 
-If you are using a different platform and have `RDKit` installed (e.g., via `conda`), `pyorca` **may** work, but we do not guarantee compatibility.
+If you are using a different platform and have `RDKit` installed (e.g., via `conda`), `assembly-theory` **may** work, but we do not guarantee compatibility.
