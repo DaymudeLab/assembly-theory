@@ -1,18 +1,14 @@
 //! Expose functionality to python library using pyo3.
-//!
-//! 
-use pyo3::prelude::*;
 use pyo3::exceptions::PyValueError;
+use pyo3::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
-use crate::loader::parse_molfile_str;
-use crate::assembly::{
-    index_search, serial_index_search
-};
 use crate::assembly::Bound as AssemblyBound;
+use crate::assembly::{index_search, serial_index_search};
+use crate::loader::parse_molfile_str;
 
-// TODO This needs to be combined with the Bounds Enum in main but I'm not sure the 
+// TODO This needs to be combined with the Bounds Enum in main but I'm not sure the
 // best way to do that. Could move it to utils
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum PyBounds {
@@ -56,7 +52,10 @@ fn make_boundlist(u: &[PyBounds]) -> Vec<AssemblyBound> {
 /// Processes a `HashSet<String>` from Python and converts it into a `Vec<PyBounds>`
 /// Raises an error if any string is invalid.
 fn process_bound_set(bound_set: HashSet<String>) -> PyResult<Vec<PyBounds>> {
-    bound_set.iter().map(|s| s.parse()).collect::<Result<_, _>>() // Try parsing each string
+    bound_set
+        .iter()
+        .map(|s| s.parse())
+        .collect::<Result<_, _>>() // Try parsing each string
 }
 
 /// Computes the molecular assembly index using specified bounds.
@@ -68,7 +67,11 @@ fn process_bound_set(bound_set: HashSet<String>) -> PyResult<Vec<PyBounds>> {
 /// # Returns
 /// - The computed molecular index as a `u32`.
 #[pyfunction]
-pub fn _molecular_assembly(mol_block: String, bound_set: HashSet<String>, serial: bool) -> PyResult<u32> {
+pub fn _molecular_assembly(
+    mol_block: String,
+    bound_set: HashSet<String>,
+    serial: bool,
+) -> PyResult<u32> {
     let mol_result = parse_molfile_str(&mol_block);
     let py_bounds = process_bound_set(bound_set)?;
 
@@ -77,11 +80,9 @@ pub fn _molecular_assembly(mol_block: String, bound_set: HashSet<String>, serial
         Err(e) => return Err(e.into()), // Convert the error to PyErr
     };
 
-    let (index, _, _) =
-    if serial {
-     serial_index_search(&mol, &make_boundlist(&py_bounds))
-    }
-    else {
+    let (index, _, _) = if serial {
+        serial_index_search(&mol, &make_boundlist(&py_bounds))
+    } else {
         index_search(&mol, &make_boundlist(&py_bounds))
     };
 
@@ -100,7 +101,11 @@ pub fn _molecular_assembly(mol_block: String, bound_set: HashSet<String>, serial
 ///   - `"duplicates"`: Duplicate count.
 ///   - `"space"`: Space calculation.
 #[pyfunction]
-pub fn _molecular_assembly_verbose(mol_block: String, bound_set: HashSet<String>, serial: bool) -> PyResult<HashMap<String, u32>> {
+pub fn _molecular_assembly_verbose(
+    mol_block: String,
+    bound_set: HashSet<String>,
+    serial: bool,
+) -> PyResult<HashMap<String, usize>> {
     let mol_result = parse_molfile_str(&mol_block);
     let py_bounds = process_bound_set(bound_set)?;
 
@@ -109,18 +114,15 @@ pub fn _molecular_assembly_verbose(mol_block: String, bound_set: HashSet<String>
         Err(e) => return Err(e.into()), // Convert error to PyErr
     };
 
-    
-    let (ix, duplicates, space) =
-        if serial {
-         serial_index_search(&mol, &make_boundlist(&py_bounds))
-        }
-        else {
-            index_search(&mol, &make_boundlist(&py_bounds))
-        };
+    let (ix, duplicates, space) = if serial {
+        serial_index_search(&mol, &make_boundlist(&py_bounds))
+    } else {
+        index_search(&mol, &make_boundlist(&py_bounds))
+    };
 
     let mut data = HashMap::new();
-    data.insert("index".to_string(), ix);
-    data.insert("duplicates".to_string(), duplicates);
+    data.insert("index".to_string(), ix as usize);
+    data.insert("duplicates".to_string(), duplicates as usize);
     data.insert("space".to_string(), space);
 
     Ok(data)
