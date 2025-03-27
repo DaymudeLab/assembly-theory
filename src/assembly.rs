@@ -377,7 +377,7 @@ pub fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize) {
             bounds,
             total_search.clone(),
         );
-        let total_search = total_search.load(Relaxed).into();
+        let total_search = total_search.load(Relaxed);
         (index as u32, total_search)
     } else {
         let mut total_search = 0;
