@@ -20,7 +20,7 @@ default = ["python"]
 python = []
 
 [lib]
-name = "orca"
+name = "assembly_theory"
 path = "src/lib.rs"
 crate-type = ["rlib","cdylib"]
 

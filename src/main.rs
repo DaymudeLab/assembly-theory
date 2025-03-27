@@ -3,8 +3,8 @@ use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
 use clap::{Args, Parser, ValueEnum};
-use orca::assembly::{index_search, serial_index_search, Bound};
-use orca::{loader, molecule::Molecule};
+use assembly_theory::assembly::{index_search, serial_index_search, Bound};
+use assembly_theory::{loader, molecule::Molecule};
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
 enum Bounds {

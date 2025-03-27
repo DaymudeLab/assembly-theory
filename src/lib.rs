@@ -16,11 +16,11 @@
 //! ```
 //! # use std::fs;
 //! # use std::path::PathBuf;
-//! use orca::*;
+//! use assembly_theory::*;
 //! # fn main() -> Result<(), std::io::Error> {
 //! # let path = PathBuf::from(format!("./data/checks/benzene.mol"));
 //! // Read a molecule data file
-//! let molfile = fs::read_to_string(path).expect("Cannot read input file.");
+//! let molfile = fs::read_to_string(path)?;
 //! let benzene = loader::parse_molfile_str(&molfile).expect("Cannot parse molfile.");
 //!
 //! // Compute assembly index of benzene

@@ -3,11 +3,11 @@
 //! ```
 //! # use std::fs;
 //! # use std::path::PathBuf;
-//! # use orca::*;
+//! # use assembly_theory::*;
 //! # fn main() -> Result<(), std::io::Error> {
 //! # let path = PathBuf::from(format!("./data/checks/benzene.mol"));
 //! // Read a molecule data file
-//! let molfile = fs::read_to_string(path).expect("Cannot read input file.");
+//! let molfile = fs::read_to_string(path)?;
 //! let benzene = loader::parse_molfile_str(&molfile).expect("Cannot parse molfile.");
 //!
 //! // Compute assembly index of benzene
@@ -38,9 +38,9 @@ struct EdgeType {
 
 static PARALLEL_MATCH_SIZE_THRESHOLD: usize = 100;
 
-/// Enum to represent the different bounds avaible in ORCA.
+/// Enum to represent the different bounds available during the computation of molecular assembly
+/// indices.
 /// Bounds are used by `index_search()` to speed up assembly index computations.
-///
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Bound {
     /// `Log` bounds by the logarithm base 2 of remaining edges
@@ -336,8 +336,8 @@ fn parallel_recurse_index_search(
 /// ```
 /// # use std::fs;
 /// # use std::path::PathBuf;
-/// # use orca::*;
-/// use orca::assembly::{Bound, index_search};
+/// # use assembly_theory::*;
+/// use assembly_theory::assembly::{Bound, index_search};
 /// # fn main() -> Result<(), std::io::Error> {
 /// # let path = PathBuf::from(format!("./data/checks/benzene.mol"));
 /// // Read a molecule data file
@@ -403,8 +403,8 @@ pub fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, u32) {
 /// ```
 /// # use std::fs;
 /// # use std::path::PathBuf;
-/// # use orca::*;
-/// use orca::assembly::{Bound, serial_index_search};
+/// # use assembly_theory::*;
+/// use assembly_theory::assembly::{Bound, serial_index_search};
 /// # fn main() -> Result<(), std::io::Error> {
 /// # let path = PathBuf::from(format!("./data/checks/benzene.mol"));
 /// // Read a molecule data file
@@ -592,7 +592,7 @@ fn vec_bound_small_frags(fragments: &[BitSet], m: usize, mol: &Molecule) -> usiz
 /// ```
 /// # use std::fs;
 /// # use std::path::PathBuf;
-/// # use orca::*;
+/// # use assembly_theory::*;
 /// # fn main() -> Result<(), std::io::Error> {
 /// # let path = PathBuf::from(format!("./data/checks/benzene.mol"));
 /// // Read a molecule data file
