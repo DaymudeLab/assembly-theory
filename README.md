@@ -7,13 +7,13 @@ University involving (in alphabetical order) Cole Mathis, Devansh Vimal,
 Devendra Parkar, Joshua Daymude, Garrett Parzych, Olivia Smith, and Sean
 Bergen.
 
-# Functionality and Usage Examples
+## Functionality and Usage Examples
 
 `assembly-theory` can be used to compute assembly indices as a standalone executable, as a library imported by other Rust code, or via a Python interface.
 Here, we provide usage examples of each; in the next section, we demonstrate testing and benchmarking functionality.
 
 
-## Building and Running the Executable
+### Building and Running the Executable
 
 Rust provides the `cargo` build system and package manager for dependency management, compilation, packaging, and versioning.
 To build the standalone executable, run:
@@ -59,7 +59,7 @@ To use a specific bound or disable bounds altogether, set the `--bounds` or `--n
 Finally, the `--molecule-info` flag prints the molecule's graph representation as a vertex and edge list, the `--help` flag prints a guide to this command line interface, and the `--version` flag prints the current `assembly-theory` version.
 
 
-## Installing and using the Python library
+### Installing and using the Python library
 
 The python library uses `maturin` as a build tool. This needs to be run in a virtual environment. Use the following commands to build and install the library:
 ```shell
@@ -77,7 +77,7 @@ anthracene = Chem.MolFromSmiles("c1ccc2cc3ccccc3cc2c1")
 at.molecular_assembly(anthracene)  # 6
 ```
 
-## Core Functions  
+### Core Functions  
 
 The python library provides three main functions:
 
@@ -95,6 +95,12 @@ The python library provides three main functions:
 - **`molecule_info(mol: Chem.Mol) -> str`**  
   Returns a string representation of the molecule’s atom and bond structure for debugging.
 
+## Contributing
+See HACKING
+
+## Known Issues
+
+`usize` issue. 
 
 ## License
 
