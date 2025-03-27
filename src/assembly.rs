@@ -153,7 +153,7 @@ fn recurse_index_search(
     largest_remove: usize,
     mut best: usize,
     bounds: &[Bound],
-    states_searched: &mut u32,
+    states_searched: &mut usize,
 ) -> usize {
     let mut cx = ix;
 
@@ -355,7 +355,7 @@ fn parallel_recurse_index_search(
 /// # Ok(())
 /// # }
 /// ```
-pub fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, u32) {
+pub fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize) {
     let mut init = BitSet::new();
     init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
 
@@ -377,7 +377,7 @@ pub fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, u32) {
             bounds,
             total_search.clone(),
         );
-        let total_search = total_search.load(Relaxed).try_into().unwrap();
+        let total_search = total_search.load(Relaxed);
         (index as u32, total_search)
     } else {
         let mut total_search = 0;
@@ -422,7 +422,7 @@ pub fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, u32) {
 /// # Ok(())
 /// # }
 /// ```
-pub fn serial_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, u32) {
+pub fn serial_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize) {
     let mut init = BitSet::new();
     init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
 
