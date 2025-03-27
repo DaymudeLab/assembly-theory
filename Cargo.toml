@@ -1,5 +1,5 @@
 [package]
-name = "orca"
+name = "assembly-theory"
 version = "0.1.0"
 edition = "2021"
 
@@ -20,7 +20,7 @@ default = ["python"]
 python = []
 
 [lib]
-name = "orca"
+name = "assembly_theory"
 path = "src/lib.rs"
 crate-type = ["rlib","cdylib"]
 

@@ -1,10 +1,10 @@
 use std::fs;
 use std::path::PathBuf;
 
-use orca::assembly::{index, naive_index_search};
+use assembly_theory::assembly::{index, naive_index_search};
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use orca::loader;
+use assembly_theory::loader;
 
 pub fn criterion_benchmark(c: &mut Criterion) {
     for str in ["aspartic", "benzene", "aspirin", "morphine"] {

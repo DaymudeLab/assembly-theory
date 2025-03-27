@@ -68,6 +68,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dcfed56ad506cb2c684a14971b8861fdc3baaaae314b9e5f9bb532cbe3ba7a4f"
 
 [[package]]
+name = "assembly-theory"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bit-set",
+ "clap 4.5.31",
+ "criterion",
+ "csv",
+ "petgraph",
+ "pyo3",
+ "rayon",
+]
+
+[[package]]
 name = "atty"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -407,20 +421,6 @@ name = "oorandom"
 version = "11.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6790f58c7ff633d8771f42965289203411a5e5c68388703c06e14f24770b41e"
-
-[[package]]
-name = "orca"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bit-set",
- "clap 4.5.31",
- "criterion",
- "csv",
- "petgraph",
- "pyo3",
- "rayon",
-]
 
 [[package]]
 name = "petgraph"
