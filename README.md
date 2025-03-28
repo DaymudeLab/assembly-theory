@@ -100,7 +100,18 @@ See [`HACKING`](HACKING.md)
 
 ## Known Issues
 
-The current implementation follows the approach of Seet et. al. 2024 and enumerates all duplicable subgraphs of the input molecule. These are recorded using a `usize` bitset. It principle it is possible this could lead to an overflow error which would manifest as a panic. It behavior was observed in previous versions which used a `u32` bitset, on molecules in the `coconut_220` benchmark, only using the `naive` implementation. This problem is ultimately unavoidable as chemical space is vast, and naive enumeration of it is a bad idea. In principle a molecular graph could be constructed such that it's duplicable subgraph enumeration would overflow aribtary memory, but such an error is unlikely to occur on reasonable compute time-scales. The discovery and discussion of this issue is documented in [Issue #49](https://github.com/DaymudeLab/assembly-theory/issues/49)
+The current implementation follows the approach of Seet et. al. 2024 and
+enumerates all duplicable subgraphs of the input molecule. The size of the
+enumeration is stored in a usize. If there are enough duplicate subgraph pairs
+in the molecule, then it is possible for the usize to overflow, resulting in a
+panic. This behavior was observed in previous versions which used a u32 on
+molecules in the coconut_220 benchmark, only using the naive implementation.
+This problem is unavoidable as chemical space is vast, and naive enumeration of
+it is a bad idea. In principle a molecular graph could be constructed such that
+its duplicable subgraph enumeration would overflow arbitrary memory. Such an
+error is unlikely to occur on reasonable compute time-scales. The discovery and
+discussion of this issue is documented in
+[Issue #49](https://github.com/DaymudeLab/assembly-theory/issues/49).
 
 ## License
 
