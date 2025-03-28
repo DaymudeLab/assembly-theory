@@ -31,7 +31,6 @@
 
 // TODO: Cite ORCA JOSS paper when it's out.
 
-
 // Molecule definition, joining operation
 pub mod molecule;
 

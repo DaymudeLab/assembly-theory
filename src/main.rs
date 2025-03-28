@@ -2,9 +2,9 @@ use std::fs;
 use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
-use clap::{Args, Parser, ValueEnum};
 use assembly_theory::assembly::{index_search, serial_index_search, Bound};
 use assembly_theory::{loader, molecule::Molecule};
+use clap::{Args, Parser, ValueEnum};
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
 enum Bounds {

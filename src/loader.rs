@@ -16,10 +16,10 @@
 //! ```
 use crate::molecule::{Atom, Bond, MGraph, Molecule};
 use clap::error::Result;
-use std::error::Error;
-use std::fmt::Display;
 use pyo3::exceptions::PyOSError;
 use pyo3::PyErr;
+use std::error::Error;
+use std::fmt::Display;
 
 /// Molecule data file parsing functions return a `ParserError` type when an error occurs.
 ///
