@@ -3,8 +3,8 @@ use std::path::PathBuf;
 
 use assembly_theory::assembly::{index, naive_index_search};
 
-use criterion::{criterion_group, criterion_main, Criterion};
 use assembly_theory::loader;
+use criterion::{criterion_group, criterion_main, Criterion};
 
 pub fn criterion_benchmark(c: &mut Criterion) {
     for str in ["aspartic", "benzene", "aspirin", "morphine"] {
