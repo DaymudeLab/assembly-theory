@@ -1,0 +1,12 @@
+[project]
+name = "assembly-theory-scripts"
+version = "0.1.0"
+description = "Supplementary scripts for assembly-theory"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "jupyter>=1.1.1",
+    "numpy>=2.2.4",
+    "pandas>=2.2.3",
+    "rdkit>=2024.9.6",
+]
