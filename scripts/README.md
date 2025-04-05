@@ -29,3 +29,38 @@ Or, if you just want to run the code:
 ```shell
 uv run jupyter execute dataset_curation.ipynb
 ```
+
+
+### `generate-ma-index.sh`
+
+While the above Python notebook curates the reference dataset `.mol` files, this script generates their ground truth assembly indices in `data/<dataset>/ma-index.csv`.
+This file is needed before a dataset can be used for testing.
+
+From the `scripts/` directory, run this script to be presented with interactive menus for generation:
+
+```shell
+./generate-ma-index.sh
+```
+
+The first menu asks you to choose the dataset to generate ground truth for.
+Enter a number to choose the dataset:
+
+```shell
+1) ../data/checks       3) ../data/gdb13_1201
+2) ../data/coconut_220  4) ../data/gdb17_800
+Generate ma-index.csv for: 
+```
+
+The next menu asks you which program to use for assembly index calculation.
+Again, enter a number to choose:
+
+```shell
+1) assembly_go
+2) assembly-theory
+Calculate assembly indices using: 
+```
+
+[`assembly_go`](https://github.com/croningp/assembly_go) is existing, open-source software for calculating assembly indices.
+We do not package its source code or its executable with our library, but it can be obtained [on GitHub](https://github.com/croningp/assembly_go) if non-self-referential ground truth is desired.
+Otherwise, a release build of `assembly-theory` is created and used.
+Note that `assembly-theory` is significantly faster.
