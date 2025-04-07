@@ -615,4 +615,3 @@ pub fn index(m: &Molecule) -> u32 {
     )
     .0
 }
-

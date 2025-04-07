@@ -1,29 +1,19 @@
 //! Test assembly-theory correctness against all reference datasets.
 
 use csv::Reader;
-use std::{
-    collections::HashMap,
-    ffi::OsStr,
-    fs,
-    path::Path
-};
+use std::{collections::HashMap, ffi::OsStr, fs, path::Path};
 
 use assembly_theory::{
+    assembly::{index_search, serial_index_search, Bound},
     loader,
-    assembly::{
-        index_search,
-        serial_index_search,
-        Bound
-    }
 };
-
 
 fn load_ma_index(dataset: &str) -> HashMap<String, u32> {
     // Set up CSV reader for data/<dataset>/ma-index.csv.
     let ma_index_path = Path::new("data").join(dataset).join("ma-index.csv");
-    let mut reader = Reader::from_path(ma_index_path)
-        .expect(&format!("{dataset}/ma-index.csv does not exist."));
-    
+    let mut reader =
+        Reader::from_path(ma_index_path).expect(&format!("{dataset}/ma-index.csv does not exist."));
+
     // Load assembly index records.
     let mut ma_index: HashMap<String, u32> = HashMap::new();
     for result in reader.records() {
@@ -31,7 +21,10 @@ fn load_ma_index(dataset: &str) -> HashMap<String, u32> {
         let record = record.iter().collect::<Vec<_>>();
         ma_index.insert(
             record[0].to_string(),
-            record[1].to_string().parse::<u32>().expect("non-integer index"),
+            record[1]
+                .to_string()
+                .parse::<u32>()
+                .expect("non-integer index"),
         );
     }
 
@@ -61,9 +54,9 @@ fn test_reference_dataset(dataset: &str, bounds: &[Bound], serial: bool) {
 
         // Load the .mol file as an assembly_theory::molecule::Molecule.
         let mol = loader::parse_molfile_str(
-            &fs::read_to_string(name.clone())
-            .expect(&format!("Could not read file {name:?}"))
-        ).expect(&format!("Failed to parse {name:?}"));
+            &fs::read_to_string(name.clone()).expect(&format!("Could not read file {name:?}")),
+        )
+        .expect(&format!("Failed to parse {name:?}"));
 
         // Calculate the molecule's assembly index.
         let (index, _, _) = if serial {
@@ -83,7 +76,9 @@ fn test_reference_dataset(dataset: &str, bounds: &[Bound], serial: bool) {
     // If there are incorrect assembly indices, report and fail the test.
     let mut error_details = String::new();
     for (molname, index, true_index) in &incorrect_mols {
-        error_details.push_str(&format!("{molname}: assembly index {index} (assembly-theory) != {true_index} (ground truth)\n"));
+        error_details.push_str(&format!(
+            "{molname}: assembly index {index} (assembly-theory) != {true_index} (ground truth)\n"
+        ));
     }
     assert!(incorrect_mols.is_empty(), "{}", error_details);
 }
@@ -105,9 +100,11 @@ fn gdb13_1201_intbound() {
 
 #[test]
 fn gdb13_1201_allbounds() {
-    let bounds = vec![Bound::IntChain,
-                      Bound::VecChainSimple,
-                      Bound::VecChainSmallFrags];
+    let bounds = vec![
+        Bound::IntChain,
+        Bound::VecChainSimple,
+        Bound::VecChainSmallFrags,
+    ];
     test_reference_dataset("gdb13_1201", &bounds, false);
 }
 
@@ -128,9 +125,11 @@ fn gdb13_1201_intbound_serial() {
 
 #[test]
 fn gdb13_1201_allbounds_serial() {
-    let bounds = vec![Bound::IntChain,
-                      Bound::VecChainSimple,
-                      Bound::VecChainSmallFrags];
+    let bounds = vec![
+        Bound::IntChain,
+        Bound::VecChainSimple,
+        Bound::VecChainSmallFrags,
+    ];
     test_reference_dataset("gdb13_1201", &bounds, true);
 }
 
@@ -155,9 +154,11 @@ fn gdb17_800_intbound() {
 #[test]
 #[ignore = "expensive test"]
 fn gdb17_800_allbounds() {
-    let bounds = vec![Bound::IntChain,
-                      Bound::VecChainSimple,
-                      Bound::VecChainSmallFrags];
+    let bounds = vec![
+        Bound::IntChain,
+        Bound::VecChainSimple,
+        Bound::VecChainSmallFrags,
+    ];
     test_reference_dataset("gdb17_800", &bounds, false);
 }
 
@@ -179,9 +180,11 @@ fn checks_intbound() {
 
 #[test]
 fn checks_allbounds() {
-    let bounds = vec![Bound::IntChain,
-                      Bound::VecChainSimple,
-                      Bound::VecChainSmallFrags];
+    let bounds = vec![
+        Bound::IntChain,
+        Bound::VecChainSimple,
+        Bound::VecChainSmallFrags,
+    ];
     test_reference_dataset("checks", &bounds, false);
 }
 
@@ -211,4 +214,3 @@ fn checks_allbounds() {
 //                       Bound::VecChainSmallFrags];
 //     test_reference_dataset("coconut_220", &bounds, false);
 // }
-
