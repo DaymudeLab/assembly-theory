@@ -42,7 +42,7 @@ jobs:
       with:
         lfs: true
     - name: Test
-      run: cargo test --verbose
+      run: cargo test --verbose -- --include-ignored
 
   release:
     name: Release
