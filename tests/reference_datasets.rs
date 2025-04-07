@@ -161,6 +161,12 @@ fn gdb17_800_allbounds() {
     test_reference_dataset("gdb17_800", &bounds, false);
 }
 
+// #[test]
+// #[ignore = "really expensive test"]
+// fn checks_naive() {
+//     test_reference_dataset("checks", &vec![], false);
+// }
+
 #[test]
 fn checks_logbound() {
     test_reference_dataset("checks", &vec![Bound::Log], false);
@@ -179,18 +185,30 @@ fn checks_allbounds() {
     test_reference_dataset("checks", &bounds, false);
 }
 
-#[test]
-#[ignore = "expensive test"]
-fn coconut_220_intbound() {
-    test_reference_dataset("coconut_220", &vec![Bound::IntChain], false);
-}
+// #[test]
+// #[ignore = "really expensive test"]
+// fn coconut_220_naive() {
+//     test_reference_dataset("coconut_220", &vec![], false);
+// }
 
-#[test]
-#[ignore = "expensive test"]
-fn coconut_220_allbounds() {
-    let bounds = vec![Bound::IntChain,
-                      Bound::VecChainSimple,
-                      Bound::VecChainSmallFrags];
-    test_reference_dataset("coconut_220", &bounds, false);
-}
+// #[test]
+// #[ignore = "really expensive test"]
+// fn coconut_220_logbound() {
+//     test_reference_dataset("coconut_220", &vec![Bound::Log], false);
+// }
+
+// #[test]
+// #[ignore = "really expensive test"]
+// fn coconut_220_intbound() {
+//     test_reference_dataset("coconut_220", &vec![Bound::IntChain], false);
+// }
+
+// #[test]
+// #[ignore = "really expensive test"]
+// fn coconut_220_allbounds() {
+//     let bounds = vec![Bound::IntChain,
+//                       Bound::VecChainSimple,
+//                       Bound::VecChainSmallFrags];
+//     test_reference_dataset("coconut_220", &bounds, false);
+// }
 
