@@ -50,12 +50,6 @@ pub fn reference_datasets(c: &mut Criterion) {
         // For each of the bounds options, run the benchmark over all molecules
         // in this dataset.
         for (bound, bound_str) in zip(&bounds, &bound_strs) {
-            // Skip the dataset benchmarks that take too long to run.
-            if *dataset == "coconut_220" && (*bound_str == "naive" || *bound_str == "logbound") {
-                continue;
-            }
-
-            // Run the benchmark.
             group.bench_with_input(BenchmarkId::new(*dataset, &bound_str), bound, |b, bound| {
                 b.iter(|| {
                     for mol in &mol_list {

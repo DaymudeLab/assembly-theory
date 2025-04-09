@@ -190,7 +190,7 @@ fn checks_allbounds() {
 // fn coconut_55_naive() {
 //     test_reference_dataset("coconut_55", &vec![], false);
 // }
-// 
+//
 // #[test]
 // #[ignore = "really expensive test"]
 // fn coconut_55_logbound() {
@@ -206,8 +206,10 @@ fn coconut_55_intbound() {
 #[test]
 #[ignore = "expensive test"]
 fn coconut_55_allbounds() {
-    let bounds = vec![Bound::IntChain,
-                      Bound::VecChainSimple,
-                      Bound::VecChainSmallFrags];
+    let bounds = vec![
+        Bound::IntChain,
+        Bound::VecChainSimple,
+        Bound::VecChainSmallFrags,
+    ];
     test_reference_dataset("coconut_55", &bounds, false);
 }
