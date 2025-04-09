@@ -15,7 +15,7 @@ pub fn reference_datasets(c: &mut Criterion) {
     let mut group = c.benchmark_group("reference_datasets");
 
     // Define datasets, bounds, and labels.
-    let datasets = ["gdb13_1201", "gdb17_800", "checks", "coconut_220"];
+    let datasets = ["gdb13_1201", "gdb17_200", "checks", "coconut_55"];
     let bounds = [
         vec![],
         vec![Bound::Log],

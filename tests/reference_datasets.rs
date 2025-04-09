@@ -135,31 +135,28 @@ fn gdb13_1201_allbounds_serial() {
 
 #[test]
 #[ignore = "expensive test"]
-fn gdb17_800_naive() {
-    test_reference_dataset("gdb17_800", &vec![], false);
+fn gdb17_200_naive() {
+    test_reference_dataset("gdb17_200", &vec![], false);
 }
 
 #[test]
-#[ignore = "expensive test"]
-fn gdb17_800_logbound() {
-    test_reference_dataset("gdb17_800", &vec![Bound::Log], false);
+fn gdb17_200_logbound() {
+    test_reference_dataset("gdb17_200", &vec![Bound::Log], false);
 }
 
 #[test]
-#[ignore = "expensive test"]
-fn gdb17_800_intbound() {
-    test_reference_dataset("gdb17_800", &vec![Bound::IntChain], false);
+fn gdb17_200_intbound() {
+    test_reference_dataset("gdb17_200", &vec![Bound::IntChain], false);
 }
 
 #[test]
-#[ignore = "expensive test"]
-fn gdb17_800_allbounds() {
+fn gdb17_200_allbounds() {
     let bounds = vec![
         Bound::IntChain,
         Bound::VecChainSimple,
         Bound::VecChainSmallFrags,
     ];
-    test_reference_dataset("gdb17_800", &bounds, false);
+    test_reference_dataset("gdb17_200", &bounds, false);
 }
 
 // #[test]
@@ -190,27 +187,27 @@ fn checks_allbounds() {
 
 // #[test]
 // #[ignore = "really expensive test"]
-// fn coconut_220_naive() {
-//     test_reference_dataset("coconut_220", &vec![], false);
+// fn coconut_55_naive() {
+//     test_reference_dataset("coconut_55", &vec![], false);
 // }
-
+// 
 // #[test]
 // #[ignore = "really expensive test"]
-// fn coconut_220_logbound() {
-//     test_reference_dataset("coconut_220", &vec![Bound::Log], false);
+// fn coconut_55_logbound() {
+//     test_reference_dataset("coconut_55", &vec![Bound::Log], false);
 // }
 
-// #[test]
-// #[ignore = "really expensive test"]
-// fn coconut_220_intbound() {
-//     test_reference_dataset("coconut_220", &vec![Bound::IntChain], false);
-// }
+#[test]
+#[ignore = "expensive test"]
+fn coconut_55_intbound() {
+    test_reference_dataset("coconut_55", &vec![Bound::IntChain], false);
+}
 
-// #[test]
-// #[ignore = "really expensive test"]
-// fn coconut_220_allbounds() {
-//     let bounds = vec![Bound::IntChain,
-//                       Bound::VecChainSimple,
-//                       Bound::VecChainSmallFrags];
-//     test_reference_dataset("coconut_220", &bounds, false);
-// }
+#[test]
+#[ignore = "expensive test"]
+fn coconut_55_allbounds() {
+    let bounds = vec![Bound::IntChain,
+                      Bound::VecChainSimple,
+                      Bound::VecChainSmallFrags];
+    test_reference_dataset("coconut_55", &bounds, false);
+}

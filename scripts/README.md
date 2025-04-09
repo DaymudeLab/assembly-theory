@@ -30,6 +30,10 @@ Or, if you just want to run the code:
 uv run jupyter execute dataset_curation.ipynb
 ```
 
+> [!NOTE]
+> The notebook may take a while to run, since it downloads full datasets from Zenodo and then extracts the desired subsets. 
+> Jupyter does not provide a way of redirecting the internal kernel's stdout to the terminal, so the various progress update messages are invisible when run in this way.
+
 
 ### `generate-ma-index.sh`
 
