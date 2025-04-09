@@ -1,39 +1,71 @@
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use std::ffi::OsStr;
 use std::fs;
-use std::path::PathBuf;
+use std::iter::zip;
+use std::path::Path;
 
-use assembly_theory::assembly::{index, naive_index_search};
+use assembly_theory::{
+    assembly::{index_search, Bound},
+    loader,
+    molecule::Molecule,
+};
 
-use assembly_theory::loader;
-use criterion::{criterion_group, criterion_main, Criterion};
+pub fn reference_datasets(c: &mut Criterion) {
+    // Define a new criterion benchmark group of dataset benchmarks.
+    let mut group = c.benchmark_group("reference_datasets");
 
-pub fn criterion_benchmark(c: &mut Criterion) {
-    for str in ["aspartic", "benzene", "aspirin", "morphine"] {
-        let path = PathBuf::from(format!("./data/checks/{str}.mol"));
-        let molfile = fs::read_to_string(path).expect("Cannot read file");
-        let molecule = loader::parse_molfile_str(&molfile).expect("Cannot parse molecule");
-        c.bench_function(str, |b| b.iter(|| index(&molecule)));
+    // Define datasets, bounds, and labels.
+    let datasets = ["gdb13_1201", "gdb17_200", "checks", "coconut_55"];
+    let bounds = [
+        vec![],
+        vec![Bound::Log],
+        vec![Bound::IntChain],
+        vec![
+            Bound::IntChain,
+            Bound::VecChainSimple,
+            Bound::VecChainSmallFrags,
+        ],
+    ];
+    let bound_strs = ["naive", "logbound", "intbound", "allbounds"];
+
+    // Loop over all datasets of interest.
+    for dataset in datasets.iter() {
+        // Load all molecules from the given dataset.
+        let paths = fs::read_dir(Path::new("data").join(dataset)).unwrap();
+        let mut mol_list: Vec<Molecule> = Vec::new();
+        for path in paths {
+            let name = path.unwrap().path();
+            if name.extension().and_then(OsStr::to_str) != Some("mol") {
+                continue;
+            }
+            mol_list.push(
+                loader::parse_molfile_str(
+                    &fs::read_to_string(name.clone())
+                        .expect(&format!("Could not read file {name:?}")),
+                )
+                .expect(&format!("Failed to parse {name:?}")),
+            );
+        }
+
+        // For each of the bounds options, run the benchmark over all molecules
+        // in this dataset.
+        for (bound, bound_str) in zip(&bounds, &bound_strs) {
+            group.bench_with_input(BenchmarkId::new(*dataset, &bound_str), bound, |b, bound| {
+                b.iter(|| {
+                    for mol in &mol_list {
+                        index_search(&mol, &bound);
+                    }
+                });
+            });
+        }
     }
 
-    for str in ["aspartic", "benzene", "aspirin"] {
-        let path = PathBuf::from(format!("./data/checks/{str}.mol"));
-        let molfile = fs::read_to_string(path).expect("Cannot read file");
-        let molecule = loader::parse_molfile_str(&molfile).expect("Cannot parse molecule");
-        c.bench_function(&format!("naive-{str}"), |b| {
-            b.iter(|| naive_index_search(&molecule))
-        });
-    }
+    group.finish();
 }
 
-pub fn gdb13_benchmark(c: &mut Criterion) {
-    let paths = fs::read_dir("data/gdb13_1201").unwrap();
-
-    for path in paths {
-        let name = path.unwrap().path();
-        let molfile = fs::read_to_string(name.clone()).expect("Cannot read file");
-        let molecule = loader::parse_molfile_str(&molfile).expect("Cannot parse molecule");
-        c.bench_function(name.to_str().unwrap(), |b| b.iter(|| index(&molecule)));
-    }
+criterion_group! {
+    name = benchmark;
+    config = Criterion::default().sample_size(20);
+    targets = reference_datasets
 }
-
-criterion_group!(benches, criterion_benchmark, gdb13_benchmark);
-criterion_main!(benches);
+criterion_main!(benchmark);

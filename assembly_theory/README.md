@@ -30,7 +30,7 @@ To run the test suite, install `pytest` and execute the tests from the top-level
 
 ```shell
 pip install pytest
-pytest test
+pytest tests
 ```
 
 ## Example Usage
