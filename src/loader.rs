@@ -14,7 +14,7 @@
 //! # Ok(())
 //! # }
 //! ```
-use crate::molecule::{Atom, Bond, MGraph, Molecule};
+use crate::molecule::{Atom, Bond, MGraph, Molecule, Element::Hydrogen};
 use clap::error::Result;
 use pyo3::exceptions::PyOSError;
 use pyo3::PyErr;
@@ -84,31 +84,40 @@ pub fn parse_sdfile_str(_input: &str) -> Result<Molecule, ParserError> {
 /// # }
 /// ```
 pub fn parse_molfile_str(input: &str) -> Result<Molecule, ParserError> {
-    let mut lines = input.lines().enumerate().skip(3); // Skip the header block, 3 lines
+    let mut lines = input.lines().enumerate().skip(3); // Skip header block
     let (ix, counts_line) = lines.next().ok_or(ParserError::NotEnoughLines)?;
     let (n_atoms, n_bonds) = parse_counts_line(ix, counts_line)?;
 
     let mut graph = MGraph::new_undirected();
-    let mut atom_indices = Vec::new();
+    let mut atom_indices = Vec::with_capacity(n_atoms); // original atom index -> Option<NodeIndex>
 
+    // === Atom parsing with hydrogen exclusion ===
     lines
         .by_ref()
         .take(n_atoms)
-        .try_fold(&mut graph, |g, (i, l)| {
-            parse_atom_line(i, l).map(|atom| {
-                atom_indices.push(g.add_node(atom));
-                g
-            })
+        .try_for_each(|(i, line)| {
+            let atom = parse_atom_line(i, line)?;
+            if atom.element() == Hydrogen {
+                atom_indices.push(None); // skip H
+            } else {
+                let idx = graph.add_node(atom);
+                atom_indices.push(Some(idx));
+            }
+            Ok(())
         })?;
 
+    // === Bond parsing with skipped H handling ===
     lines
         .by_ref()
         .take(n_bonds)
-        .try_fold(&mut graph, |g, (i, l)| {
-            parse_bond_line(i, l).map(|(first, second, bond)| {
-                g.add_edge(atom_indices[first - 1], atom_indices[second - 1], bond);
-                g
-            })
+        .try_for_each(|(i, line)| {
+            let (first, second, bond) = parse_bond_line(i, line)?;
+            let a = atom_indices.get(first - 1).copied().flatten();
+            let b = atom_indices.get(second - 1).copied().flatten();
+            if let (Some(ai), Some(bi)) = (a, b) {
+                graph.add_edge(ai, bi, bond);
+            }
+            Ok(())
         })?;
 
     Ok(Molecule::from_graph(graph))
