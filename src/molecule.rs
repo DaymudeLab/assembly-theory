@@ -11,16 +11,18 @@ use std::{
 
 use bit_set::BitSet;
 use petgraph::{
-    algo::{is_isomorphic, is_isomorphic_subgraph, subgraph_isomorphisms_iter},
+    algo::{
+        is_isomorphic, is_isomorphic_matching, is_isomorphic_subgraph, subgraph_isomorphisms_iter,
+    },
+    dot::Dot,
     graph::{EdgeIndex, Graph, NodeIndex},
     Undirected,
 };
 
-use crate::utils::{edge_induced_subgraph, edges_contained_within, is_subset_connected};
+use crate::utils::{edge_induced_subgraph, is_subset_connected};
 
 pub(crate) type Index = u32;
 pub(crate) type MGraph = Graph<Atom, Bond, Undirected, Index>;
-type MSubgraph = Graph<Atom, Option<Bond>, Undirected, Index>;
 type EdgeSet = BTreeSet<EdgeIndex<Index>>;
 type NodeSet = BTreeSet<NodeIndex<Index>>;
 
@@ -284,10 +286,22 @@ impl Molecule {
     }
 
     /// Return set of all subgraphs of self as an iterable data structure
-    pub fn enumerate_subgraphs(&self) -> impl Iterator<Item = NodeSet> {
+    pub fn enumerate_induced_subgraphs(&self) -> impl Iterator<Item = NodeSet> {
         let mut solutions = HashSet::new();
         let remainder = BTreeSet::from_iter(self.graph.node_indices());
-        self.generate_connected_subgraphs(
+        self.generate_connected_induced_subgraphs(
+            remainder,
+            BTreeSet::new(),
+            BTreeSet::new(),
+            &mut solutions,
+        );
+        solutions.into_iter().filter(|s| !s.is_empty())
+    }
+
+    pub fn enumerate_noninduced_subgraphs(&self) -> impl Iterator<Item = EdgeSet> {
+        let mut solutions = HashSet::new();
+        let remainder = BTreeSet::from_iter(self.graph.edge_indices());
+        self.generate_connected_noninduced_subgraphs(
             remainder,
             BTreeSet::new(),
             BTreeSet::new(),
@@ -316,7 +330,7 @@ impl Molecule {
     // From
     // https://stackoverflow.com/a/15722579
     // https://stackoverflow.com/a/15658245
-    fn generate_connected_subgraphs(
+    fn generate_connected_induced_subgraphs(
         &self,
         mut remainder: NodeSet,
         mut subset: NodeSet,
@@ -332,7 +346,7 @@ impl Molecule {
         if let Some(v) = candidates.first() {
             remainder.remove(v);
 
-            self.generate_connected_subgraphs(
+            self.generate_connected_induced_subgraphs(
                 remainder.clone(),
                 subset.clone(),
                 neighbors.clone(),
@@ -341,38 +355,111 @@ impl Molecule {
 
             subset.insert(*v);
             neighbors.extend(self.graph.neighbors(*v));
-            self.generate_connected_subgraphs(remainder, subset, neighbors, solutions);
+            self.generate_connected_induced_subgraphs(remainder, subset, neighbors, solutions);
         } else if subset.len() > 2 {
             solutions.insert(subset);
         }
+    }
+
+    fn generate_connected_noninduced_subgraphs(
+        &self,
+        mut remainder: EdgeSet,
+        mut subset: EdgeSet,
+        mut neighbors: EdgeSet,
+        solutions: &mut HashSet<EdgeSet>,
+    ) {
+        let candidates = if subset.is_empty() {
+            remainder.clone()
+        } else {
+            remainder.intersection(&neighbors).cloned().collect()
+        };
+
+        if let Some(e) = candidates.first() {
+            remainder.remove(e);
+
+            self.generate_connected_noninduced_subgraphs(
+                remainder.clone(),
+                subset.clone(),
+                neighbors.clone(),
+                solutions,
+            );
+
+            subset.insert(*e);
+            let (src, dst) = self.graph.edge_endpoints(*e).expect("malformed input");
+            neighbors.extend(
+                self.graph
+                    .neighbors(src)
+                    .filter_map(|n| self.graph.find_edge(src, n)),
+            );
+            neighbors.extend(
+                self.graph
+                    .neighbors(dst)
+                    .filter_map(|n| self.graph.find_edge(dst, n)),
+            );
+
+            self.generate_connected_noninduced_subgraphs(remainder, subset, neighbors, solutions);
+        } else if subset.len() > 1 {
+            solutions.insert(subset);
+        }
+    }
+
+    #[allow(dead_code)]
+    fn print_edgelist(&self, list: &[EdgeIndex], name: &str) {
+        println!(
+            "{name}: {:?}",
+            list.into_iter()
+                .map(|e| (
+                    e.index(),
+                    self.graph
+                        .edge_endpoints(*e)
+                        .map(|(i, j)| (
+                            i.index(),
+                            self.graph.node_weight(i).unwrap().element(),
+                            j.index(),
+                            self.graph.node_weight(j).unwrap().element(),
+                        ))
+                        .unwrap()
+                ))
+                .collect::<Vec<_>>()
+        );
     }
 
     /// Return an iterator of bitsets from self containing all duplicate and
     /// non-overlapping pairs of isomorphic subgraphs
     pub fn matches(&self) -> impl Iterator<Item = (BitSet, BitSet)> {
         let mut matches = BTreeSet::new();
-        for subgraph in self.enumerate_subgraphs() {
+        let subgraphs = self.enumerate_noninduced_subgraphs().collect::<Vec<_>>();
+
+        for (i, h_edges) in subgraphs.iter().enumerate() {
             let mut h = self.graph().clone();
-            h.retain_nodes(|_, n| subgraph.contains(&n));
+            h.retain_edges(|_, e| h_edges.contains(&e));
+            h.retain_nodes(|g, n| g.neighbors(n).next().is_some());
+            for (j, g_edges) in subgraphs.iter().enumerate() {
+                // Skip overlapping subgraphs
+                if i == j || h_edges.intersection(g_edges).next().is_some() {
+                    continue;
+                };
 
-            let h_prime = self.graph().map(
-                |_, n| *n,
-                |i, e| {
-                    let (src, dst) = self.graph.edge_endpoints(i).unwrap();
-                    (!subgraph.contains(&src) || !subgraph.contains(&dst)).then_some(*e)
-                },
-            );
+                let mut g = self.graph().clone();
+                g.retain_edges(|_, e| g_edges.contains(&e));
+                g.retain_nodes(|g, n| g.neighbors(n).next().is_some());
 
-            for cert in isomorphic_subgraphs_of(&h, &h_prime) {
-                let cert = BTreeSet::from_iter(cert);
+                // Skip nonisomorphic subgraphs
+                if !is_isomorphic_matching(&h, &g, |v0, v1| *v0 == *v1, |e0, e1| *e0 == *e1) {
+                    continue;
+                }
 
-                let mut c = BitSet::new();
-                c.extend(edges_contained_within(&self.graph, &cert).map(|e| e.index()));
+                let mut hbits = BitSet::with_capacity(self.graph.edge_count());
+                hbits.extend(h_edges.iter().map(|e| e.index()));
 
-                let mut h = BitSet::new();
-                h.extend(edges_contained_within(&self.graph, &subgraph).map(|e| e.index()));
+                let mut gbits = BitSet::with_capacity(self.graph.edge_count());
+                gbits.extend(g_edges.iter().map(|e| e.index()));
 
-                matches.insert(if c < h { (c, h) } else { (h, c) });
+                matches.insert(if hbits < gbits {
+                    (hbits, gbits)
+                } else {
+                    (gbits, hbits)
+                });
             }
         }
         matches.into_iter()
@@ -477,28 +564,8 @@ impl Molecule {
 
     /// Pretty-printable string representation of self
     pub fn info(&self) -> String {
-        let mut info = String::new();
-        let g = self.graph();
-        let mut nodes: Vec<Element> = Vec::new();
-        for (i, w) in g.node_weights().enumerate() {
-            info.push_str(&format!("{i}: {:?}\n", w.element));
-            nodes.push(w.element);
-        }
-        info.push('\n');
-        for idx in g.edge_indices().zip(g.edge_weights()) {
-            let (e1, e2) = self.graph().edge_endpoints(idx.0).expect("bad");
-            info.push_str(&format!(
-                "{}: {:?}, ({}, {}), ({:?}, {:?})\n",
-                idx.0.index(),
-                idx.1,
-                e1.index(),
-                e2.index(),
-                nodes[e1.index()],
-                nodes[e2.index()]
-            ));
-        }
-
-        info
+        let dot = Dot::new(&self.graph);
+        format!("{:?}", dot)
     }
 }
 
@@ -506,10 +573,10 @@ impl Molecule {
 // this is a TODO when there is more time
 /// Return vector containing isomorphic subgraphs if pattern is isomorphic to
 /// a subgraph of target
-pub fn isomorphic_subgraphs_of(pattern: &MGraph, target: &MSubgraph) -> Vec<Vec<NodeIndex<Index>>> {
+pub fn isomorphic_subgraphs_of(pattern: &MGraph, target: &MGraph) -> Vec<Vec<NodeIndex<Index>>> {
     if let Some(iter) =
         subgraph_isomorphisms_iter(&pattern, &target, &mut |n0, n1| n1 == n0, &mut |e0, e1| {
-            e1.is_some_and(|e| *e0 == e)
+            e1 == e0
         })
     {
         iter.map(|v| v.into_iter().map(NodeIndex::new).collect())
