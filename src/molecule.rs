@@ -16,6 +16,7 @@ use petgraph::{
     },
     dot::Dot,
     graph::{EdgeIndex, Graph, NodeIndex},
+    unionfind::UnionFind,
     Undirected,
 };
 
@@ -428,37 +429,42 @@ impl Molecule {
     /// non-overlapping pairs of isomorphic subgraphs
     pub fn matches(&self) -> impl Iterator<Item = (BitSet, BitSet)> {
         let mut matches = BTreeSet::new();
-        let subgraphs = self.enumerate_noninduced_subgraphs().collect::<Vec<_>>();
+        let subgraph_edges = self.enumerate_noninduced_subgraphs().collect::<Vec<_>>();
+        let subgraphs = subgraph_edges
+            .iter()
+            .map(|edges| {
+                let mut subgraph = self.graph.clone();
+                subgraph.retain_edges(|_, e| edges.contains(&e));
+                subgraph.retain_nodes(|g, n| g.neighbors(n).next().is_some());
+                subgraph
+            })
+            .collect::<Vec<_>>();
 
-        for (i, h_edges) in subgraphs.iter().enumerate() {
-            let mut h = self.graph().clone();
-            h.retain_edges(|_, e| h_edges.contains(&e));
-            h.retain_nodes(|g, n| g.neighbors(n).next().is_some());
-            for (j, g_edges) in subgraphs.iter().enumerate() {
+        let subgraph_bitsets = subgraph_edges
+            .iter()
+            .map(|edges| {
+                let mut bits = BitSet::with_capacity(edges.len());
+                bits.extend(edges.iter().map(|e| e.index()));
+                bits
+            })
+            .collect::<Vec<_>>();
+
+        for (i, (h, hbits)) in subgraphs.iter().zip(subgraph_bitsets.iter()).enumerate() {
+            for (j, (g, gbits)) in subgraphs.iter().zip(subgraph_bitsets.iter()).enumerate() {
                 // Skip overlapping subgraphs
-                if i == j || h_edges.intersection(g_edges).next().is_some() {
+                if i == j || hbits.intersection(gbits).next().is_some() {
                     continue;
                 };
-
-                let mut g = self.graph().clone();
-                g.retain_edges(|_, e| g_edges.contains(&e));
-                g.retain_nodes(|g, n| g.neighbors(n).next().is_some());
 
                 // Skip nonisomorphic subgraphs
                 if !is_isomorphic_matching(&h, &g, |v0, v1| *v0 == *v1, |e0, e1| *e0 == *e1) {
                     continue;
                 }
 
-                let mut hbits = BitSet::with_capacity(self.graph.edge_count());
-                hbits.extend(h_edges.iter().map(|e| e.index()));
-
-                let mut gbits = BitSet::with_capacity(self.graph.edge_count());
-                gbits.extend(g_edges.iter().map(|e| e.index()));
-
                 matches.insert(if hbits < gbits {
-                    (hbits, gbits)
+                    (hbits.clone(), gbits.clone())
                 } else {
-                    (gbits, hbits)
+                    (gbits.clone(), hbits.clone())
                 });
             }
         }
