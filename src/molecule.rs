@@ -449,6 +449,20 @@ impl Molecule {
             })
             .collect::<Vec<_>>();
 
+        let mut uf = UnionFind::<usize>::new(subgraphs.len());
+
+        fn add_to_matches(
+            matches: &mut BTreeSet<(BitSet, BitSet)>,
+            hbits: &BitSet,
+            gbits: &BitSet,
+        ) {
+            matches.insert(if hbits < gbits {
+                (hbits.clone(), gbits.clone())
+            } else {
+                (gbits.clone(), hbits.clone())
+            });
+        }
+
         for (i, (h, hbits)) in subgraphs.iter().zip(subgraph_bitsets.iter()).enumerate() {
             for (j, (g, gbits)) in subgraphs.iter().zip(subgraph_bitsets.iter()).enumerate() {
                 // Skip overlapping subgraphs
@@ -456,16 +470,20 @@ impl Molecule {
                     continue;
                 };
 
+                // Skip subgraphs already known to be isomorphic; add to matches
+                if uf.find(i) == uf.find(j) {
+                    add_to_matches(&mut matches, hbits, gbits);
+                    continue;
+                }
+
                 // Skip nonisomorphic subgraphs
                 if !is_isomorphic_matching(&h, &g, |v0, v1| *v0 == *v1, |e0, e1| *e0 == *e1) {
                     continue;
                 }
 
-                matches.insert(if hbits < gbits {
-                    (hbits.clone(), gbits.clone())
-                } else {
-                    (gbits.clone(), hbits.clone())
-                });
+                // Record isomorphism
+                uf.union(i, j);
+                add_to_matches(&mut matches, hbits, gbits);
             }
         }
         matches.into_iter()
