@@ -233,7 +233,6 @@ jobs:
       - name: Publish to PyPI
         if: ${{ startsWith(github.ref, 'refs/tags/') }}
         uses: PyO3/maturin-action@v1
-        env:
         with:
           command: upload
           args: --non-interactive --skip-existing wheels-*/*
