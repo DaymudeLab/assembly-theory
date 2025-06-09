@@ -230,6 +230,14 @@ fn recurse_index_search(
     cx
 }
 
+fn recurese_clique_index_search() {
+    
+}
+
+pub fn clique_index_search() {
+
+}
+
 #[allow(clippy::too_many_arguments)]
 fn parallel_recurse_index_search(
     mol: &Molecule,
