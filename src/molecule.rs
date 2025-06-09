@@ -399,7 +399,7 @@ impl Molecule {
             );
 
             self.generate_connected_noninduced_subgraphs(remainder, subset, neighbors, solutions);
-        } else if subset.len() > 1 {
+        } else if subset.len() > 1 && subset.len() < self.graph.edge_count() / 2 + 1 {
             solutions.insert(subset);
         }
     }
@@ -429,7 +429,10 @@ impl Molecule {
     /// non-overlapping pairs of isomorphic subgraphs
     pub fn matches(&self) -> impl Iterator<Item = (BitSet, BitSet)> {
         let mut matches = BTreeSet::new();
-        let subgraph_edges = self.enumerate_noninduced_subgraphs().collect::<Vec<_>>();
+        let subgraph_edges = self.enumerate_noninduced_subgraphs()
+            // .filter(|g| g.len() - 1 < self.graph.edge_count() / 2)
+            .collect::<Vec<_>>();
+
         let subgraphs = subgraph_edges
             .iter()
             .map(|edges| {
