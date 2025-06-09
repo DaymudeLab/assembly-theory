@@ -24,6 +24,7 @@ use std::{
 };
 
 use bit_set::BitSet;
+use petgraph::{graph::NodeIndex, Graph, Undirected};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
@@ -230,12 +231,39 @@ fn recurse_index_search(
     cx
 }
 
-fn recurese_clique_index_search() {
+fn recurse_clique_index_search() {
     
 }
 
-pub fn clique_index_search() {
+pub fn clique_index_search(mol: &Molecule) {
+    let mut matches: Vec<(BitSet, BitSet)> = mol.matches().collect();
+    matches.sort_by(|e1, e2| e2.0.len().cmp(&e1.0.len()));
 
+    let mut matches_graph = Graph::<(usize, usize), _, Undirected>::new_undirected();
+    let mut nodes: Vec<NodeIndex> = Vec::new();
+
+    // Create vertices of matches_graph
+    for (idx, (h1, _)) in matches.iter().enumerate() {
+        let v = matches_graph.add_node((h1.len() - 1, idx));
+        nodes.push(v);
+    }
+
+    // Create edges of matches_graph
+    // two matches are connected if they are compatible with each other
+    for (idx1, (h1, h2)) in matches.iter().enumerate() {
+        for (idx2, (h1p, h2p)) in matches[idx1 + 1..].iter().enumerate() {
+            let compatible = {
+                h2.is_disjoint(h2p) && 
+                (h1.is_disjoint(h1p) || h1.is_subset(h1p) || h1.is_superset(h1p)) &&
+                (h1.is_disjoint(h2p) || h1.is_superset(h2p)) &&
+                (h1p.is_disjoint(h2) || h1p.is_superset(h2))
+            };
+
+            if compatible {
+                matches_graph.add_edge(nodes[idx1], nodes[idx1 + idx2 + 1], ());
+            }
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
