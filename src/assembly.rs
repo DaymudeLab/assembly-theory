@@ -231,21 +231,103 @@ fn recurse_index_search(
     cx
 }
 
-fn recurse_clique_index_search() {
-    
+fn recurse_clique_index_search(mol: &Molecule,
+    matches: &Vec<(BitSet, BitSet)>,
+    fragments: &[BitSet],
+    ix: usize,
+    largest_remove: usize,
+    mut best: usize,
+    states_searched: &mut usize,
+    subgraph: BitSet,
+    nodes: &Vec<NodeIndex>,
+    matches_graph: &Graph<(usize, usize), (), Undirected>,
+) -> usize {
+    let mut cx = ix;
+
+    *states_searched += 1;
+
+    // Search for duplicatable fragment
+    for x in subgraph.iter() {
+        let v = nodes[x];
+        let (h1, h2) = &matches[x];
+
+        let mut fractures = fragments.to_owned();
+        let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
+        let f2 = fragments.iter().enumerate().find(|(_, c)| h2.is_subset(c));
+
+        let largest_remove = h1.len();
+
+        let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) else {
+            continue;
+        };
+
+        // All of these clones are on bitsets and cheap enough
+        if i1 == i2 {
+            let mut union = h1.clone();
+            union.union_with(h2);
+            let mut difference = f1.clone();
+            difference.difference_with(&union);
+            let c = connected_components_under_edges(mol.graph(), &difference);
+            fractures.extend(c);
+            fractures.swap_remove(i1);
+        } else {
+            let mut f1r = f1.clone();
+            f1r.difference_with(h1);
+            let mut f2r = f2.clone();
+            f2r.difference_with(h2);
+
+            let c1 = connected_components_under_edges(mol.graph(), &f1r);
+            let c2 = connected_components_under_edges(mol.graph(), &f2r);
+
+            fractures.extend(c1);
+            fractures.extend(c2);
+
+            fractures.swap_remove(i1.max(i2));
+            fractures.swap_remove(i1.min(i2));
+        }
+
+        fractures.retain(|i| i.len() > 1);
+        fractures.push(h1.clone());
+
+        let mut subgraph_clone = subgraph.clone();
+        let mut neighbors = BitSet::new();
+        for u in matches_graph.neighbors(v) {
+            neighbors.insert(matches_graph.node_weight(u).unwrap().1);
+        }
+        subgraph_clone.intersect_with(&neighbors);
+
+        cx = cx.min(recurse_clique_index_search(
+            mol,
+            matches,
+            &fractures,
+            ix - h1.len() + 1,
+            largest_remove,
+            best,
+            states_searched,
+            subgraph_clone,
+            nodes,
+            matches_graph,
+        ));
+        best = best.min(cx);
+    }
+
+    cx
 }
 
-pub fn clique_index_search(mol: &Molecule) {
+pub fn clique_index_search(mol: &Molecule) -> (u32, u32, usize) {
     let mut matches: Vec<(BitSet, BitSet)> = mol.matches().collect();
     matches.sort_by(|e1, e2| e2.0.len().cmp(&e1.0.len()));
 
     let mut matches_graph = Graph::<(usize, usize), _, Undirected>::new_undirected();
     let mut nodes: Vec<NodeIndex> = Vec::new();
 
+    let mut subgraph = BitSet::new();
+
     // Create vertices of matches_graph
     for (idx, (h1, _)) in matches.iter().enumerate() {
         let v = matches_graph.add_node((h1.len() - 1, idx));
         nodes.push(v);
+        subgraph.insert(idx);
     }
 
     // Create edges of matches_graph
@@ -264,6 +346,25 @@ pub fn clique_index_search(mol: &Molecule) {
             }
         }
     }
+
+    let mut init = BitSet::new();
+    init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
+    let edge_count = mol.graph().edge_count();
+
+    let mut total_search = 0;
+    let index = recurse_clique_index_search(
+        mol, 
+        &matches, 
+        &[init], 
+        edge_count - 1, 
+        edge_count, 
+        edge_count - 1, 
+        &mut total_search,
+        subgraph, 
+        &nodes, 
+        &matches_graph);
+
+    (index as u32, matches.len() as u32, total_search)
 }
 
 #[allow(clippy::too_many_arguments)]
