@@ -16,15 +16,14 @@
 //! # }
 //! ```
 use std::{
-    collections::BTreeSet,
-    sync::{
+    char::UNICODE_VERSION, collections::BTreeSet, sync::{
         atomic::{AtomicUsize, Ordering::Relaxed},
         Arc,
-    },
+    }
 };
 
 use bit_set::BitSet;
-use petgraph::{graph::NodeIndex, Graph, Undirected};
+use petgraph::{graph::NodeIndex, prelude::StableGraph, Graph, Undirected};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
@@ -237,14 +236,30 @@ fn recurse_clique_index_search(mol: &Molecule,
     ix: usize,
     largest_remove: usize,
     mut best: usize,
+    bounds: &[Bound],
     states_searched: &mut usize,
     subgraph: BitSet,
     nodes: &Vec<NodeIndex>,
-    matches_graph: &Graph<(usize, usize), (), Undirected>,
+    matches_graph: &StableGraph<(usize, usize), (), Undirected>,
 ) -> usize {
     let mut cx = ix;
 
     *states_searched += 1;
+
+    // Branch and Bound
+    for bound_type in bounds {
+        let exceeds = match bound_type {
+            Bound::Log => ix - log_bound(fragments) >= best,
+            Bound::IntChain => ix - addition_bound(fragments, largest_remove) >= best,
+            Bound::VecChainSimple => ix - vec_bound_simple(fragments, largest_remove, mol) >= best,
+            Bound::VecChainSmallFrags => {
+                ix - vec_bound_small_frags(fragments, largest_remove, mol) >= best
+            }
+        };
+        if exceeds {
+            return ix;
+        }
+    }
 
     // Search for duplicatable fragment
     for x in subgraph.iter() {
@@ -291,8 +306,12 @@ fn recurse_clique_index_search(mol: &Molecule,
 
         let mut subgraph_clone = subgraph.clone();
         let mut neighbors = BitSet::new();
+        let weight_v = matches_graph.node_weight(v).unwrap().1;
         for u in matches_graph.neighbors(v) {
-            neighbors.insert(matches_graph.node_weight(u).unwrap().1);
+            let weight_u = matches_graph.node_weight(u).unwrap().1;
+            if weight_u >= weight_v {
+                neighbors.insert(matches_graph.node_weight(u).unwrap().1);
+            }
         }
         subgraph_clone.intersect_with(&neighbors);
 
@@ -303,6 +322,7 @@ fn recurse_clique_index_search(mol: &Molecule,
             ix - h1.len() + 1,
             largest_remove,
             best,
+            bounds,
             states_searched,
             subgraph_clone,
             nodes,
@@ -314,11 +334,56 @@ fn recurse_clique_index_search(mol: &Molecule,
     cx
 }
 
-pub fn clique_index_search(mol: &Molecule) -> (u32, u32, usize) {
+fn kernelize(mut g: StableGraph<(usize, usize), (), Undirected>, mut subgraph: BitSet) 
+    -> (StableGraph<(usize, usize), (), Undirected>, BitSet) {
+    let nodes: Vec<NodeIndex> = g.node_indices().collect();
+    let mut count = 0;
+
+    for (idx, v) in nodes.iter().enumerate() {
+        let v_weight = g.node_weight(*v);
+        if v_weight == None {
+            continue;
+        }
+        let v_weight = v_weight.unwrap();
+        let v_val = v_weight.0;
+        let v_rank = v_weight.1;
+        let neighbors_v: BTreeSet<usize> = g.neighbors(*v).map(|x| g.node_weight(x).unwrap().1).collect();
+
+        for u in &nodes[idx+1..] {
+            let u_weight = g.node_weight(*u);
+            if u_weight == None {
+                continue;
+            }
+            let u_weight = u_weight.unwrap();
+            let u_val = u_weight.0;
+            let u_rank = u_weight.1;
+            let neighbors_u: BTreeSet<usize> = g.neighbors(*u).map(|x| g.node_weight(x).unwrap().1).collect();
+
+            if neighbors_u.is_subset(&neighbors_v) && u_val <= v_val {
+                count += 1;
+
+                g.remove_node(*u);
+                subgraph.remove(u_rank);
+
+            }
+            else if neighbors_v.is_subset(&neighbors_u) && v_val <= u_val {
+                count += 1;
+
+                g.remove_node(*v);
+                subgraph.remove(v_rank);
+            }
+        }
+    }
+
+    // println!("Reduce count: {}", count);
+    (g, subgraph)
+}
+
+pub fn clique_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize) {
     let mut matches: Vec<(BitSet, BitSet)> = mol.matches().collect();
     matches.sort_by(|e1, e2| e2.0.len().cmp(&e1.0.len()));
 
-    let mut matches_graph = Graph::<(usize, usize), _, Undirected>::new_undirected();
+    let mut matches_graph = StableGraph::<(usize, usize), _, Undirected>::with_capacity(matches.len(), matches.len());
     let mut nodes: Vec<NodeIndex> = Vec::new();
 
     let mut subgraph = BitSet::new();
@@ -351,18 +416,34 @@ pub fn clique_index_search(mol: &Molecule) -> (u32, u32, usize) {
     init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
     let edge_count = mol.graph().edge_count();
 
+    (matches_graph, subgraph) = kernelize(matches_graph, subgraph);
+
+    for x in &subgraph {
+        if matches_graph.node_weight(nodes[x]) == None {
+            println!("!: {}", x);
+        }
+    }
+
     let mut total_search = 0;
+
+    use std::time::Instant;
+    let start = Instant::now();
+
     let index = recurse_clique_index_search(
         mol, 
         &matches, 
         &[init], 
         edge_count - 1, 
         edge_count, 
-        edge_count - 1, 
+        edge_count - 1,
+        bounds,
         &mut total_search,
         subgraph, 
         &nodes, 
         &matches_graph);
+
+    let dur = start.elapsed();
+    println!("Time: {:?}", dur);
 
     (index as u32, matches.len() as u32, total_search)
 }
@@ -569,6 +650,10 @@ pub fn serial_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize
 
     let edge_count = mol.graph().edge_count();
     let mut total_search = 0;
+
+    use std::time::Instant;
+    let start = Instant::now();
+
     let index = recurse_index_search(
         mol,
         &matches,
@@ -579,6 +664,10 @@ pub fn serial_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize
         bounds,
         &mut total_search,
     );
+
+    let dur = start.elapsed();
+    println!("Time: {:?}", dur);
+
     (index as u32, matches.len() as u32, total_search)
 }
 
