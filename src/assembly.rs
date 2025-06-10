@@ -503,7 +503,7 @@ fn unique_edges(fragment: &BitSet, mol: &Molecule) -> Vec<EdgeType> {
 
         let edge_type = EdgeType { bond, ends };
 
-        if types.iter().any(|&t| t == edge_type) {
+        if types.contains(&edge_type) {
             continue;
         } else {
             types.push(edge_type);
