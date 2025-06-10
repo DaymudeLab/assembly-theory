@@ -1,4 +1,7 @@
-use petgraph::graph::{EdgeIndex, Graph};
+use petgraph::{
+    graph::{EdgeIndex, Graph},
+    visit::{EdgeCount, IntoEdges},
+};
 
 struct VF3State<N, E> {
     pattern: Graph<N, E>,
@@ -31,8 +34,32 @@ impl<N, E> VF3State<N, E> {
 
     fn pop_mapping(&mut self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) {}
 
-    fn generate_pairs(&mut self) -> impl Iterator<Item = (EdgeIndex, EdgeIndex)> {
-        todo!()
+    fn generate_pairs(&mut self) -> Vec<(EdgeIndex, EdgeIndex)> {
+        let mut target_frontier = (0..self.target.edge_count())
+            .filter_map(|i| {
+                (self.target_map[i].is_none() && self.target_depths[i].is_some())
+                    .then_some(EdgeIndex::new(i))
+            })
+            .peekable();
+        let pattern_frontier = (0..self.pattern.edge_count()).filter_map(|i| {
+            (self.pattern_map[i].is_none() && self.pattern_depths[i].is_some())
+                .then_some(EdgeIndex::new(i))
+        });
+
+        if let (Some(u), Some(_)) = (pattern_frontier.min(), target_frontier.peek()) {
+            target_frontier.map(|t| (u, t)).collect()
+        } else {
+            let u = (0..self.pattern.edge_count())
+                .find(|i| self.pattern_map[*i].is_none())
+                .unwrap();
+            (0..self.target.edge_count())
+                .filter_map(|i| {
+                    self.target_map[i]
+                        .is_none()
+                        .then_some((EdgeIndex::new(u), EdgeIndex::new(i)))
+                })
+                .collect()
+        }
     }
 
     fn search(&mut self) -> Option<Vec<Option<EdgeIndex>>> {
