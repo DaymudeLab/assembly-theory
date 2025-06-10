@@ -1,0 +1,72 @@
+use petgraph::graph::{EdgeIndex, Graph};
+
+struct VF3State<N, E> {
+    pattern: Graph<N, E>,
+    target: Graph<N, E>,
+    pattern_map: Vec<Option<EdgeIndex>>,
+    target_map: Vec<Option<EdgeIndex>>,
+    pattern_depths: Vec<Option<usize>>,
+    target_depths: Vec<Option<usize>>,
+    depth: usize,
+}
+
+impl<N, E> VF3State<N, E> {
+    fn new(pattern: Graph<N, E>, target: Graph<N, E>) -> Self {
+        VF3State {
+            pattern_map: vec![None; pattern.edge_count()],
+            target_map: vec![None; target.edge_count()],
+            pattern_depths: vec![None; pattern.edge_count()],
+            target_depths: vec![None; target.edge_count()],
+            depth: 0,
+            pattern,
+            target,
+        }
+    }
+
+    fn is_consistent(&self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) -> bool {
+        todo!()
+    }
+
+    fn push_mapping(&mut self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) {}
+
+    fn pop_mapping(&mut self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) {}
+
+    fn generate_pairs(&mut self) -> impl Iterator<Item = (EdgeIndex, EdgeIndex)> {
+        todo!()
+    }
+
+    fn search(&mut self) -> Option<Vec<Option<EdgeIndex>>> {
+        if self.depth == self.pattern.edge_count() {
+            return Some(self.pattern_map.clone());
+        } else {
+            for (pattern_edge, target_edge) in self.generate_pairs() {
+                if self.is_consistent(pattern_edge, target_edge) {
+                    self.push_mapping(pattern_edge, target_edge);
+                    if let Some(mapping) = self.search() {
+                        return Some(mapping);
+                    }
+                    self.pop_mapping(pattern_edge, target_edge)
+                }
+            }
+        }
+        None
+    }
+
+    fn iter(&mut self) -> Vec<Vec<Option<EdgeIndex>>> {
+        let mut isomorphisms = vec![];
+        if self.depth == self.pattern.edge_count() {
+            isomorphisms.push(self.pattern_map.clone());
+        } else {
+            for (pattern_edge, target_edge) in self.generate_pairs() {
+                if self.is_consistent(pattern_edge, target_edge) {
+                    self.push_mapping(pattern_edge, target_edge);
+                    isomorphisms.append(&mut self.iter());
+                    self.pop_mapping(pattern_edge, target_edge)
+                }
+            }
+        }
+        isomorphisms
+    }
+}
+
+pub fn noninduced_subgraph_isomorphism_iter<N, E>(pattern: Graph<N, E>, target: Graph<N, E>) {}

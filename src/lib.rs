@@ -46,3 +46,5 @@ mod utils;
 // Python library
 #[cfg(feature = "python")]
 pub mod python;
+
+mod vf3;
