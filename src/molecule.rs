@@ -408,7 +408,7 @@ impl Molecule {
     fn print_edgelist(&self, list: &[EdgeIndex], name: &str) {
         println!(
             "{name}: {:?}",
-            list.into_iter()
+            list.iter()
                 .map(|e| (
                     e.index(),
                     self.graph
@@ -429,9 +429,7 @@ impl Molecule {
     /// non-overlapping pairs of isomorphic subgraphs
     pub fn matches(&self) -> impl Iterator<Item = (BitSet, BitSet)> {
         let mut matches = BTreeSet::new();
-        let subgraph_edges = self.enumerate_noninduced_subgraphs()
-            // .filter(|g| g.len() - 1 < self.graph.edge_count() / 2)
-            .collect::<Vec<_>>();
+        let subgraph_edges = self.enumerate_noninduced_subgraphs().collect::<Vec<_>>();
 
         let subgraphs = subgraph_edges
             .iter()
