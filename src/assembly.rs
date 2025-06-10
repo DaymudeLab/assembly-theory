@@ -23,7 +23,7 @@ use std::{
 };
 
 use bit_set::BitSet;
-use petgraph::{graph::NodeIndex, prelude::StableGraph, Graph, Undirected};
+use petgraph::{graph::NodeIndex, Graph, Undirected};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
@@ -240,7 +240,7 @@ fn recurse_clique_index_search(mol: &Molecule,
     states_searched: &mut usize,
     subgraph: BitSet,
     nodes: &Vec<NodeIndex>,
-    matches_graph: &StableGraph<(usize, usize), (), Undirected>,
+    matches_graph: &Graph<(usize, usize), (), Undirected>,
 ) -> usize {
     let mut cx = ix;
 
@@ -314,6 +314,7 @@ fn recurse_clique_index_search(mol: &Molecule,
             }
         }
         subgraph_clone.intersect_with(&neighbors);
+        // subgraph_clone = kernelize(&matches_graph, subgraph_clone);
 
         cx = cx.min(recurse_clique_index_search(
             mol,
@@ -334,56 +335,59 @@ fn recurse_clique_index_search(mol: &Molecule,
     cx
 }
 
-fn kernelize(mut g: StableGraph<(usize, usize), (), Undirected>, mut subgraph: BitSet) 
-    -> (StableGraph<(usize, usize), (), Undirected>, BitSet) {
+fn kernelize(g: &Graph<(usize, usize), (), Undirected>, mut subgraph: BitSet) -> BitSet {
     let nodes: Vec<NodeIndex> = g.node_indices().collect();
     let mut count = 0;
 
     for (idx, v) in nodes.iter().enumerate() {
         let v_weight = g.node_weight(*v);
-        if v_weight == None {
-            continue;
-        }
         let v_weight = v_weight.unwrap();
         let v_val = v_weight.0;
         let v_rank = v_weight.1;
-        let neighbors_v: BTreeSet<usize> = g.neighbors(*v).map(|x| g.node_weight(x).unwrap().1).collect();
+        if !subgraph.contains(v_rank) {
+            continue;
+        }
+        let neighbors_v: BTreeSet<usize> = g.neighbors(*v)
+            .map(|x| g.node_weight(x).unwrap().1)
+            .filter(|x| subgraph.contains(*x))
+            .collect();
 
         for u in &nodes[idx+1..] {
             let u_weight = g.node_weight(*u);
-            if u_weight == None {
-                continue;
-            }
             let u_weight = u_weight.unwrap();
             let u_val = u_weight.0;
             let u_rank = u_weight.1;
-            let neighbors_u: BTreeSet<usize> = g.neighbors(*u).map(|x| g.node_weight(x).unwrap().1).collect();
+            if !subgraph.contains(u_rank) {
+                continue;
+            }
+            let neighbors_u: BTreeSet<usize> = g.neighbors(*u)
+                .map(|x| g.node_weight(x).unwrap().1)
+                .filter(|x| subgraph.contains(*x))
+                .collect();
 
             if neighbors_u.is_subset(&neighbors_v) && u_val <= v_val {
                 count += 1;
 
-                g.remove_node(*u);
                 subgraph.remove(u_rank);
 
             }
             else if neighbors_v.is_subset(&neighbors_u) && v_val <= u_val {
                 count += 1;
 
-                g.remove_node(*v);
                 subgraph.remove(v_rank);
             }
         }
     }
 
     // println!("Reduce count: {}", count);
-    (g, subgraph)
+    subgraph
 }
 
 pub fn clique_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize) {
     let mut matches: Vec<(BitSet, BitSet)> = mol.matches().collect();
     matches.sort_by(|e1, e2| e2.0.len().cmp(&e1.0.len()));
 
-    let mut matches_graph = StableGraph::<(usize, usize), _, Undirected>::with_capacity(matches.len(), matches.len());
+    let mut matches_graph = Graph::<(usize, usize), _, Undirected>::with_capacity(matches.len(), matches.len());
     let mut nodes: Vec<NodeIndex> = Vec::new();
 
     let mut subgraph = BitSet::new();
@@ -416,7 +420,7 @@ pub fn clique_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize
     init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
     let edge_count = mol.graph().edge_count();
 
-    (matches_graph, subgraph) = kernelize(matches_graph, subgraph);
+    subgraph = kernelize(&matches_graph, subgraph);
 
     for x in &subgraph {
         if matches_graph.node_weight(nodes[x]) == None {
