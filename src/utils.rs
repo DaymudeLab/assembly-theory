@@ -190,3 +190,19 @@ where
         s.contains(&src) || s.contains(&dst)
     })
 }
+
+pub fn edge_neighbors<'a, N, E, Ty, Ix>(
+    g: &'a Graph<N, E, Ty, Ix>,
+    e: EdgeIndex<Ix>,
+) -> impl Iterator<Item = EdgeIndex<Ix>> + 'a
+where
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    let (src, dst) = g.edge_endpoints(e).unwrap();
+    let src_neighbors = g.neighbors(src).map(move |n| g.find_edge(src, n));
+    let dst_neighbors = g.neighbors(dst).map(move |n| g.find_edge(dst, n));
+    src_neighbors
+        .chain(dst_neighbors)
+        .filter_map(move |w| w.filter(|i| e != *i))
+}

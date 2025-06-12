@@ -4,6 +4,8 @@ use petgraph::{
     visit::{EdgeCount, IntoEdges, IntoNeighbors},
 };
 
+use crate::utils::edge_neighbors;
+
 struct VF3State<N, E> {
     pattern: Graph<N, E>,
     target: Graph<N, E>,
@@ -30,6 +32,8 @@ impl<N, E> VF3State<N, E> {
     fn is_consistent(&self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) -> bool {
         todo!()
     }
+
+    fn rule_pred_succ(&self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) -> bool {}
 
     fn pop_mapping(&mut self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) {
         self.pattern_map[pattern_edge.index()] = None;
@@ -61,19 +65,7 @@ impl<N, E> VF3State<N, E> {
         }
 
         for i in 0..self.pattern_map.len() {
-            let (src, dst) = self.pattern.edge_endpoints(EdgeIndex::new(i)).unwrap();
-            let src_neighbors = self
-                .pattern
-                .neighbors(src)
-                .map(|n| self.pattern.find_edge(src, n));
-            let dst_neighbors = self
-                .pattern
-                .neighbors(dst)
-                .map(|n| self.pattern.find_edge(dst, n));
-            let neighbors = src_neighbors
-                .chain(dst_neighbors)
-                .map(|i| i.unwrap().index());
-
+            let neighbors = edge_neighbors(&self.pattern, EdgeIndex::new(i)).map(|e| e.index());
             for neighbor in neighbors {
                 if self.pattern_map[neighbor].is_none() && self.pattern_depths[neighbor].is_none() {
                     self.pattern_depths[neighbor] = Some(self.depth);
@@ -82,19 +74,7 @@ impl<N, E> VF3State<N, E> {
         }
 
         for i in 0..self.target_map.len() {
-            let (src, dst) = self.target.edge_endpoints(EdgeIndex::new(i)).unwrap();
-            let src_neighbors = self
-                .target
-                .neighbors(src)
-                .map(|n| self.target.find_edge(src, n));
-            let dst_neighbors = self
-                .target
-                .neighbors(dst)
-                .map(|n| self.target.find_edge(dst, n));
-            let neighbors = src_neighbors
-                .chain(dst_neighbors)
-                .map(|i| i.unwrap().index());
-
+            let neighbors = edge_neighbors(&self.target, EdgeIndex::new(i)).map(|e| e.index());
             for neighbor in neighbors {
                 if self.target_map[neighbor].is_none() && self.target_depths[neighbor].is_none() {
                     self.target_depths[neighbor] = Some(self.depth);
@@ -166,5 +146,4 @@ impl<N, E> VF3State<N, E> {
     }
 }
 
-pub fn noninduced_subgraph_isomorphism_iter<N, E>(pattern: Graph<N, E>, target: Graph<N, E>) {
-}
+pub fn noninduced_subgraph_isomorphism_iter<N, E>(pattern: Graph<N, E>, target: Graph<N, E>) {}
