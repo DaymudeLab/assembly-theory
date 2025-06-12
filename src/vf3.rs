@@ -31,7 +31,10 @@ where
     }
 
     fn is_consistent(&self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) -> bool {
-        todo!()
+        self.semantic_rule(pattern_edge, target_edge)
+            && self.core_rule(pattern_edge, target_edge)
+            && self.frontier_rule(pattern_edge, target_edge)
+            && self.remainder_rule(pattern_edge, target_edge)
     }
 
     fn core_rule(&self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) -> bool {
@@ -39,15 +42,48 @@ where
     }
 
     fn frontier_rule(&self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) -> bool {
-        todo!()
+        let card_pattern = edge_neighbors(&self.pattern, pattern_edge)
+            .filter(|e| {
+                self.pattern_depths[e.index()].is_some() && self.pattern_map[e.index()].is_none()
+            })
+            .count();
+
+        let card_target = edge_neighbors(&self.target, target_edge)
+            .filter(|e| {
+                self.target_depths[e.index()].is_some() && self.target_map[e.index()].is_none()
+            })
+            .count();
+
+        card_target >= card_pattern
     }
 
     fn remainder_rule(&self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) -> bool {
-        todo!()
+        let card_pattern = edge_neighbors(&self.pattern, pattern_edge)
+            .filter(|e| self.pattern_map[e.index()].is_none())
+            .count();
+
+        let card_target = edge_neighbors(&self.target, target_edge)
+            .filter(|e| self.target_map[e.index()].is_none())
+            .count();
+
+        card_target >= card_pattern
     }
 
     fn semantic_rule(&self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) -> bool {
-        todo!()
+        let edge_match =
+            self.pattern.edge_weight(pattern_edge) == self.target.edge_weight(target_edge);
+
+        let (pattern_src, pattern_dst) = self.pattern.edge_endpoints(pattern_edge).unwrap();
+        let (target_src, target_dst) = self.pattern.edge_endpoints(pattern_edge).unwrap();
+
+        let pattern_src = self.pattern.node_weight(pattern_src);
+        let pattern_dst = self.pattern.node_weight(pattern_dst);
+        let target_src = self.target.node_weight(target_src);
+        let target_dst = self.target.node_weight(target_dst);
+
+        let node_match = (pattern_src == target_src && pattern_dst == target_dst)
+            || (pattern_src == target_dst && pattern_dst == target_src);
+        edge_match && node_match
     }
 
     fn pop_mapping(&mut self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) {
@@ -127,7 +163,7 @@ where
         }
     }
 
-    fn search(&mut self) -> Option<Vec<Option<EdgeIndex>>> {
+    pub fn search(&mut self) -> Option<Vec<Option<EdgeIndex>>> {
         if self.depth == self.pattern.edge_count() {
             return Some(self.pattern_map.clone());
         } else {
