@@ -33,7 +33,21 @@ impl<N, E> VF3State<N, E> {
         todo!()
     }
 
-    fn rule_pred_succ(&self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) -> bool {}
+    fn core_rule(&self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) -> bool {
+        todo!()
+    }
+
+    fn frontier_rule(&self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) -> bool {
+        todo!()
+    }
+
+    fn remainder_rule(&self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) -> bool {
+        todo!()
+    }
+
+    fn semantic_rule(&self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) -> bool {
+        todo!()
+    }
 
     fn pop_mapping(&mut self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) {
         self.pattern_map[pattern_edge.index()] = None;
