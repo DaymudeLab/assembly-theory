@@ -1,8 +1,5 @@
-use petgraph::{
-    csr::Neighbors,
-    graph::{EdgeIndex, Graph},
-    visit::{EdgeCount, IntoEdges, IntoNeighbors},
-};
+use bit_set::BitSet;
+use petgraph::graph::{EdgeIndex, Graph};
 
 use crate::utils::edge_neighbors;
 
@@ -16,7 +13,11 @@ struct VF3State<N, E> {
     depth: usize,
 }
 
-impl<N, E> VF3State<N, E> {
+impl<N, E> VF3State<N, E>
+where
+    E: PartialEq,
+    N: PartialEq,
+{
     fn new(pattern: Graph<N, E>, target: Graph<N, E>) -> Self {
         VF3State {
             pattern_map: vec![None; pattern.edge_count()],
@@ -143,15 +144,24 @@ impl<N, E> VF3State<N, E> {
         None
     }
 
-    fn iter(&mut self) -> Vec<Vec<Option<EdgeIndex>>> {
+    pub fn bitset_from_current_mapping(&self) -> BitSet {
+        BitSet::from_iter(
+            self.target_map
+                .iter()
+                .enumerate()
+                .filter_map(|(ix, e)| e.map(|_| ix)),
+        )
+    }
+
+    pub fn all_subgraphs(&mut self) -> Vec<BitSet> {
         let mut isomorphisms = vec![];
         if self.depth == self.pattern.edge_count() {
-            isomorphisms.push(self.pattern_map.clone());
+            isomorphisms.push(self.bitset_from_current_mapping());
         } else {
             for (pattern_edge, target_edge) in self.generate_pairs() {
                 if self.is_consistent(pattern_edge, target_edge) {
                     self.push_mapping(pattern_edge, target_edge);
-                    isomorphisms.append(&mut self.iter());
+                    isomorphisms.append(&mut self.all_subgraphs());
                     self.pop_mapping(pattern_edge, target_edge)
                 }
             }
@@ -160,4 +170,14 @@ impl<N, E> VF3State<N, E> {
     }
 }
 
-pub fn noninduced_subgraph_isomorphism_iter<N, E>(pattern: Graph<N, E>, target: Graph<N, E>) {}
+pub fn noninduced_subgraph_isomorphism_iter<N, E>(
+    pattern: Graph<N, E>,
+    target: Graph<N, E>,
+) -> impl Iterator<Item = BitSet>
+where
+    N: PartialEq,
+    E: PartialEq,
+{
+    let mut state = VF3State::new(pattern, target);
+    state.all_subgraphs().into_iter()
+}
