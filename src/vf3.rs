@@ -1,6 +1,7 @@
 use petgraph::{
+    csr::Neighbors,
     graph::{EdgeIndex, Graph},
-    visit::{EdgeCount, IntoEdges},
+    visit::{EdgeCount, IntoEdges, IntoNeighbors},
 };
 
 struct VF3State<N, E> {
@@ -30,9 +31,77 @@ impl<N, E> VF3State<N, E> {
         todo!()
     }
 
-    fn push_mapping(&mut self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) {}
+    fn pop_mapping(&mut self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) {
+        self.pattern_map[pattern_edge.index()] = None;
+        self.target_map[target_edge.index()] = None;
+        for i in 0..self.pattern_depths.len() {
+            if self.pattern_depths[i].is_some_and(|depth| depth >= self.depth) {
+                self.pattern_depths[i] = None
+            }
+        }
+        for i in 0..self.target_depths.len() {
+            if self.target_depths[i].is_some_and(|depth| depth >= self.depth) {
+                self.target_depths[i] = None
+            }
+        }
+        self.depth -= 1;
+    }
 
-    fn pop_mapping(&mut self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) {}
+    fn push_mapping(&mut self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) {
+        self.pattern_map[pattern_edge.index()] = Some(target_edge);
+        self.target_map[target_edge.index()] = Some(pattern_edge);
+        self.depth += 1;
+
+        if self.pattern_depths[pattern_edge.index()].is_none() {
+            self.pattern_depths[pattern_edge.index()] = Some(self.depth);
+        }
+
+        if self.target_depths[target_edge.index()].is_none() {
+            self.target_depths[target_edge.index()] = Some(self.depth);
+        }
+
+        for i in 0..self.pattern_map.len() {
+            let (src, dst) = self.pattern.edge_endpoints(EdgeIndex::new(i)).unwrap();
+            let src_neighbors = self
+                .pattern
+                .neighbors(src)
+                .map(|n| self.pattern.find_edge(src, n));
+            let dst_neighbors = self
+                .pattern
+                .neighbors(dst)
+                .map(|n| self.pattern.find_edge(dst, n));
+            let neighbors = src_neighbors
+                .chain(dst_neighbors)
+                .map(|i| i.unwrap().index());
+
+            for neighbor in neighbors {
+                if self.pattern_map[neighbor].is_none() && self.pattern_depths[neighbor].is_none() {
+                    self.pattern_depths[neighbor] = Some(self.depth);
+                }
+            }
+        }
+
+        for i in 0..self.target_map.len() {
+            let (src, dst) = self.target.edge_endpoints(EdgeIndex::new(i)).unwrap();
+            let src_neighbors = self
+                .target
+                .neighbors(src)
+                .map(|n| self.target.find_edge(src, n));
+            let dst_neighbors = self
+                .target
+                .neighbors(dst)
+                .map(|n| self.target.find_edge(dst, n));
+            let neighbors = src_neighbors
+                .chain(dst_neighbors)
+                .map(|i| i.unwrap().index());
+
+            for neighbor in neighbors {
+                if self.target_map[neighbor].is_none() && self.target_depths[neighbor].is_none() {
+                    self.target_depths[neighbor] = Some(self.depth);
+                }
+            }
+        }
+    }
 
     fn generate_pairs(&mut self) -> Vec<(EdgeIndex, EdgeIndex)> {
         let mut target_frontier = (0..self.target.edge_count())
@@ -41,6 +110,7 @@ impl<N, E> VF3State<N, E> {
                     .then_some(EdgeIndex::new(i))
             })
             .peekable();
+
         let pattern_frontier = (0..self.pattern.edge_count()).filter_map(|i| {
             (self.pattern_map[i].is_none() && self.pattern_depths[i].is_some())
                 .then_some(EdgeIndex::new(i))
@@ -96,4 +166,5 @@ impl<N, E> VF3State<N, E> {
     }
 }
 
-pub fn noninduced_subgraph_isomorphism_iter<N, E>(pattern: Graph<N, E>, target: Graph<N, E>) {}
+pub fn noninduced_subgraph_isomorphism_iter<N, E>(pattern: Graph<N, E>, target: Graph<N, E>) {
+}
