@@ -1,7 +1,7 @@
 use bit_set::BitSet;
 use petgraph::graph::{EdgeIndex, Graph};
 
-use crate::utils::edge_neighbors;
+use crate::utils::{edge_neighbors, node_between};
 
 struct VF3State<N, E> {
     pattern: Graph<N, E>,
@@ -38,7 +38,29 @@ where
     }
 
     fn core_rule(&self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) -> bool {
-        todo!()
+        for neighbor in edge_neighbors(&self.pattern, pattern_edge) {
+            let Some(neighbor_in_target) = self.pattern_map[neighbor.index()] else {
+                return false;
+            };
+            if node_between(&self.pattern, pattern_edge, neighbor)
+                != node_between(&self.target, target_edge, neighbor_in_target)
+            {
+                return false;
+            }
+        }
+
+        for neighbor in edge_neighbors(&self.target, pattern_edge) {
+            let Some(neighbor_in_pattern) = self.pattern_map[neighbor.index()] else {
+                return false;
+            };
+            if node_between(&self.target, pattern_edge, neighbor)
+                != node_between(&self.pattern, pattern_edge, neighbor_in_pattern)
+            {
+                return false;
+            }
+        }
+
+        true
     }
 
     fn frontier_rule(&self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) -> bool {

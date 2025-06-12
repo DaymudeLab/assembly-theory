@@ -206,3 +206,22 @@ where
         .chain(dst_neighbors)
         .filter_map(move |w| w.filter(|i| e != *i))
 }
+
+pub fn node_between<N, E, Ty, Ix>(
+    g: &Graph<N, E, Ty, Ix>,
+    left: EdgeIndex<Ix>,
+    right: EdgeIndex<Ix>,
+) -> bool
+where
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    let Some((lsrc, ldst)) = g.edge_endpoints(left) else {
+        return false;
+    };
+    let Some((rsrc, rdst)) = g.edge_endpoints(right) else {
+        return false;
+    };
+
+    lsrc == rsrc || lsrc == rdst || ldst == rsrc || ldst == rdst
+}
