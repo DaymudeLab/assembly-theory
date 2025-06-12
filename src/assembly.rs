@@ -259,6 +259,12 @@ fn recurse_clique_index_search(mol: &Molecule,
         if exceeds {
             return ix;
         }
+        if subgraph.len() <= ix - best {
+            let sum: usize = subgraph.iter().map(|rank| matches_graph.node_weight(nodes[rank]).unwrap().0).sum();
+            if ix as i32 - sum as i32 >= best as i32 {
+                return ix;
+            }
+        }
     }
 
     // Search for duplicatable fragment
@@ -314,7 +320,7 @@ fn recurse_clique_index_search(mol: &Molecule,
             }
         }
         subgraph_clone.intersect_with(&neighbors);
-        subgraph_clone = kernelize(&matches_graph, subgraph_clone, nodes);
+        //subgraph_clone = kernelize(&matches_graph, subgraph_clone, nodes);
 
         cx = cx.min(recurse_clique_index_search(
             mol,
@@ -403,8 +409,8 @@ pub fn clique_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize
             let compatible = {
                 h2.is_disjoint(h2p) && 
                 (h1.is_disjoint(h1p) || h1.is_subset(h1p) || h1.is_superset(h1p)) &&
-                (h1.is_disjoint(h2p) || h1.is_superset(h2p)) &&
-                (h1p.is_disjoint(h2) || h1p.is_superset(h2))
+                (h1p.is_disjoint(h2) || h1p.is_superset(h2)) &&
+                (h1.is_disjoint(h2p) || h1.is_superset(h2p))
             };
 
             if compatible {
