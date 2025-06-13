@@ -1,24 +1,31 @@
 use bit_set::BitSet;
-use petgraph::graph::{EdgeIndex, Graph};
+use petgraph::{
+    graph::{EdgeIndex, Graph, IndexType},
+    Undirected,
+};
 
 use crate::utils::{edge_neighbors, node_between};
 
-struct VF3State<N, E> {
-    pattern: Graph<N, E>,
-    target: Graph<N, E>,
-    pattern_map: Vec<Option<EdgeIndex>>,
-    target_map: Vec<Option<EdgeIndex>>,
+struct VF3State<'a, N, E, Ty, Ix> {
+    pattern: &'a Graph<N, E, Ty, Ix>,
+    target: &'a Graph<N, E, Ty, Ix>,
+    pattern_map: Vec<Option<EdgeIndex<Ix>>>,
+    target_map: Vec<Option<EdgeIndex<Ix>>>,
     pattern_depths: Vec<Option<usize>>,
     target_depths: Vec<Option<usize>>,
     depth: usize,
 }
 
-impl<N, E> VF3State<N, E>
+impl<'a, N, E, Ix> VF3State<'a, N, E, Undirected, Ix>
 where
     E: PartialEq,
     N: PartialEq,
+    Ix: IndexType,
 {
-    fn new(pattern: Graph<N, E>, target: Graph<N, E>) -> Self {
+    fn new(
+        pattern: &'a Graph<N, E, Undirected, Ix>,
+        target: &'a Graph<N, E, Undirected, Ix>,
+    ) -> Self {
         VF3State {
             pattern_map: vec![None; pattern.edge_count()],
             target_map: vec![None; target.edge_count()],
@@ -30,14 +37,14 @@ where
         }
     }
 
-    fn is_consistent(&self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) -> bool {
+    fn is_consistent(&self, pattern_edge: EdgeIndex<Ix>, target_edge: EdgeIndex<Ix>) -> bool {
         self.semantic_rule(pattern_edge, target_edge)
             && self.core_rule(pattern_edge, target_edge)
             && self.frontier_rule(pattern_edge, target_edge)
             && self.remainder_rule(pattern_edge, target_edge)
     }
 
-    fn core_rule(&self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) -> bool {
+    fn core_rule(&self, pattern_edge: EdgeIndex<Ix>, target_edge: EdgeIndex<Ix>) -> bool {
         for neighbor in edge_neighbors(&self.pattern, pattern_edge) {
             let Some(neighbor_in_target) = self.pattern_map[neighbor.index()] else {
                 return false;
@@ -63,7 +70,7 @@ where
         true
     }
 
-    fn frontier_rule(&self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) -> bool {
+    fn frontier_rule(&self, pattern_edge: EdgeIndex<Ix>, target_edge: EdgeIndex<Ix>) -> bool {
         let card_pattern = edge_neighbors(&self.pattern, pattern_edge)
             .filter(|e| {
                 self.pattern_depths[e.index()].is_some() && self.pattern_map[e.index()].is_none()
@@ -79,7 +86,7 @@ where
         card_target >= card_pattern
     }
 
-    fn remainder_rule(&self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) -> bool {
+    fn remainder_rule(&self, pattern_edge: EdgeIndex<Ix>, target_edge: EdgeIndex<Ix>) -> bool {
         let card_pattern = edge_neighbors(&self.pattern, pattern_edge)
             .filter(|e| self.pattern_map[e.index()].is_none())
             .count();
@@ -91,7 +98,7 @@ where
         card_target >= card_pattern
     }
 
-    fn semantic_rule(&self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) -> bool {
+    fn semantic_rule(&self, pattern_edge: EdgeIndex<Ix>, target_edge: EdgeIndex<Ix>) -> bool {
         let edge_match =
             self.pattern.edge_weight(pattern_edge) == self.target.edge_weight(target_edge);
 
@@ -108,7 +115,7 @@ where
         edge_match && node_match
     }
 
-    fn pop_mapping(&mut self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) {
+    fn pop_mapping(&mut self, pattern_edge: EdgeIndex<Ix>, target_edge: EdgeIndex<Ix>) {
         self.pattern_map[pattern_edge.index()] = None;
         self.target_map[target_edge.index()] = None;
         for i in 0..self.pattern_depths.len() {
@@ -124,7 +131,7 @@ where
         self.depth -= 1;
     }
 
-    fn push_mapping(&mut self, pattern_edge: EdgeIndex, target_edge: EdgeIndex) {
+    fn push_mapping(&mut self, pattern_edge: EdgeIndex<Ix>, target_edge: EdgeIndex<Ix>) {
         self.pattern_map[pattern_edge.index()] = Some(target_edge);
         self.target_map[target_edge.index()] = Some(pattern_edge);
         self.depth += 1;
@@ -156,7 +163,7 @@ where
         }
     }
 
-    fn generate_pairs(&mut self) -> Vec<(EdgeIndex, EdgeIndex)> {
+    fn generate_pairs(&mut self) -> Vec<(EdgeIndex<Ix>, EdgeIndex<Ix>)> {
         let mut target_frontier = (0..self.target.edge_count())
             .filter_map(|i| {
                 (self.target_map[i].is_none() && self.target_depths[i].is_some())
@@ -185,23 +192,6 @@ where
         }
     }
 
-    pub fn search(&mut self) -> Option<Vec<Option<EdgeIndex>>> {
-        if self.depth == self.pattern.edge_count() {
-            return Some(self.pattern_map.clone());
-        } else {
-            for (pattern_edge, target_edge) in self.generate_pairs() {
-                if self.is_consistent(pattern_edge, target_edge) {
-                    self.push_mapping(pattern_edge, target_edge);
-                    if let Some(mapping) = self.search() {
-                        return Some(mapping);
-                    }
-                    self.pop_mapping(pattern_edge, target_edge)
-                }
-            }
-        }
-        None
-    }
-
     pub fn bitset_from_current_mapping(&self) -> BitSet {
         BitSet::from_iter(
             self.target_map
@@ -228,14 +218,43 @@ where
     }
 }
 
-pub fn noninduced_subgraph_isomorphism_iter<N, E>(
-    pattern: Graph<N, E>,
-    target: Graph<N, E>,
+pub fn noninduced_subgraph_isomorphism_iter<N, E, Ix>(
+    pattern: &Graph<N, E, Undirected, Ix>,
+    target: &Graph<N, E, Undirected, Ix>,
 ) -> impl Iterator<Item = BitSet>
 where
     N: PartialEq,
     E: PartialEq,
+    Ix: IndexType,
 {
     let mut state = VF3State::new(pattern, target);
     state.all_subgraphs().into_iter()
+}
+
+
+mod tests {
+    use super::*;
+
+    #[test]
+    fn p3_is_subgraph_of_c4() {
+        let mut p3 = Graph::<(), (), Undirected>::new_undirected();
+        let n0 = p3.add_node(());
+        let n1 = p3.add_node(());
+        let n2 = p3.add_node(());
+        p3.add_edge(n0, n1, ());
+        p3.add_edge(n1, n2, ());
+
+        let mut c4 = Graph::<(), (), Undirected>::new_undirected();
+        let n0 = c4.add_node(());
+        let n1 = c4.add_node(());
+        let n2 = c4.add_node(());
+        let n3 = c4.add_node(());
+        c4.add_edge(n0, n1, ());
+        c4.add_edge(n1, n2, ());
+        c4.add_edge(n2, n3, ());
+        c4.add_edge(n3, n0, ());
+
+        let count = noninduced_subgraph_isomorphism_iter(&p3, &c4).count();
+        assert_eq!(count, 4)
+    }
 }
