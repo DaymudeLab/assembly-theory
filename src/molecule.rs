@@ -14,7 +14,6 @@ use petgraph::{
     algo::{is_isomorphic, is_isomorphic_subgraph},
     dot::Dot,
     graph::{EdgeIndex, Graph, NodeIndex},
-    visit::{EdgeCount, NodeCount},
     Undirected,
 };
 
@@ -436,11 +435,13 @@ impl Molecule {
             let mut h = self.graph().clone();
             h.retain_edges(|_, e| subgraph.contains(e.index()));
 
-            let mut h_prime = self.graph.clone();
-            h_prime.retain_edges(|_, e| !subgraph.contains(e.index()));
-            h_prime.retain_nodes(|g, n| g.neighbors(n).count() > 0);
-
-            for cert in noninduced_subgraph_isomorphism_iter(&h, &h_prime) {
+            let h_prime = self.graph().map(
+                |_, n| *n,
+                |i, e| (!subgraph.contains(i.index())).then_some(*e),
+            );
+            for cert in noninduced_subgraph_isomorphism_iter(&h, &h_prime, |e1, e2| {
+                e2.is_some_and(|e| e == *e1)
+            }) {
                 matches.insert(if subgraph < cert {
                     (subgraph.clone(), cert)
                 } else {
