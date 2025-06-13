@@ -191,10 +191,10 @@ where
     })
 }
 
-pub fn edge_neighbors<'a, N, E, Ty, Ix>(
-    g: &'a Graph<N, E, Ty, Ix>,
+pub fn edge_neighbors<N, E, Ty, Ix>(
+    g: &Graph<N, E, Ty, Ix>,
     e: EdgeIndex<Ix>,
-) -> impl Iterator<Item = EdgeIndex<Ix>> + 'a
+) -> impl Iterator<Item = EdgeIndex<Ix>> + '_
 where
     Ty: EdgeType,
     Ix: IndexType,
@@ -216,12 +216,8 @@ where
     Ty: EdgeType,
     Ix: IndexType,
 {
-    let Some((lsrc, ldst)) = g.edge_endpoints(left) else {
-        return None;
-    };
-    let Some((rsrc, rdst)) = g.edge_endpoints(right) else {
-        return None;
-    };
+    let (lsrc, ldst) = g.edge_endpoints(left)?;
+    let (rsrc, rdst) = g.edge_endpoints(right)?;
 
     if lsrc == rsrc || lsrc == rdst {
         Some(g.node_weight(lsrc)?)
