@@ -207,6 +207,31 @@ where
         .filter_map(move |w| w.filter(|i| e != *i))
 }
 
+pub fn node_weight_between<N, E, Ty, Ix>(
+    g: &Graph<N, E, Ty, Ix>,
+    left: EdgeIndex<Ix>,
+    right: EdgeIndex<Ix>,
+) -> Option<&N>
+where
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    let Some((lsrc, ldst)) = g.edge_endpoints(left) else {
+        return None;
+    };
+    let Some((rsrc, rdst)) = g.edge_endpoints(right) else {
+        return None;
+    };
+
+    if lsrc == rsrc || lsrc == rdst {
+        Some(g.node_weight(lsrc)?)
+    } else if ldst == rsrc || ldst == rdst {
+        Some(g.node_weight(ldst)?)
+    } else {
+        None
+    }
+}
+
 pub fn node_between<N, E, Ty, Ix>(
     g: &Graph<N, E, Ty, Ix>,
     left: EdgeIndex<Ix>,
