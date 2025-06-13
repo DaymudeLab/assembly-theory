@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use bit_set::BitSet;
 use petgraph::{
     graph::{EdgeIndex, Graph, IndexType},
@@ -46,24 +48,22 @@ where
 
     fn core_rule(&self, pattern_edge: EdgeIndex<Ix>, target_edge: EdgeIndex<Ix>) -> bool {
         for neighbor in edge_neighbors(&self.pattern, pattern_edge) {
-            let Some(neighbor_in_target) = self.pattern_map[neighbor.index()] else {
-                return false;
-            };
-            if node_between(&self.pattern, pattern_edge, neighbor)
-                != node_between(&self.target, target_edge, neighbor_in_target)
-            {
-                return false;
+            if let Some(neighbor_in_target) = self.pattern_map[neighbor.index()] {
+                if node_between(&self.pattern, pattern_edge, neighbor)
+                    != node_between(&self.target, target_edge, neighbor_in_target)
+                {
+                    return false;
+                }
             }
         }
 
-        for neighbor in edge_neighbors(&self.target, pattern_edge) {
-            let Some(neighbor_in_pattern) = self.pattern_map[neighbor.index()] else {
-                return false;
-            };
-            if node_between(&self.target, pattern_edge, neighbor)
-                != node_between(&self.pattern, pattern_edge, neighbor_in_pattern)
-            {
-                return false;
+        for neighbor in edge_neighbors(&self.target, target_edge) {
+            if let Some(neighbor_in_pattern) = self.target_map[neighbor.index()] {
+                if node_between(&self.target, target_edge, neighbor)
+                    != node_between(&self.pattern, pattern_edge, neighbor_in_pattern)
+                {
+                    return false;
+                }
             }
         }
 
@@ -201,15 +201,15 @@ where
         )
     }
 
-    pub fn all_subgraphs(&mut self) -> Vec<BitSet> {
-        let mut isomorphisms = vec![];
+    pub fn all_subgraphs(&mut self) -> HashSet<BitSet> {
+        let mut isomorphisms = HashSet::new();
         if self.depth == self.pattern.edge_count() {
-            isomorphisms.push(self.bitset_from_current_mapping());
+            isomorphisms.insert(self.bitset_from_current_mapping());
         } else {
             for (pattern_edge, target_edge) in self.generate_pairs() {
                 if self.is_consistent(pattern_edge, target_edge) {
                     self.push_mapping(pattern_edge, target_edge);
-                    isomorphisms.append(&mut self.all_subgraphs());
+                    isomorphisms.extend(&mut self.all_subgraphs().into_iter());
                     self.pop_mapping(pattern_edge, target_edge)
                 }
             }
@@ -231,8 +231,8 @@ where
     state.all_subgraphs().into_iter()
 }
 
-
 mod tests {
+    #![allow(unused_imports)]
     use super::*;
 
     #[test]
@@ -254,7 +254,9 @@ mod tests {
         c4.add_edge(n2, n3, ());
         c4.add_edge(n3, n0, ());
 
-        let count = noninduced_subgraph_isomorphism_iter(&p3, &c4).count();
+        let count = noninduced_subgraph_isomorphism_iter(&p3, &c4)
+            .inspect(|g| println!("{g:?}"))
+            .count();
         assert_eq!(count, 4)
     }
 }
