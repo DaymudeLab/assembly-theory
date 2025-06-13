@@ -14,6 +14,7 @@ use petgraph::{
     algo::{is_isomorphic, is_isomorphic_subgraph},
     dot::Dot,
     graph::{EdgeIndex, Graph, NodeIndex},
+    visit::{EdgeCount, NodeCount},
     Undirected,
 };
 
@@ -506,40 +507,8 @@ impl Molecule {
         Self { graph: g }
     }
 
-    /// Returns isolated single bond as a molecule.
-    pub fn single_bond() -> Self {
-        let mut g = Graph::default();
-        let u = g.add_node(Atom {
-            capacity: 4,
-            element: Element::Carbon,
-        });
-        let v = g.add_node(Atom {
-            capacity: 4,
-            element: Element::Carbon,
-        });
-        g.add_edge(u, v, Bond::Single);
-        Self { graph: g }
-    }
-
-    /// Returns isolated double bond as a molecule.
-    pub fn double_bond() -> Self {
-        let mut g = Graph::default();
-        let u = g.add_node(Atom {
-            capacity: 4,
-            element: Element::Carbon,
-        });
-        let v = g.add_node(Atom {
-            capacity: 4,
-            element: Element::Carbon,
-        });
-        g.add_edge(u, v, Bond::Double);
-        Self { graph: g }
-    }
-
-    /// Return true if and only if self is a single or double bond
     pub fn is_basic_unit(&self) -> bool {
-        self.is_isomorphic_to(&Molecule::single_bond())
-            || self.is_isomorphic_to(&Molecule::double_bond())
+        self.graph.edge_count() == 1 && self.graph.node_count() == 2
     }
 
     /// Return the graph of self as an MGraph
