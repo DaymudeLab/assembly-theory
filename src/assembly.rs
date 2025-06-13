@@ -16,11 +16,13 @@
 //! # }
 //! ```
 use std::{
-    char::UNICODE_VERSION, collections::BTreeSet, sync::{
+    char::UNICODE_VERSION, collections::BTreeSet, ops::BitAnd, sync::{
         atomic::{AtomicUsize, Ordering::Relaxed},
         Arc,
     }
 };
+
+use std::time::Instant;
 
 use bit_set::BitSet;
 use petgraph::{graph::NodeIndex, Graph, Undirected};
@@ -54,6 +56,66 @@ pub enum Bound {
     /// 'VecChainSmallFrags' bounds using information on the number of fragments of size 2 in the
     /// molecule
     VecChainSmallFrags,
+}
+
+#[derive(Debug)]
+struct CGraph {
+    graph: Vec<BitSet>,
+    weights: Vec<usize>,
+    matches: Vec<(BitSet, BitSet)>,
+}
+
+impl CGraph {
+    pub fn new(mut init_matches: Vec<(BitSet, BitSet)>) -> Self{
+        let size = init_matches.len();
+        init_matches.sort_by(|e1, e2| e2.0.len().cmp(&e1.0.len()));
+
+        // Initialize weights and empty graph
+        let mut init_graph: Vec<BitSet> = Vec::with_capacity(size);
+        let mut init_weights: Vec<usize> = Vec::with_capacity(size);
+        for m in init_matches.iter() {
+            init_graph.push(BitSet::with_capacity(size));
+            init_weights.push(m.0.len());
+        }
+
+        // Populate graph
+        for (idx1, (h1, h2)) in init_matches.iter().enumerate() {
+            for (idx2, (h1p, h2p)) in init_matches[idx1 + 1..].iter().enumerate() {
+                let idx2 = idx2 + idx1 + 1;
+
+                let compatible = {
+                    h2.is_disjoint(h2p) && 
+                    (h1.is_disjoint(h1p) || h1.is_subset(h1p) || h1.is_superset(h1p)) &&
+                    (h1p.is_disjoint(h2) || h1p.is_superset(h2)) &&
+                    (h1.is_disjoint(h2p) || h1.is_superset(h2p))
+                };
+
+                if compatible {
+                    init_graph[idx1].insert(idx2);
+                    init_graph[idx2].insert(idx1);
+                }
+            }
+        }
+
+        Self {
+            graph: init_graph,
+            weights: init_weights,
+            matches: init_matches,
+        }
+    }
+
+    // Should probably return Option<> instead
+    pub fn adjacent_to(&self, v: usize) -> &BitSet {
+        &self.graph[v]
+    }
+
+    pub fn remaining_weight_bound(&self, subgraph: &BitSet) -> usize {
+        subgraph.iter().map(|i| self.weights[i]).sum()
+    }
+
+    pub fn get_match(&self, v: usize) -> &(BitSet, BitSet) {
+        &self.matches[v]
+    }
 }
 
 pub fn naive_assembly_depth(mol: &Molecule) -> u32 {
@@ -154,6 +216,7 @@ fn recurse_index_search(
     mut best: usize,
     bounds: &[Bound],
     states_searched: &mut usize,
+    last_removed: i32
 ) -> usize {
     let mut cx = ix;
 
@@ -176,6 +239,8 @@ fn recurse_index_search(
 
     // Search for duplicatable fragment
     for (i, (h1, h2)) in matches.iter().enumerate() {
+        let i = i as i32;
+        if i <= last_removed {continue;}
         let mut fractures = fragments.to_owned();
         let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
         let f2 = fragments.iter().enumerate().find(|(_, c)| h2.is_subset(c));
@@ -216,13 +281,14 @@ fn recurse_index_search(
 
         cx = cx.min(recurse_index_search(
             mol,
-            &matches[i + 1..],
+            &matches,
             &fractures,
             ix - h1.len() + 1,
             largest_remove,
             best,
             bounds,
             states_searched,
+            i
         ));
         best = best.min(cx);
     }
@@ -230,47 +296,27 @@ fn recurse_index_search(
     cx
 }
 
-fn recurse_clique_index_search(mol: &Molecule,
-    matches: &Vec<(BitSet, BitSet)>,
+
+fn recurse_clique_index_search_with_start(mol: &Molecule,
     fragments: &[BitSet],
     ix: usize,
     largest_remove: usize,
     mut best: usize,
     bounds: &[Bound],
     states_searched: &mut usize,
-    subgraph: BitSet,
-    nodes: &Vec<NodeIndex>,
-    matches_graph: &Graph<(usize, usize), (), Undirected>,
-) -> usize {
+    mut subgraph: BitSet,
+    matches_graph: &CGraph,
+    depth: usize
+) -> usize  {
     let mut cx = ix;
 
-    *states_searched += 1;
-
-    // Branch and Bound
-    for bound_type in bounds {
-        let exceeds = match bound_type {
-            Bound::Log => ix - log_bound(fragments) >= best,
-            Bound::IntChain => ix - addition_bound(fragments, largest_remove) >= best,
-            Bound::VecChainSimple => ix - vec_bound_simple(fragments, largest_remove, mol) >= best,
-            Bound::VecChainSmallFrags => {
-                ix - vec_bound_small_frags(fragments, largest_remove, mol) >= best
-            }
-        };
-        if exceeds {
-            return ix;
-        }
-        if subgraph.len() <= ix - best {
-            let sum: usize = subgraph.iter().map(|rank| matches_graph.node_weight(nodes[rank]).unwrap().0).sum();
-            if ix as i32 - sum as i32 >= best as i32 {
-                return ix;
-            }
-        }
-    }
-
     // Search for duplicatable fragment
-    for x in subgraph.iter() {
-        let v = nodes[x];
-        let (h1, h2) = &matches[x];
+    for v in subgraph.clone().iter() {
+        if !subgraph.contains(v) {
+            continue;
+        }
+
+        let (h1, h2) = matches_graph.get_match(v);
 
         let mut fractures = fragments.to_owned();
         let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
@@ -311,20 +357,11 @@ fn recurse_clique_index_search(mol: &Molecule,
         fractures.push(h1.clone());
 
         let mut subgraph_clone = subgraph.clone();
-        let mut neighbors = BitSet::new();
-        let weight_v = matches_graph.node_weight(v).unwrap().1;
-        for u in matches_graph.neighbors(v) {
-            let weight_u = matches_graph.node_weight(u).unwrap().1;
-            if weight_u >= weight_v {
-                neighbors.insert(matches_graph.node_weight(u).unwrap().1);
-            }
-        }
+        let neighbors = matches_graph.adjacent_to(v);
         subgraph_clone.intersect_with(&neighbors);
-        //subgraph_clone = kernelize(&matches_graph, subgraph_clone, nodes);
 
         cx = cx.min(recurse_clique_index_search(
             mol,
-            matches,
             &fractures,
             ix - h1.len() + 1,
             largest_remove,
@@ -332,51 +369,215 @@ fn recurse_clique_index_search(mol: &Molecule,
             bounds,
             states_searched,
             subgraph_clone,
-            nodes,
             matches_graph,
+            depth + 1,
         ));
-        best = best.min(cx);
+        if cx < best {
+            best = cx;
+            // kernelize
+            for v in subgraph.clone().iter() {
+                let mut neighbor_sum = 0;
+                for u in matches_graph.adjacent_to(v) {
+                    if subgraph.contains(u) {
+                        neighbor_sum += matches_graph.weights[u];
+                    }
+                }
+
+                if ix >= best + neighbor_sum {
+                    subgraph.remove(v);
+                }
+            }
+        }
+
+        subgraph.remove(v);
     }
 
     cx
 }
 
-fn kernelize(g: &Graph<(usize, usize), (), Undirected>, mut subgraph: BitSet, nodes: &Vec<NodeIndex>) -> BitSet {
+
+fn recurse_clique_index_search(mol: &Molecule,
+    fragments: &[BitSet],
+    ix: usize,
+    largest_remove: usize,
+    mut best: usize,
+    bounds: &[Bound],
+    states_searched: &mut usize,
+    subgraph: BitSet,
+    matches_graph: &CGraph,
+    depth: usize,
+) -> usize {
+    let mut cx = ix;
+
+    *states_searched += 1;
+
+    // Branch and Bound
+    for bound_type in bounds {
+        let exceeds = match bound_type {
+            Bound::Log => ix - log_bound(fragments) >= best,
+            Bound::IntChain => ix - addition_bound(fragments, largest_remove) >= best,
+            Bound::VecChainSimple => ix - vec_bound_simple(fragments, largest_remove, mol) >= best,
+            Bound::VecChainSmallFrags => {
+                ix - vec_bound_small_frags(fragments, largest_remove, mol) >= best
+            }
+        };
+        if exceeds {
+            return ix;
+        }
+        if subgraph.iter().count() <= ix - best {
+            if ix >= best + matches_graph.remaining_weight_bound(&subgraph) {
+                return ix;
+            }
+        }
+    }
+
+    let mut to_remove = BitSet::with_capacity(subgraph.capacity());
+
+    // Search for duplicatable fragment
+    for v in subgraph.iter() {
+        let (h1, h2) = matches_graph.get_match(v);
+
+        let mut fractures = fragments.to_owned();
+        let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
+        let f2 = fragments.iter().enumerate().find(|(_, c)| h2.is_subset(c));
+
+        let largest_remove = h1.len();
+
+        let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) else {
+            continue;
+        };
+
+        // All of these clones are on bitsets and cheap enough
+        if i1 == i2 {
+            let mut union = h1.clone();
+            union.union_with(h2);
+            let mut difference = f1.clone();
+            difference.difference_with(&union);
+            let c = connected_components_under_edges(mol.graph(), &difference);
+            fractures.extend(c);
+            fractures.swap_remove(i1);
+        } else {
+            let mut f1r = f1.clone();
+            f1r.difference_with(h1);
+            let mut f2r = f2.clone();
+            f2r.difference_with(h2);
+
+            let c1 = connected_components_under_edges(mol.graph(), &f1r);
+            let c2 = connected_components_under_edges(mol.graph(), &f2r);
+
+            fractures.extend(c1);
+            fractures.extend(c2);
+
+            fractures.swap_remove(i1.max(i2));
+            fractures.swap_remove(i1.min(i2));
+        }
+
+        fractures.retain(|i| i.len() > 1);
+        fractures.push(h1.clone());
+
+        let mut subgraph_clone = subgraph.clone();
+        let neighbors = matches_graph.adjacent_to(v).clone();
+        subgraph_clone.intersect_with(&neighbors);
+        subgraph_clone.difference_with(&to_remove);
+        //print!("Depth: {} ", depth);
+        if depth == 1 {
+            subgraph_clone = kernelize(matches_graph, subgraph_clone);
+        }
+
+        cx = cx.min(recurse_clique_index_search(
+            mol,
+            &fractures,
+            ix - h1.len() + 1,
+            largest_remove,
+            best,
+            bounds,
+            states_searched,
+            subgraph_clone,
+            matches_graph,
+            depth + 1,
+        ));
+        best = best.min(cx);
+
+        to_remove.insert(v);
+    }
+
+    cx
+}
+
+pub fn clique_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize) {
+    // Graph Initialization
+    let matches: Vec<(BitSet, BitSet)> = mol.matches().collect();
+    let num_matches = matches.len();
+    let matches_graph = CGraph::new(matches);
+    let mut subgraph = BitSet::with_capacity(num_matches);
+    for i in 0..num_matches {
+        subgraph.insert(i);
+    }
+
+    // Kernelization
+    //let start = Instant::now();
+    subgraph = kernelize(&matches_graph, subgraph);
+    //let dur = start.elapsed();
+    //println!("Kernel Time: {:?}", dur);
+
+    // Search
+    let mut total_search = 0;
+    let mut init = BitSet::new();
+    init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
+    let edge_count = mol.graph().edge_count();
+
+    //let start = Instant::now();
+
+    let index = recurse_clique_index_search(
+        mol, 
+        &[init], 
+        edge_count - 1, 
+        edge_count, 
+        edge_count - 1,
+        bounds,
+        &mut total_search,
+        subgraph.clone(),
+        &matches_graph,
+        1);
+
+    //let dur = start.elapsed();
+    //println!("Search Time: {:?}", dur);
+
+    (index as u32, num_matches as u32, total_search)
+}
+
+fn kernelize(g: &CGraph, mut subgraph: BitSet) -> BitSet {
     //let mut count = 0;
 
     let subgraph_copy = subgraph.clone();
-    for v_rank in subgraph_copy.iter() {
-        if !subgraph.contains(v_rank) {
+    for v in subgraph_copy.iter() {
+        if !subgraph.contains(v) {
             continue;
         }
-        let v_index = nodes[v_rank];
-        let v_val = g.node_weight(v_index).unwrap().0;
-        let neighbors_v: BTreeSet<usize> = g.neighbors(v_index)
-            .map(|x| g.node_weight(x).unwrap().1)
-            .filter(|x| subgraph.contains(*x))
-            .collect();
+        
+        let v_val = g.weights[v];
+        let mut neighbors_v= g.adjacent_to(v).clone();
+        neighbors_v.intersect_with(&subgraph);
 
-        for u_rank in subgraph_copy.iter().filter(|x| *x > v_rank) {
-            if !subgraph.contains(u_rank) {
+        for u in subgraph_copy.iter().filter(|x| x > &v) {
+            if !subgraph.contains(u) {
                 continue;
             }
-            let u_index = nodes[u_rank];
-            let u_val = g.node_weight(u_index).unwrap().0;
-            let neighbors_u: BTreeSet<usize> = g.neighbors(u_index)
-                .map(|x| g.node_weight(x).unwrap().1)
-                .filter(|x| subgraph.contains(*x))
-                .collect();
 
-            if neighbors_u.is_subset(&neighbors_v) && u_val <= v_val {
+            let u_val = g.weights[u];
+            let mut neighbors_u = g.adjacent_to(u).clone();
+            neighbors_u.intersect_with(&subgraph);
+
+            if u_val <= v_val && neighbors_u.is_subset(&neighbors_v) {
                 //count += 1;
 
-                subgraph.remove(u_rank);
+                subgraph.remove(u);
 
             }
-            else if neighbors_v.is_subset(&neighbors_u) && v_val <= u_val {
+            else if v_val <= u_val && neighbors_v.is_subset(&neighbors_u) {
                 //count += 1;
 
-                subgraph.remove(v_rank);
+                subgraph.remove(v);
                 break;
             }
         }
@@ -384,69 +585,6 @@ fn kernelize(g: &Graph<(usize, usize), (), Undirected>, mut subgraph: BitSet, no
 
     //println!("Reduce count: {}", count);
     subgraph
-}
-
-pub fn clique_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize) {
-    let mut matches: Vec<(BitSet, BitSet)> = mol.matches().collect();
-    matches.sort_by(|e1, e2| e2.0.len().cmp(&e1.0.len()));
-
-    let mut matches_graph = Graph::<(usize, usize), _, Undirected>::with_capacity(matches.len(), matches.len());
-    let mut nodes: Vec<NodeIndex> = Vec::new();
-
-    let mut subgraph = BitSet::new();
-
-    // Create vertices of matches_graph
-    for (idx, (h1, _)) in matches.iter().enumerate() {
-        let v = matches_graph.add_node((h1.len() - 1, idx));
-        nodes.push(v);
-        subgraph.insert(idx);
-    }
-
-    // Create edges of matches_graph
-    // two matches are connected if they are compatible with each other
-    for (idx1, (h1, h2)) in matches.iter().enumerate() {
-        for (idx2, (h1p, h2p)) in matches[idx1 + 1..].iter().enumerate() {
-            let compatible = {
-                h2.is_disjoint(h2p) && 
-                (h1.is_disjoint(h1p) || h1.is_subset(h1p) || h1.is_superset(h1p)) &&
-                (h1p.is_disjoint(h2) || h1p.is_superset(h2)) &&
-                (h1.is_disjoint(h2p) || h1.is_superset(h2p))
-            };
-
-            if compatible {
-                matches_graph.add_edge(nodes[idx1], nodes[idx1 + idx2 + 1], ());
-            }
-        }
-    }
-
-    let mut init = BitSet::new();
-    init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
-    let edge_count = mol.graph().edge_count();
-
-    subgraph = kernelize(&matches_graph, subgraph, &nodes);
-
-    let mut total_search = 0;
-
-    use std::time::Instant;
-    let start = Instant::now();
-
-    let index = recurse_clique_index_search(
-        mol, 
-        &matches, 
-        &[init], 
-        edge_count - 1, 
-        edge_count, 
-        edge_count - 1,
-        bounds,
-        &mut total_search,
-        subgraph, 
-        &nodes, 
-        &matches_graph);
-
-    let dur = start.elapsed();
-    println!("Time: {:?}", dur);
-
-    (index as u32, matches.len() as u32, total_search)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -609,6 +747,7 @@ pub fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize) {
             edge_count - 1,
             bounds,
             &mut total_search,
+            -1
         );
         (index as u32, total_search)
     };
@@ -652,8 +791,7 @@ pub fn serial_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize
     let edge_count = mol.graph().edge_count();
     let mut total_search = 0;
 
-    use std::time::Instant;
-    let start = Instant::now();
+    //let start = Instant::now();
 
     let index = recurse_index_search(
         mol,
@@ -664,10 +802,11 @@ pub fn serial_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize
         edge_count - 1,
         bounds,
         &mut total_search,
+        -1
     );
 
-    let dur = start.elapsed();
-    println!("Time: {:?}", dur);
+    //let dur = start.elapsed();
+    //println!("Time: {:?}", dur);
 
     (index as u32, matches.len() as u32, total_search)
 }
