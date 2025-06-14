@@ -11,16 +11,16 @@ use std::{
 
 use bit_set::BitSet;
 use petgraph::{
-    algo::{
-        is_isomorphic, is_isomorphic_matching, is_isomorphic_subgraph, subgraph_isomorphisms_iter,
-    },
+    algo::{is_isomorphic, is_isomorphic_subgraph},
     dot::Dot,
     graph::{EdgeIndex, Graph, NodeIndex},
-    unionfind::UnionFind,
     Undirected,
 };
 
-use crate::utils::{edge_induced_subgraph, is_subset_connected};
+use crate::{
+    utils::{edge_induced_subgraph, is_subset_connected},
+    vf3::noninduced_subgraph_isomorphism_iter,
+};
 
 pub(crate) type Index = u32;
 pub(crate) type MGraph = Graph<Atom, Bond, Undirected, Index>;
@@ -299,7 +299,7 @@ impl Molecule {
         solutions.into_iter().filter(|s| !s.is_empty())
     }
 
-    pub fn enumerate_noninduced_subgraphs(&self) -> impl Iterator<Item = EdgeSet> {
+    pub fn enumerate_noninduced_subgraphs(&self) -> impl Iterator<Item = BitSet> {
         let mut solutions = HashSet::new();
         let remainder = BTreeSet::from_iter(self.graph.edge_indices());
         self.generate_connected_noninduced_subgraphs(
@@ -308,7 +308,9 @@ impl Molecule {
             BTreeSet::new(),
             &mut solutions,
         );
-        solutions.into_iter().filter(|s| !s.is_empty())
+        solutions.into_iter().filter_map(|s| {
+            (!s.is_empty()).then_some(BitSet::from_iter(s.iter().map(|i| i.index())))
+        })
     }
 
     /// Return `true` if self is not formed in a valid way
@@ -429,62 +431,22 @@ impl Molecule {
     /// non-overlapping pairs of isomorphic subgraphs
     pub fn matches(&self) -> impl Iterator<Item = (BitSet, BitSet)> {
         let mut matches = BTreeSet::new();
-        let subgraph_edges = self.enumerate_noninduced_subgraphs().collect::<Vec<_>>();
+        for subgraph in self.enumerate_noninduced_subgraphs() {
+            let mut h = self.graph().clone();
+            h.retain_edges(|_, e| subgraph.contains(e.index()));
 
-        let subgraphs = subgraph_edges
-            .iter()
-            .map(|edges| {
-                let mut subgraph = self.graph.clone();
-                subgraph.retain_edges(|_, e| edges.contains(&e));
-                subgraph.retain_nodes(|g, n| g.neighbors(n).next().is_some());
-                subgraph
-            })
-            .collect::<Vec<_>>();
-
-        let subgraph_bitsets = subgraph_edges
-            .iter()
-            .map(|edges| {
-                let mut bits = BitSet::with_capacity(edges.len());
-                bits.extend(edges.iter().map(|e| e.index()));
-                bits
-            })
-            .collect::<Vec<_>>();
-
-        let mut uf = UnionFind::<usize>::new(subgraphs.len());
-
-        fn add_to_matches(
-            matches: &mut BTreeSet<(BitSet, BitSet)>,
-            hbits: &BitSet,
-            gbits: &BitSet,
-        ) {
-            matches.insert(if hbits < gbits {
-                (hbits.clone(), gbits.clone())
-            } else {
-                (gbits.clone(), hbits.clone())
-            });
-        }
-
-        for (i, (h, hbits)) in subgraphs.iter().zip(subgraph_bitsets.iter()).enumerate() {
-            for (j, (g, gbits)) in subgraphs.iter().zip(subgraph_bitsets.iter()).enumerate() {
-                // Skip overlapping subgraphs
-                if i == j || hbits.intersection(gbits).next().is_some() {
-                    continue;
-                };
-
-                // Skip subgraphs already known to be isomorphic; add to matches
-                if uf.find(i) == uf.find(j) {
-                    add_to_matches(&mut matches, hbits, gbits);
-                    continue;
-                }
-
-                // Skip nonisomorphic subgraphs
-                if !is_isomorphic_matching(&h, &g, |v0, v1| *v0 == *v1, |e0, e1| *e0 == *e1) {
-                    continue;
-                }
-
-                // Record isomorphism
-                uf.union(i, j);
-                add_to_matches(&mut matches, hbits, gbits);
+            let h_prime = self.graph().map(
+                |_, n| *n,
+                |i, e| (!subgraph.contains(i.index())).then_some(*e),
+            );
+            for cert in noninduced_subgraph_isomorphism_iter(&h, &h_prime, |e1, e2| {
+                e2.is_some_and(|e| e == *e1)
+            }) {
+                matches.insert(if subgraph < cert {
+                    (subgraph.clone(), cert)
+                } else {
+                    (cert, subgraph.clone())
+                });
             }
         }
         matches.into_iter()
@@ -546,40 +508,8 @@ impl Molecule {
         Self { graph: g }
     }
 
-    /// Returns isolated single bond as a molecule.
-    pub fn single_bond() -> Self {
-        let mut g = Graph::default();
-        let u = g.add_node(Atom {
-            capacity: 4,
-            element: Element::Carbon,
-        });
-        let v = g.add_node(Atom {
-            capacity: 4,
-            element: Element::Carbon,
-        });
-        g.add_edge(u, v, Bond::Single);
-        Self { graph: g }
-    }
-
-    /// Returns isolated double bond as a molecule.
-    pub fn double_bond() -> Self {
-        let mut g = Graph::default();
-        let u = g.add_node(Atom {
-            capacity: 4,
-            element: Element::Carbon,
-        });
-        let v = g.add_node(Atom {
-            capacity: 4,
-            element: Element::Carbon,
-        });
-        g.add_edge(u, v, Bond::Double);
-        Self { graph: g }
-    }
-
-    /// Return true if and only if self is a single or double bond
     pub fn is_basic_unit(&self) -> bool {
-        self.is_isomorphic_to(&Molecule::single_bond())
-            || self.is_isomorphic_to(&Molecule::double_bond())
+        self.graph.edge_count() == 1 && self.graph.node_count() == 2
     }
 
     /// Return the graph of self as an MGraph
@@ -591,23 +521,6 @@ impl Molecule {
     pub fn info(&self) -> String {
         let dot = Dot::new(&self.graph);
         format!("{:?}", dot)
-    }
-}
-
-// Performance improvement would likely happen if we switch from vf2 to vf3;
-// this is a TODO when there is more time
-/// Return vector containing isomorphic subgraphs if pattern is isomorphic to
-/// a subgraph of target
-pub fn isomorphic_subgraphs_of(pattern: &MGraph, target: &MGraph) -> Vec<Vec<NodeIndex<Index>>> {
-    if let Some(iter) =
-        subgraph_isomorphisms_iter(&pattern, &target, &mut |n0, n1| n1 == n0, &mut |e0, e1| {
-            e1 == e0
-        })
-    {
-        iter.map(|v| v.into_iter().map(NodeIndex::new).collect())
-            .collect()
-    } else {
-        Vec::new()
     }
 }
 

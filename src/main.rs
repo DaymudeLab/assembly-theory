@@ -67,9 +67,9 @@ fn index_message(mol: &Molecule, bounds: &[Bound], verbose: bool, serial: bool) 
     };
     if verbose {
         let mut message = String::new();
-        message.push_str(&format!("Assembly Index: {index}\n"));
+        message.push_str(&format!("Assembly index: {index}\n"));
         message.push_str(&format!("Duplicate subgraph pairs: {duplicates}\n"));
-        message.push_str(&format!("Search Space: {space}"));
+        message.push_str(&format!("Search space: {space}"));
         message
     } else {
         index.to_string()
