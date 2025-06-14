@@ -190,3 +190,59 @@ where
         s.contains(&src) || s.contains(&dst)
     })
 }
+
+pub fn edge_neighbors<N, E, Ty, Ix>(
+    g: &Graph<N, E, Ty, Ix>,
+    e: EdgeIndex<Ix>,
+) -> impl Iterator<Item = EdgeIndex<Ix>> + '_
+where
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    let (src, dst) = g.edge_endpoints(e).unwrap();
+    let src_neighbors = g.neighbors(src).map(move |n| g.find_edge(src, n));
+    let dst_neighbors = g.neighbors(dst).map(move |n| g.find_edge(dst, n));
+    src_neighbors
+        .chain(dst_neighbors)
+        .filter_map(move |w| w.filter(|i| e != *i))
+}
+
+pub fn node_weight_between<N, E, Ty, Ix>(
+    g: &Graph<N, E, Ty, Ix>,
+    left: EdgeIndex<Ix>,
+    right: EdgeIndex<Ix>,
+) -> Option<&N>
+where
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    let (lsrc, ldst) = g.edge_endpoints(left)?;
+    let (rsrc, rdst) = g.edge_endpoints(right)?;
+
+    if lsrc == rsrc || lsrc == rdst {
+        Some(g.node_weight(lsrc)?)
+    } else if ldst == rsrc || ldst == rdst {
+        Some(g.node_weight(ldst)?)
+    } else {
+        None
+    }
+}
+
+pub fn node_between<N, E, Ty, Ix>(
+    g: &Graph<N, E, Ty, Ix>,
+    left: EdgeIndex<Ix>,
+    right: EdgeIndex<Ix>,
+) -> bool
+where
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    let Some((lsrc, ldst)) = g.edge_endpoints(left) else {
+        return false;
+    };
+    let Some((rsrc, rdst)) = g.edge_endpoints(right) else {
+        return false;
+    };
+
+    lsrc == rsrc || lsrc == rdst || ldst == rsrc || ldst == rdst
+}
