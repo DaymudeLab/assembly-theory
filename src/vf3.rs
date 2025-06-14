@@ -117,7 +117,8 @@ where
         let target_src = self.target.node_weight(target_src);
         let target_dst = self.target.node_weight(target_dst);
 
-        let node_match = pattern_src == target_src && pattern_dst == target_dst;
+        let node_match = (pattern_src == target_src && pattern_dst == target_dst)
+            || (pattern_src == target_dst && pattern_dst == target_src);
         edge_match && node_match
     }
 
