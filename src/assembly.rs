@@ -63,6 +63,7 @@ struct CGraph {
     graph: Vec<BitSet>,
     weights: Vec<usize>,
     matches: Vec<(BitSet, BitSet)>,
+    colors: Option<Vec<Vec<usize>>>,
 }
 
 impl CGraph {
@@ -101,6 +102,7 @@ impl CGraph {
             graph: init_graph,
             weights: init_weights,
             matches: init_matches,
+            colors: None,
         }
     }
 
@@ -115,6 +117,47 @@ impl CGraph {
 
     pub fn get_match(&self, v: usize) -> &(BitSet, BitSet) {
         &self.matches[v]
+    }
+
+    pub fn color_bound(&self, subgraph: &BitSet) -> usize{
+        // Greedy coloring
+        let mut colors: Vec<usize> = vec![0; self.matches.len()];
+        let mut num_colors = 0;
+        let mut largest: Vec<usize> = Vec::new();
+        
+
+        for v in (0..self.matches.len()).rev() {
+            if !subgraph.contains(v) {
+                continue;
+            }
+
+            let mut used: Vec<usize> = vec![0; num_colors + 1];
+
+            for u in subgraph.intersection(&self.graph[v]) {
+                if colors[u] != 0 {
+                    used[colors[u] - 1] = 1;
+                }
+            }
+
+            let mut k = 0;
+            while used[k] != 0 {
+                k += 1;
+            }
+
+            if k == num_colors {
+                num_colors += 1;
+                largest.push(0);
+            }
+            if self.weights[v] > largest[k] {
+                largest[k] = self.weights[v]
+            }
+
+            colors[v] = k + 1;
+        }
+
+        largest.iter().sum::<usize>()
+        //println!("{:?}", self.graph.iter().map(|x| x.len()).collect::<Vec<usize>>());
+        //println!("{:?}", colors);
     }
 }
 
@@ -424,11 +467,12 @@ fn recurse_clique_index_search(mol: &Molecule,
         if exceeds {
             return ix;
         }
-        if subgraph.iter().count() <= ix - best {
-            if ix >= best + matches_graph.remaining_weight_bound(&subgraph) {
-                return ix;
-            }
-        }
+    }
+    if ix >= best + subgraph.iter().count() && ix >= best + matches_graph.remaining_weight_bound(&subgraph) {
+        return ix;
+    }
+    if ix >= best + matches_graph.color_bound(&subgraph) {
+        return ix;
     }
 
     let mut to_remove = BitSet::with_capacity(subgraph.capacity());
