@@ -63,7 +63,6 @@ struct CGraph {
     graph: Vec<BitSet>,
     weights: Vec<usize>,
     matches: Vec<(BitSet, BitSet)>,
-    colors: Option<Vec<Vec<usize>>>,
 }
 
 impl CGraph {
@@ -76,7 +75,7 @@ impl CGraph {
         let mut init_weights: Vec<usize> = Vec::with_capacity(size);
         for m in init_matches.iter() {
             init_graph.push(BitSet::with_capacity(size));
-            init_weights.push(m.0.len());
+            init_weights.push(m.0.len() - 1);
         }
 
         // Populate graph
@@ -102,8 +101,19 @@ impl CGraph {
             graph: init_graph,
             weights: init_weights,
             matches: init_matches,
-            colors: None,
         }
+    }
+
+    pub fn len(&self) -> usize {
+        self.matches.len()
+    }
+
+    pub fn degree(&self, v: usize, subgraph: &BitSet) -> usize {
+        self.graph[v].intersection(subgraph).count()
+    }
+
+    pub fn degree_dist(&self) -> Vec<usize> {
+        (0..self.len()).map(|v| self.graph[v].iter().count()).collect()
     }
 
     // Should probably return Option<> instead
@@ -117,7 +127,7 @@ impl CGraph {
 
     pub fn get_match(&self, v: usize) -> &(BitSet, BitSet) {
         &self.matches[v]
-    }
+    }  
 
     pub fn color_bound(&self, subgraph: &BitSet) -> usize{
         // Greedy coloring
@@ -475,7 +485,7 @@ fn recurse_clique_index_search(mol: &Molecule,
         return ix;
     }
 
-    let mut to_remove = BitSet::with_capacity(subgraph.capacity());
+    let mut to_remove = BitSet::with_capacity(matches_graph.len());
 
     // Search for duplicatable fragment
     for v in subgraph.iter() {
@@ -591,9 +601,9 @@ pub fn clique_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize
 }
 
 fn kernelize(g: &CGraph, mut subgraph: BitSet) -> BitSet {
-    //let mut count = 0;
-
+    let mut count = 0;
     let subgraph_copy = subgraph.clone();
+
     for v in subgraph_copy.iter() {
         if !subgraph.contains(v) {
             continue;
@@ -613,13 +623,13 @@ fn kernelize(g: &CGraph, mut subgraph: BitSet) -> BitSet {
             neighbors_u.intersect_with(&subgraph);
 
             if u_val <= v_val && neighbors_u.is_subset(&neighbors_v) {
-                //count += 1;
+                count += 1;
 
                 subgraph.remove(u);
 
             }
             else if v_val <= u_val && neighbors_v.is_subset(&neighbors_u) {
-                //count += 1;
+                count += 1;
 
                 subgraph.remove(v);
                 break;
@@ -627,7 +637,46 @@ fn kernelize(g: &CGraph, mut subgraph: BitSet) -> BitSet {
         }
     }
 
-    //println!("Reduce count: {}", count);
+    println!("Reduce count: {}", count);
+    subgraph
+}
+
+fn kernelize_fast(g: &CGraph, mut subgraph: BitSet) -> BitSet {
+    let mut count = 0;
+    let subgraph_copy = subgraph.clone();
+
+    for v in subgraph_copy.iter() {
+        let v_val = g.weights[v];
+        let mut neighbors_v = g.adjacent_to(v).clone();
+        neighbors_v.intersect_with(&subgraph);
+
+        let Some(w) = neighbors_v.iter().next() else {
+            count += 1;
+            subgraph.remove(v);
+            continue;
+        };
+
+        for u in g.adjacent_to(w).intersection(&subgraph) {
+            if g.adjacent_to(v).contains(u) || u == v {
+                continue;
+            }
+
+            let u_val = g.weights[u];
+            if v_val > u_val {
+                continue;
+            }
+            let mut neighbors_u = g.adjacent_to(u).clone();
+            neighbors_u.intersect_with(&subgraph);
+
+            if neighbors_v.is_subset(&neighbors_u) {
+                count += 1;
+                subgraph.remove(v);
+                break;
+            }
+        }
+    }
+
+    println!("Reduce count: {}", count);
     subgraph
 }
 
