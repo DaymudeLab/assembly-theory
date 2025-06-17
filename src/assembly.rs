@@ -125,9 +125,16 @@ impl CGraph {
         (0..self.len()).map(|v| self.graph[v].iter().count()).collect()
     }
 
-    // Should probably return Option<> instead
-    pub fn adjacent_to(&self, v: usize) -> &BitSet {
-        &self.graph[v]
+    // Returns a safely mutable set of out neighbors of v in subgraph.
+    pub fn out_neighbors(&self, v: usize, subgraph: &BitSet) -> BitSet {
+        let mut neighbors = self.graph[v].clone();
+        neighbors.intersect_with(subgraph);
+        
+        neighbors
+    }
+
+    pub fn are_adjacent(&self, v: usize, u: usize) -> bool {
+        self.graph[v].contains(u)
     }
 
     pub fn remaining_weight_bound(&self, subgraph: &BitSet) -> usize {
@@ -418,9 +425,7 @@ fn recurse_clique_index_search_with_start(mol: &Molecule,
         fractures.retain(|i| i.len() > 1);
         fractures.push(h1.clone());
 
-        let mut subgraph_clone = subgraph.clone();
-        let neighbors = matches_graph.adjacent_to(v);
-        subgraph_clone.intersect_with(&neighbors);
+        let mut subgraph_clone = matches_graph.out_neighbors(v, &subgraph);
 
         cx = cx.min(recurse_clique_index_search(
             mol,
@@ -439,7 +444,7 @@ fn recurse_clique_index_search_with_start(mol: &Molecule,
             // kernelize
             for v in subgraph.clone().iter() {
                 let mut neighbor_sum = 0;
-                for u in matches_graph.adjacent_to(v) {
+                for u in matches_graph.graph[v].iter() {
                     if subgraph.contains(u) {
                         neighbor_sum += matches_graph.weights[u];
                     }
@@ -538,9 +543,7 @@ fn recurse_clique_index_search(mol: &Molecule,
         fractures.retain(|i| i.len() > 1);
         fractures.push(h1.clone());
 
-        let mut subgraph_clone = subgraph.clone();
-        let neighbors = matches_graph.adjacent_to(v).clone();
-        subgraph_clone.intersect_with(&neighbors);
+        let mut subgraph_clone = matches_graph.out_neighbors(v, &subgraph);
         subgraph_clone.difference_with(&to_remove);
         //print!("Depth: {} ", depth);
         /*if depth == 1 {
@@ -619,50 +622,8 @@ fn kernelize(g: &CGraph, mut subgraph: BitSet) -> BitSet {
     let subgraph_copy = subgraph.clone();
 
     for v in subgraph_copy.iter() {
-        if !subgraph.contains(v) {
-            continue;
-        }
-        
         let v_val = g.weights[v];
-        let mut neighbors_v= g.adjacent_to(v).clone();
-        neighbors_v.intersect_with(&subgraph);
-
-        for u in subgraph_copy.iter().filter(|x| x > &v) {
-            if !subgraph.contains(u) {
-                continue;
-            }
-
-            let u_val = g.weights[u];
-            let mut neighbors_u = g.adjacent_to(u).clone();
-            neighbors_u.intersect_with(&subgraph);
-
-            if u_val <= v_val && neighbors_u.is_subset(&neighbors_v) {
-                count += 1;
-
-                subgraph.remove(u);
-
-            }
-            else if v_val <= u_val && neighbors_v.is_subset(&neighbors_u) {
-                count += 1;
-
-                subgraph.remove(v);
-                break;
-            }
-        }
-    }
-
-    println!("Reduce count: {}", count);
-    subgraph
-}
-
-fn kernelize_fast(g: &CGraph, mut subgraph: BitSet) -> BitSet {
-    let mut count = 0;
-    let subgraph_copy = subgraph.clone();
-
-    for v in subgraph_copy.iter() {
-        let v_val = g.weights[v];
-        let mut neighbors_v = g.adjacent_to(v).clone();
-        neighbors_v.intersect_with(&subgraph);
+        let neighbors_v = g.out_neighbors(v, &subgraph);
 
         let Some(w) = neighbors_v.iter().next() else {
             count += 1;
@@ -670,8 +631,8 @@ fn kernelize_fast(g: &CGraph, mut subgraph: BitSet) -> BitSet {
             continue;
         };
 
-        for u in g.adjacent_to(w).intersection(&subgraph) {
-            if g.adjacent_to(v).contains(u) || u == v {
+        for u in subgraph.iter() {
+            if !g.are_adjacent(u, w) || !subgraph.contains(u) || g.are_adjacent(v, u) || g.are_adjacent(u, v) || u == v {
                 continue;
             }
 
@@ -679,8 +640,8 @@ fn kernelize_fast(g: &CGraph, mut subgraph: BitSet) -> BitSet {
             if v_val > u_val {
                 continue;
             }
-            let mut neighbors_u = g.adjacent_to(u).clone();
-            neighbors_u.intersect_with(&subgraph);
+
+            let neighbors_u = g.out_neighbors(u, &subgraph);
 
             if neighbors_v.is_subset(&neighbors_u) {
                 count += 1;
