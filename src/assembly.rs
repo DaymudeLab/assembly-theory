@@ -83,16 +83,25 @@ impl CGraph {
             for (idx2, (h1p, h2p)) in init_matches[idx1 + 1..].iter().enumerate() {
                 let idx2 = idx2 + idx1 + 1;
 
-                let compatible = {
-                    h2.is_disjoint(h2p) && 
-                    (h1.is_disjoint(h1p) || h1.is_subset(h1p) || h1.is_superset(h1p)) &&
-                    (h1p.is_disjoint(h2) || h1p.is_superset(h2)) &&
+                let forward_compatible = {
+                    h2.is_disjoint(h1p) && 
+                    h2.is_disjoint(h2p) &&
+                    (h1.is_disjoint(h1p) || h1.is_superset(h1p)) &&
                     (h1.is_disjoint(h2p) || h1.is_superset(h2p))
                 };
 
-                if compatible {
+                if forward_compatible {
                     init_graph[idx1].insert(idx2);
-                    init_graph[idx2].insert(idx1);
+
+                    let backward_compatible = {
+                        h2p.is_disjoint(h1) &&
+                        (h1p.is_disjoint(h1) || h1p.is_superset(h1)) &&
+                        (h1p.is_disjoint(h2) || h1p.is_superset(h2))
+                    };
+                    
+                    if backward_compatible {
+                        init_graph[idx2].insert(idx1);
+                    }
                 }
             }
         }
@@ -534,9 +543,9 @@ fn recurse_clique_index_search(mol: &Molecule,
         subgraph_clone.intersect_with(&neighbors);
         subgraph_clone.difference_with(&to_remove);
         //print!("Depth: {} ", depth);
-        if depth == 1 {
+        /*if depth == 1 {
             subgraph_clone = kernelize(matches_graph, subgraph_clone);
-        }
+        }*/
 
         cx = cx.min(recurse_clique_index_search(
             mol,
@@ -562,17 +571,22 @@ pub fn clique_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize
     // Graph Initialization
     let matches: Vec<(BitSet, BitSet)> = mol.matches().collect();
     let num_matches = matches.len();
+
+    let start = Instant::now();
     let matches_graph = CGraph::new(matches);
+    let dur = start.elapsed();
+    println!("Graph Time: {:?}", dur);
+
     let mut subgraph = BitSet::with_capacity(num_matches);
     for i in 0..num_matches {
         subgraph.insert(i);
     }
 
     // Kernelization
-    //let start = Instant::now();
+    let start = Instant::now();
     subgraph = kernelize(&matches_graph, subgraph);
-    //let dur = start.elapsed();
-    //println!("Kernel Time: {:?}", dur);
+    let dur = start.elapsed();
+    println!("Kernel Time: {:?}", dur);
 
     // Search
     let mut total_search = 0;
@@ -580,7 +594,7 @@ pub fn clique_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize
     init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
     let edge_count = mol.graph().edge_count();
 
-    //let start = Instant::now();
+    let start = Instant::now();
 
     let index = recurse_clique_index_search(
         mol, 
@@ -594,8 +608,8 @@ pub fn clique_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize
         &matches_graph,
         1);
 
-    //let dur = start.elapsed();
-    //println!("Search Time: {:?}", dur);
+    let dur = start.elapsed();
+    println!("Search Time: {:?}", dur);
 
     (index as u32, num_matches as u32, total_search)
 }
@@ -884,7 +898,7 @@ pub fn serial_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize
     let edge_count = mol.graph().edge_count();
     let mut total_search = 0;
 
-    //let start = Instant::now();
+    let start = Instant::now();
 
     let index = recurse_index_search(
         mol,
@@ -898,8 +912,8 @@ pub fn serial_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize
         -1
     );
 
-    //let dur = start.elapsed();
-    //println!("Time: {:?}", dur);
+    let dur = start.elapsed();
+    println!("Search Time: {:?}", dur);
 
     (index as u32, matches.len() as u32, total_search)
 }
