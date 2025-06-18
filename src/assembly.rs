@@ -133,6 +133,25 @@ impl CGraph {
         neighbors
     }
 
+    pub fn forward_neighbors(&self, v: usize, subgraph: &BitSet) -> BitSet {
+        let mut neighbors = self.graph[v].clone();
+        neighbors.intersect_with(subgraph);
+        let mut to_remove = vec![];
+        for u in neighbors.iter() {
+            if u <= v {
+                to_remove.push(u);
+            }
+            if u > v {
+                break;
+            }
+        }
+        for u in to_remove {
+            neighbors.remove(u);
+        }
+
+        neighbors
+    }
+
     pub fn are_adjacent(&self, v: usize, u: usize) -> bool {
         self.graph[v].contains(u)
     }
@@ -180,10 +199,57 @@ impl CGraph {
 
             colors[v] = k + 1;
         }
+        //print!("Bounds: {}, ", largest.iter().sum::<usize>());
+        //println!("{:?}, ", self.graph.iter().map(|x| x.len()).collect::<Vec<usize>>());
+        //println!("{:?}", colors);
 
         largest.iter().sum::<usize>()
+    }
+
+    pub fn color_bound_improved(&self, subgraph: &BitSet) -> usize{
+        // Greedy coloring
+        let mut colors: Vec<usize> = vec![0; self.matches.len()];
+        let mut num_colors = 0;
+        let mut largest: Vec<usize> = Vec::new();
+        
+
+        for v in (0..self.matches.len()).rev() {
+            if !subgraph.contains(v) {
+                continue;
+            }
+
+            let mut used: Vec<usize> = vec![0; num_colors];
+
+            for u in subgraph.intersection(&self.graph[v]) {
+                if colors[u] != 0 {
+                    used[colors[u] - 1] = 1;
+                }
+            }
+
+            let mut max = 0;
+            let mut max_idx = num_colors;
+            for i in 0..num_colors {
+                if used[i] == 0 && largest[i] > max {
+                    max = largest[i];
+                    max_idx = i;
+                }
+            }
+
+            if max_idx == num_colors {
+                num_colors += 1;
+                largest.push(0);
+            }
+            if self.weights[v] > largest[max_idx] {
+                largest[max_idx] = self.weights[v]
+            }
+
+            colors[v] = max_idx + 1;
+        }
+        //println!("{} ", largest.iter().sum::<usize>());
         //println!("{:?}", self.graph.iter().map(|x| x.len()).collect::<Vec<usize>>());
         //println!("{:?}", colors);
+
+        largest.iter().sum::<usize>()
     }
 }
 
@@ -425,7 +491,7 @@ fn recurse_clique_index_search_with_start(mol: &Molecule,
         fractures.retain(|i| i.len() > 1);
         fractures.push(h1.clone());
 
-        let mut subgraph_clone = matches_graph.out_neighbors(v, &subgraph);
+        let subgraph_clone = matches_graph.out_neighbors(v, &subgraph);
 
         cx = cx.min(recurse_clique_index_search(
             mol,
@@ -499,8 +565,6 @@ fn recurse_clique_index_search(mol: &Molecule,
         return ix;
     }
 
-    let mut to_remove = BitSet::with_capacity(matches_graph.len());
-
     // Search for duplicatable fragment
     for v in subgraph.iter() {
         let (h1, h2) = matches_graph.get_match(v);
@@ -543,9 +607,7 @@ fn recurse_clique_index_search(mol: &Molecule,
         fractures.retain(|i| i.len() > 1);
         fractures.push(h1.clone());
 
-        let mut subgraph_clone = matches_graph.out_neighbors(v, &subgraph);
-        subgraph_clone.difference_with(&to_remove);
-        //print!("Depth: {} ", depth);
+        let mut subgraph_clone = matches_graph.forward_neighbors(v, &subgraph);
         /*if depth == 1 {
             subgraph_clone = kernelize(matches_graph, subgraph_clone);
         }*/
@@ -563,8 +625,6 @@ fn recurse_clique_index_search(mol: &Molecule,
             depth + 1,
         ));
         best = best.min(cx);
-
-        to_remove.insert(v);
     }
 
     cx
@@ -626,13 +686,11 @@ fn kernelize(g: &CGraph, mut subgraph: BitSet) -> BitSet {
         let neighbors_v = g.out_neighbors(v, &subgraph);
 
         let Some(w) = neighbors_v.iter().next() else {
-            count += 1;
-            subgraph.remove(v);
             continue;
         };
 
         for u in subgraph.iter() {
-            if !g.are_adjacent(u, w) || !subgraph.contains(u) || g.are_adjacent(v, u) || g.are_adjacent(u, v) || u == v {
+            if !subgraph.contains(u) || !g.are_adjacent(u, w) || g.are_adjacent(v, u) || g.are_adjacent(u, v) || v == u {
                 continue;
             }
 
@@ -651,7 +709,7 @@ fn kernelize(g: &CGraph, mut subgraph: BitSet) -> BitSet {
         }
     }
 
-    println!("Reduce count: {}", count);
+    //println!("Reduce count: {}", count);
     subgraph
 }
 
