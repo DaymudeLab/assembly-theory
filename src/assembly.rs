@@ -16,7 +16,7 @@
 //! # }
 //! ```
 use std::{
-    char::UNICODE_VERSION, collections::BTreeSet, ops::BitAnd, sync::{
+    collections::BTreeSet, sync::{
         atomic::{AtomicUsize, Ordering::Relaxed},
         Arc,
     }
@@ -25,7 +25,6 @@ use std::{
 use std::time::Instant;
 
 use bit_set::BitSet;
-use petgraph::{graph::NodeIndex, Graph, Undirected};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
@@ -166,7 +165,7 @@ impl CGraph {
 
     pub fn color_bound(&self, subgraph: &BitSet) -> usize{
         // Greedy coloring
-        let mut colors: Vec<usize> = vec![0; self.matches.len()];
+        let mut colors: Vec<i32> = vec![-1; self.len()];
         let mut num_colors = 0;
         let mut largest: Vec<usize> = Vec::new();
         
@@ -179,8 +178,8 @@ impl CGraph {
             let mut used: Vec<usize> = vec![0; num_colors + 1];
 
             for u in subgraph.intersection(&self.graph[v]) {
-                if colors[u] != 0 {
-                    used[colors[u] - 1] = 1;
+                if colors[u] != -1 {
+                    used[colors[u] as usize] = 1;
                 }
             }
 
@@ -194,10 +193,10 @@ impl CGraph {
                 largest.push(0);
             }
             if self.weights[v] > largest[k] {
-                largest[k] = self.weights[v]
+                largest[k] = self.weights[v];
             }
 
-            colors[v] = k + 1;
+            colors[v] = k as i32;
         }
         //print!("Bounds: {}, ", largest.iter().sum::<usize>());
         //println!("{:?}, ", self.graph.iter().map(|x| x.len()).collect::<Vec<usize>>());
@@ -208,7 +207,7 @@ impl CGraph {
 
     pub fn color_bound_improved(&self, subgraph: &BitSet) -> usize{
         // Greedy coloring
-        let mut colors: Vec<usize> = vec![0; self.matches.len()];
+        let mut colors: Vec<i32> = vec![-1; self.len()];
         let mut num_colors = 0;
         let mut largest: Vec<usize> = Vec::new();
         
@@ -221,8 +220,8 @@ impl CGraph {
             let mut used: Vec<usize> = vec![0; num_colors];
 
             for u in subgraph.intersection(&self.graph[v]) {
-                if colors[u] != 0 {
-                    used[colors[u] - 1] = 1;
+                if colors[u] != -1 {
+                    used[colors[u] as usize] = 1;
                 }
             }
 
@@ -243,13 +242,73 @@ impl CGraph {
                 largest[max_idx] = self.weights[v]
             }
 
-            colors[v] = max_idx + 1;
+            colors[v] = max_idx as i32;
         }
         //println!("{} ", largest.iter().sum::<usize>());
         //println!("{:?}", self.graph.iter().map(|x| x.len()).collect::<Vec<usize>>());
         //println!("{:?}", colors);
 
         largest.iter().sum::<usize>()
+    }
+
+    pub fn cover_bound(&self, subgraph: &BitSet) -> usize {
+        // Greedy coloring
+        let mut colors: Vec<Option<Vec<usize>>> = vec![None; self.len()];
+        let mut col_weights = vec![];
+        let mut num_col = 0;
+
+        for v in (0..self.matches.len()).rev() {
+            if !subgraph.contains(v) {
+                continue;
+            }
+
+            let mut v_col = Vec::new();
+            let mut used = vec![0; num_col];
+
+            // Find colors used in neighborhood of v
+            for u in subgraph.intersection(&self.graph[v]) {
+                let Some(u_col) = &colors[u] else {
+                    continue;
+                };
+
+                for c in u_col {
+                    used[*c] = 1;
+                }
+            }
+
+            let mut total_weight = 0;
+            let v_val = self.weights[v];
+            // Find colors to give to v
+            for c in 0..num_col {
+                if used[c] == 1 {
+                    continue;
+                }
+
+                v_col.push(c);
+                total_weight += col_weights[c];
+
+                if total_weight >= v_val {
+                    break;
+                }
+            }
+
+            if total_weight == 0 {
+                v_col.push(num_col);
+                col_weights.push(self.weights[v]);
+                num_col += 1
+            }
+            else if total_weight < self.weights[v] {
+                let mut k = num_col - 1;
+                while used[k] == 1 {
+                    k -= 1
+                }
+                col_weights[k] += self.weights[v] - total_weight
+            }
+
+            colors[v] = Some(v_col);
+        };
+
+        col_weights.iter().sum()
     }
 }
 
@@ -561,7 +620,10 @@ fn recurse_clique_index_search(mol: &Molecule,
     if ix >= best + subgraph.iter().count() && ix >= best + matches_graph.remaining_weight_bound(&subgraph) {
         return ix;
     }
-    if ix >= best + matches_graph.color_bound(&subgraph) {
+    /*if ix >= best + matches_graph.color_bound_improved(&subgraph) {
+        return ix;
+    }*/
+    if ix >= best + matches_graph.cover_bound(&subgraph) {
         return ix;
     }
 
