@@ -51,7 +51,7 @@ Enter a number to choose the dataset:
 
 ```shell
 1) ../data/checks       3) ../data/gdb13_1201
-2) ../data/coconut_220  4) ../data/gdb17_800
+2) ../data/coconut_55   4) ../data/gdb17_200
 Generate ma-index.csv for: 
 ```
 
@@ -59,12 +59,13 @@ The next menu asks you which program to use for assembly index calculation.
 Again, enter a number to choose:
 
 ```shell
-1) assembly_go
-2) assembly-theory
+1) assembly_go (Jirasek et al., 2024)
+2) assembly_cpp (Seet et al., 2024)
+3) assembly-theory
 Calculate assembly indices using: 
 ```
 
 [`assembly_go`](https://github.com/croningp/assembly_go) is existing, open-source software for calculating assembly indices.
 We do not package its source code or its executable with our library, but it can be obtained [on GitHub](https://github.com/croningp/assembly_go) if non-self-referential ground truth is desired.
+[`assembly_cpp`] is the current state-of-the-art algorithm by Seet et al. (2024) and was provided to us by its authors on the condition that it remains private and is used only for this ground-truth generation.
 Otherwise, a release build of `assembly-theory` is created and used.
-Note that `assembly-theory` is significantly faster.
