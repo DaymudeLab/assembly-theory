@@ -147,7 +147,19 @@ impl CGraph {
     }
 
     pub fn remaining_weight_bound(&self, subgraph: &BitSet) -> usize {
-        subgraph.iter().map(|i| self.weights[i]).sum()
+        subgraph.iter().map(|v| self.weights[v]).sum()
+    }
+
+    pub fn remaining_weight_bound_new(&self, subgraph: &BitSet) -> usize {
+        let deg_sum = subgraph.iter().map(|v| self.degree(v, subgraph)).sum::<usize>() as f32;
+        let max_clique = ((1_f32 + (4_f32 * deg_sum + 1_f32).sqrt()) / 2_f32).floor() as usize;
+        let mut sum = 0;
+        let mut iter = subgraph.iter();
+        for _ in 0..max_clique {
+            sum += self.weights[iter.next().unwrap()];
+        };
+
+        sum
     }
 
     pub fn get_match(&self, v: usize) -> &(BitSet, BitSet) {
@@ -285,15 +297,15 @@ impl CGraph {
 
             if total_weight == 0 {
                 v_col.push(num_col);
-                col_weights.push(self.weights[v]);
+                col_weights.push(v_val);
                 num_col += 1
             }
-            else if total_weight < self.weights[v] {
+            else if total_weight < v_val {
                 let mut k = num_col - 1;
                 while used[k] == 1 {
                     k -= 1
                 }
-                col_weights[k] += self.weights[v] - total_weight
+                col_weights[k] += v_val - total_weight
             }
 
             colors[v] = Some(v_col);
@@ -590,6 +602,9 @@ fn recurse_clique_index_search(mol: &Molecule,
     matches_graph: &CGraph,
     depth: usize,
 ) -> usize {
+    if subgraph.len() == 0 {
+        return ix;
+    }
     let mut cx = ix;
 
     *states_searched += 1;
@@ -608,9 +623,9 @@ fn recurse_clique_index_search(mol: &Molecule,
             return ix;
         }
     }
-    if ix >= best + subgraph.iter().count() && ix >= best + matches_graph.remaining_weight_bound(&subgraph) {
+    /*if ix >= best + subgraph.iter().count() && ix >= best + matches_graph.remaining_weight_bound_new(&subgraph) {
         return ix;
-    }
+    }*/
     /*if ix >= best + matches_graph.color_bound_improved(&subgraph) {
         return ix;
     }*/
@@ -700,7 +715,7 @@ pub fn clique_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize
 
     // Kernelization
     let start = Instant::now();
-    subgraph = kernelize(&matches_graph, subgraph);
+    subgraph = kernelize_fast(&matches_graph, subgraph);
     let dur = start.elapsed();
     println!("Kernel Time: {:?}", dur);
 
@@ -743,6 +758,47 @@ fn kernelize(g: &CGraph, mut subgraph: BitSet) -> BitSet {
         };
 
         for u in g.graph[w].intersection(&subgraph) {
+            if g.are_adjacent(v, u) || v == u {
+                continue;
+            }
+
+            let u_val = g.weights[u];
+            if v_val > u_val {
+                continue;
+            }
+
+            let neighbors_u = g.neighbors(u, &subgraph);
+
+            if neighbors_v.is_subset(&neighbors_u) {
+                count += 1;
+                subgraph.remove(v);
+                break;
+            }
+        }
+    }
+
+    //println!("Reduce count: {}", count);
+    subgraph
+}
+
+fn kernelize_fast(g: &CGraph, mut subgraph: BitSet) -> BitSet {
+    let mut count = 0;
+    let subgraph_copy = subgraph.clone();
+
+    for v in subgraph_copy.iter() {
+        let v_val = g.weights[v];
+        let neighbors_v = g.neighbors(v, &subgraph);
+
+        let Some(w1) = neighbors_v.iter().next() else {
+            continue;
+        };
+        let Some(w2) = neighbors_v.iter().last() else {
+            continue;
+        };
+
+        let mut s = subgraph.clone();
+        s.intersect_with(&g.graph[w1]);
+        for u in s.intersection(&&g.graph[w2]) {
             if g.are_adjacent(v, u) || v == u {
                 continue;
             }
