@@ -745,6 +745,44 @@ pub fn clique_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize
     (index as u32, num_matches as u32, total_search)
 }
 
+pub fn clique_index_search_bench(mol: &Molecule, matches: Vec<(BitSet, BitSet)>) -> (u32, u32, usize) {
+    // Graph Initialization
+    let num_matches = matches.len();
+    let matches_graph = CGraph::new(matches);
+
+    // Kernelization
+    let mut subgraph = BitSet::with_capacity(num_matches);
+    for i in 0..num_matches {
+        subgraph.insert(i);
+    }
+    //subgraph = kernelize_fast(&matches_graph, subgraph);
+
+    // Search
+    let mut total_search = 0;
+    let mut init = BitSet::new();
+    init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
+    let edge_count = mol.graph().edge_count();
+    let bounds = vec![
+        Bound::IntChain,
+        Bound::VecChainSimple,
+        Bound::VecChainSmallFrags,
+    ];
+
+    let index = recurse_clique_index_search(
+        mol, 
+        &[init], 
+        edge_count - 1, 
+        edge_count, 
+        edge_count - 1,
+        &bounds,
+        &mut total_search,
+        subgraph.clone(),
+        &matches_graph,
+        1);
+
+    (index as u32, num_matches as u32, total_search)
+}
+
 fn kernelize(g: &CGraph, mut subgraph: BitSet) -> BitSet {
     let mut count = 0;
     let subgraph_copy = subgraph.clone();

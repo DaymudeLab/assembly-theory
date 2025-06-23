@@ -30,3 +30,7 @@ crate-type = ["rlib","cdylib"]
 name = "benchmark"
 harness = false
 
+[[bench]]
+name = "search_benchmark"
+harness = false
+
