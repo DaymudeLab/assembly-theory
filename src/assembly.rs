@@ -96,8 +96,6 @@ impl CGraph {
             }
         }
 
-        // Sort by degree
-
         Self {
             graph: init_graph,
             weights: init_weights,
@@ -263,6 +261,70 @@ impl CGraph {
                 continue;
             }
 
+            let mut v_col = Vec::new();
+            let mut used = vec![0; num_col];
+
+            // Find colors used in neighborhood of v
+            for u in subgraph.intersection(&self.graph[v]) {
+                let Some(u_col) = &colors[u] else {
+                    continue;
+                };
+
+                for c in u_col {
+                    used[*c] = 1;
+                }
+            }
+
+            let mut total_weight = 0;
+            let v_val = self.weights[v];
+            // Find colors to give to v
+            for c in 0..num_col {
+                if used[c] == 1 {
+                    continue;
+                }
+
+                v_col.push(c);
+                total_weight += col_weights[c];
+
+                if total_weight >= v_val {
+                    break;
+                }
+            }
+
+            if total_weight == 0 {
+                v_col.push(num_col);
+                col_weights.push(v_val);
+                num_col += 1
+            }
+            else if total_weight < v_val {
+                let mut k = num_col - 1;
+                while used[k] == 1 {
+                    k -= 1
+                }
+                col_weights[k] += v_val - total_weight
+            }
+
+            colors[v] = Some(v_col);
+        };
+
+        col_weights.iter().sum()
+    }
+
+    pub fn cover_bound_sort(&self, subgraph: &BitSet) -> usize {
+        // Sort vertices
+        let mut vertices: Vec<(usize, usize)> = Vec::with_capacity(subgraph.len());;
+        for v in subgraph {
+            vertices.push((v, self.degree(v, subgraph)));
+        }
+
+        vertices.sort_by(|a, b| b.1.cmp(&a.1));
+
+        // Greedy coloring
+        let mut colors: Vec<Option<Vec<usize>>> = vec![None; self.len()];
+        let mut col_weights = vec![];
+        let mut num_col = 0;
+
+        for (v, _) in vertices {
             let mut v_col = Vec::new();
             let mut used = vec![0; num_col];
 
@@ -595,16 +657,20 @@ fn recurse_clique_index_search(mol: &Molecule,
     if ix >= best + matches_graph.cover_bound(&subgraph) {
         return ix;
     }
+    if ix >= best + matches_graph.cover_bound_sort(&subgraph) {
+        return ix;
+    }
     
     /*println!("Neccesary: {}", {if ix >= best {ix - best} else { 0 }});
-    println!("Ground Truth: {}", savings_ground_truth(0, 0, &subgraph, matches_graph));
+    //println!("Ground Truth: {}", matches_graph.savings_ground_truth(&subgraph));
     println!("Weight Sum: {}", matches_graph.remaining_weight_bound(&subgraph));
     println!("Add: {}", addition_bound(fragments, largest_remove));
     println!("Frag: {}", matches_graph.frag_bound(&subgraph, fragments));
     println!("Vec: {}", vec_bound_simple(fragments, largest_remove, mol));
     println!("Small Vec: {}", vec_bound_small_frags(fragments, largest_remove, mol));
     println!("Color: {}", matches_graph.color_bound(&subgraph));
-    println!("Cover: {}\n", matches_graph.cover_bound(&subgraph));*/
+    println!("Cover: {}", matches_graph.cover_bound(&subgraph));
+    println!("Cover Sort: {}\n", matches_graph.cover_bound_sort(&subgraph));*/
 
     /*if addition_bound(fragments, largest_remove) < matches_graph.frag_bound(&subgraph, fragments) && ix > best {
         println!("Largest Remove: {}", largest_remove);
