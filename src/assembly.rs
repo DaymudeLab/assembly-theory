@@ -105,6 +105,41 @@ impl CGraph {
         }
     }
 
+    pub fn savings_ground_truth(&self, subgraph: &BitSet) -> usize {
+        self.savings_ground_truth_recurse(0, 0, subgraph)
+    }
+
+    fn savings_ground_truth_recurse(&self, ix: usize, mut best: usize, subgraph: &BitSet) -> usize {
+        if subgraph.len() == 0 {
+            return ix;
+        }
+        let mut cx = ix;
+
+        /*if ix + subgraph.iter().count() <= best && ix + self.remaining_weight_bound(&subgraph) <= best {
+            return ix;
+        }*/
+        /*if ix + self.color_bound(&subgraph) <= best {
+            return ix;
+        }*/
+        if ix + self.cover_bound(&subgraph) <= best{
+            return ix;
+        }
+
+        // Search for duplicatable fragment
+        for v in subgraph.iter() {
+            let subgraph_clone = self.forward_neighbors(v, &subgraph);
+
+            cx = cx.max(self.savings_ground_truth_recurse(
+                ix + self.weights[v],
+                best,
+                &subgraph_clone,
+            ));
+            best = best.max(cx);
+        }
+
+        cx
+    }
+
     pub fn len(&self) -> usize {
         self.matches.len()
     }
@@ -520,7 +555,6 @@ fn recurse_index_search(
 fn recurse_clique_index_search(mol: &Molecule,
     fragments: &[BitSet],
     ix: usize,
-    largest_remove: usize,
     mut best: usize,
     bounds: &[Bound],
     states_searched: &mut usize,
@@ -532,14 +566,14 @@ fn recurse_clique_index_search(mol: &Molecule,
         return ix;
     }
     let mut cx = ix;
-
+    let largest_remove = matches_graph.weights[subgraph.iter().next().unwrap()] + 1;
     *states_searched += 1;
 
     // Branch and Bound
     for bound_type in bounds {
         let exceeds = match bound_type {
             Bound::Log => false, //ix - log_bound(fragments) >= best,
-            Bound::IntChain => false, //ix - addition_bound(fragments, largest_remove) >= best,
+            Bound::IntChain => ix - addition_bound(fragments, largest_remove) >= best,
             Bound::VecChainSimple => ix - vec_bound_simple(fragments, largest_remove, mol) >= best,
             Bound::VecChainSmallFrags => {
                 ix - vec_bound_small_frags(fragments, largest_remove, mol) >= best
@@ -590,8 +624,6 @@ fn recurse_clique_index_search(mol: &Molecule,
         let mut fractures = fragments.to_owned();
         let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
         let f2 = fragments.iter().enumerate().find(|(_, c)| h2.is_subset(c));
-
-        let largest_remove = h1.len();
 
         let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) else {
             continue;
@@ -653,7 +685,6 @@ fn recurse_clique_index_search(mol: &Molecule,
             mol,
             &fractures,
             ix - matches_graph.weights[v],
-            largest_remove,
             best,
             bounds,
             states_searched,
@@ -662,42 +693,6 @@ fn recurse_clique_index_search(mol: &Molecule,
             depth + 1,
         ));
         best = best.min(cx);
-    }
-
-    cx
-}
-
-fn savings_ground_truth (ix: usize,
-    mut best: usize,
-    subgraph: &BitSet,
-    matches_graph: &CGraph,
-) -> usize {
-    if subgraph.len() == 0 {
-        return ix;
-    }
-    let mut cx = ix;
-
-    /*if ix >= best + subgraph.iter().count() && ix >= best + matches_graph.remaining_weight_bound(&subgraph) {
-        return ix;
-    }*/
-    /*if ix >= best + matches_graph.color_bound(&subgraph) {
-        return ix;
-    }*/
-    if ix + matches_graph.cover_bound(&subgraph) <= best{
-        return ix;
-    }
-
-    // Search for duplicatable fragment
-    for v in subgraph.iter() {
-        let subgraph_clone = matches_graph.forward_neighbors(v, &subgraph);
-
-        cx = cx.max(savings_ground_truth(
-            matches_graph.weights[v],
-            best,
-            &subgraph_clone,
-            matches_graph,
-        ));
-        best = best.max(cx);
     }
 
     cx
@@ -736,7 +731,6 @@ pub fn clique_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize
         mol, 
         &[init], 
         edge_count - 1, 
-        edge_count, 
         edge_count - 1,
         bounds,
         &mut total_search,
@@ -777,7 +771,6 @@ pub fn clique_index_search_bench(mol: &Molecule, matches: Vec<(BitSet, BitSet)>)
         mol, 
         &[init], 
         edge_count - 1, 
-        edge_count, 
         edge_count - 1,
         &bounds,
         &mut total_search,
