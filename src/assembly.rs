@@ -115,6 +115,13 @@ impl CGraph {
         (0..self.len()).map(|v| self.graph[v].iter().count()).collect()
     }
 
+    pub fn density(&self, subgraph: &BitSet) -> f32 {
+        let n = subgraph.len() as f32;
+        let deg_sum = subgraph.iter().map(|v| self.graph[v].intersection(subgraph).count()).sum::<usize>() as f32;
+
+        deg_sum / (n * (n + 1_f32))
+    }
+
     // Returns a safely mutable set of neighbors of v in subgraph.
     pub fn neighbors(&self, v: usize, subgraph: &BitSet) -> BitSet {
         let mut neighbors = self.graph[v].clone();
@@ -147,10 +154,6 @@ impl CGraph {
     }
 
     pub fn remaining_weight_bound(&self, subgraph: &BitSet) -> usize {
-        subgraph.iter().map(|v| self.weights[v]).sum()
-    }
-
-    pub fn remaining_weight_bound_new(&self, subgraph: &BitSet) -> usize {
         let deg_sum = subgraph.iter().map(|v| self.degree(v, subgraph)).sum::<usize>() as f32;
         let max_clique = ((1_f32 + (4_f32 * deg_sum + 1_f32).sqrt()) / 2_f32).floor() as usize;
         let mut sum = 0;
@@ -167,48 +170,6 @@ impl CGraph {
     }  
 
     pub fn color_bound(&self, subgraph: &BitSet) -> usize{
-        // Greedy coloring
-        let mut colors: Vec<i32> = vec![-1; self.len()];
-        let mut num_colors = 0;
-        let mut largest: Vec<usize> = Vec::new();
-        
-
-        for v in (0..self.matches.len()).rev() {
-            if !subgraph.contains(v) {
-                continue;
-            }
-
-            let mut used: Vec<usize> = vec![0; num_colors + 1];
-
-            for u in subgraph.intersection(&self.graph[v]) {
-                if colors[u] != -1 {
-                    used[colors[u] as usize] = 1;
-                }
-            }
-
-            let mut k = 0;
-            while used[k] != 0 {
-                k += 1;
-            }
-
-            if k == num_colors {
-                num_colors += 1;
-                largest.push(0);
-            }
-            if self.weights[v] > largest[k] {
-                largest[k] = self.weights[v];
-            }
-
-            colors[v] = k as i32;
-        }
-        //print!("Bounds: {}, ", largest.iter().sum::<usize>());
-        //println!("{:?}, ", self.graph.iter().map(|x| x.len()).collect::<Vec<usize>>());
-        //println!("{:?}", colors);
-
-        largest.iter().sum::<usize>()
-    }
-
-    pub fn color_bound_improved(&self, subgraph: &BitSet) -> usize{
         // Greedy coloring
         let mut colors: Vec<i32> = vec![-1; self.len()];
         let mut num_colors = 0;
@@ -312,6 +273,37 @@ impl CGraph {
         };
 
         col_weights.iter().sum()
+    }
+
+    pub fn frag_bound(&self, subgraph: &BitSet, fragments: &[BitSet]) -> usize {
+        let mut num_bonds: Vec<isize> = fragments.iter().map(|x| x.len() as isize).collect();
+        let mut has_bonds = fragments.len();
+        let mut bound = 0;
+
+        for v in subgraph.iter() {
+            if has_bonds == 0 {
+                break;
+            }
+
+            let m = &self.matches[v];
+            let b = m.1.iter().next().unwrap();
+            let mut i = 0;
+            while !fragments[i].contains(b) {
+                i += 1;
+            }
+
+            if num_bonds[i] > 0 {
+                let m_len = m.0.len();
+                num_bonds[i] -= (m_len + 1) as isize;
+                bound += m_len;
+
+                if num_bonds[i] <= 0 {
+                    has_bonds -= 1;
+                }
+            }
+        }
+
+        bound
     }
 }
 
@@ -494,103 +486,6 @@ fn recurse_index_search(
 }
 
 
-fn recurse_clique_index_search_with_start(mol: &Molecule,
-    fragments: &[BitSet],
-    ix: usize,
-    largest_remove: usize,
-    mut best: usize,
-    bounds: &[Bound],
-    states_searched: &mut usize,
-    mut subgraph: BitSet,
-    matches_graph: &CGraph,
-    depth: usize
-) -> usize  {
-    let mut cx = ix;
-
-    // Search for duplicatable fragment
-    for v in subgraph.clone().iter() {
-        if !subgraph.contains(v) {
-            continue;
-        }
-
-        let (h1, h2) = matches_graph.get_match(v);
-
-        let mut fractures = fragments.to_owned();
-        let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
-        let f2 = fragments.iter().enumerate().find(|(_, c)| h2.is_subset(c));
-
-        let largest_remove = h1.len();
-
-        let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) else {
-            continue;
-        };
-
-        // All of these clones are on bitsets and cheap enough
-        if i1 == i2 {
-            let mut union = h1.clone();
-            union.union_with(h2);
-            let mut difference = f1.clone();
-            difference.difference_with(&union);
-            let c = connected_components_under_edges(mol.graph(), &difference);
-            fractures.extend(c);
-            fractures.swap_remove(i1);
-        } else {
-            let mut f1r = f1.clone();
-            f1r.difference_with(h1);
-            let mut f2r = f2.clone();
-            f2r.difference_with(h2);
-
-            let c1 = connected_components_under_edges(mol.graph(), &f1r);
-            let c2 = connected_components_under_edges(mol.graph(), &f2r);
-
-            fractures.extend(c1);
-            fractures.extend(c2);
-
-            fractures.swap_remove(i1.max(i2));
-            fractures.swap_remove(i1.min(i2));
-        }
-
-        fractures.retain(|i| i.len() > 1);
-        fractures.push(h1.clone());
-
-        let subgraph_clone = matches_graph.forward_neighbors(v, &subgraph);
-
-        cx = cx.min(recurse_clique_index_search(
-            mol,
-            &fractures,
-            ix - h1.len() + 1,
-            largest_remove,
-            best,
-            bounds,
-            states_searched,
-            subgraph_clone,
-            matches_graph,
-            depth + 1,
-        ));
-        if cx < best {
-            best = cx;
-            // kernelize
-            for v in subgraph.clone().iter() {
-                let mut neighbor_sum = 0;
-                for u in matches_graph.graph[v].iter() {
-                    if subgraph.contains(u) {
-                        neighbor_sum += matches_graph.weights[u];
-                    }
-                }
-
-                if ix >= best + neighbor_sum {
-                    subgraph.remove(v);
-                }
-            }
-        }
-
-        subgraph.remove(v);
-    }
-
-    cx
-}
-
-
 fn recurse_clique_index_search(mol: &Molecule,
     fragments: &[BitSet],
     ix: usize,
@@ -623,10 +518,13 @@ fn recurse_clique_index_search(mol: &Molecule,
             return ix;
         }
     }
-    /*if ix >= best + subgraph.iter().count() && ix >= best + matches_graph.remaining_weight_bound_new(&subgraph) {
+    /*if ix >= best + subgraph.iter().count() && ix >= best + matches_graph.remaining_weight_bound(&subgraph) {
         return ix;
     }*/
-    /*if ix >= best + matches_graph.color_bound_improved(&subgraph) {
+    /*if ix >= best + matches_graph.color_bound(&subgraph) {
+        return ix;
+    }*/
+    /*if ix >= best + matches_graph.frag_bound(&subgraph, fragments) {
         return ix;
     }*/
     if ix >= best + matches_graph.cover_bound(&subgraph) {
@@ -677,13 +575,32 @@ fn recurse_clique_index_search(mol: &Molecule,
 
         let mut subgraph_clone = matches_graph.forward_neighbors(v, &subgraph);
         /*if depth == 1 {
-            subgraph_clone = kernelize(matches_graph, subgraph_clone);
+            /*if subgraph_clone.len() >= 260 {
+                let start = Instant::now();
+                subgraph_clone = kernelize(matches_graph, subgraph_clone);
+                let dur = start.elapsed();
+                println!("Kernel Time: {:?}", dur);
+            }*/
+            //println!("{}, {}", subgraph_clone.len(), matches_graph.density(&subgraph_clone));
+            if subgraph_clone.len() >= 10 && matches_graph.density(&subgraph_clone) >= 0.6 {
+                println!("{}", subgraph_clone.len());
+                println!("{:?}", subgraph_clone);
+                println!("{:?}", subgraph_clone.iter().map(|v| matches_graph.weights[v]).collect::<Vec<usize>>());
+                for (edges, v) in subgraph_clone.iter().map(|v| &matches_graph.graph[v]).zip(subgraph_clone.iter()) {
+                    let mut edges_clone = edges.clone();
+                    edges_clone.intersect_with(&subgraph_clone);
+                    edges_clone.insert(v);
+                    println!("{:?}", edges_clone.symmetric_difference(&subgraph_clone).collect::<Vec<usize>>());
+                }
+
+                std::process::exit(1);
+            }
         }*/
 
         cx = cx.min(recurse_clique_index_search(
             mol,
             &fractures,
-            ix - h1.len() + 1,
+            ix - matches_graph.weights[v],
             largest_remove,
             best,
             bounds,
@@ -706,7 +623,7 @@ pub fn clique_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize
     let start = Instant::now();
     let matches_graph = CGraph::new(matches);
     let dur = start.elapsed();
-    println!("Graph Time: {:?}", dur);
+    //println!("Graph Time: {:?}", dur);
 
     let mut subgraph = BitSet::with_capacity(num_matches);
     for i in 0..num_matches {
@@ -717,7 +634,7 @@ pub fn clique_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize
     let start = Instant::now();
     subgraph = kernelize_fast(&matches_graph, subgraph);
     let dur = start.elapsed();
-    println!("Kernel Time: {:?}", dur);
+    //println!("Kernel Time: {:?}", dur);
 
     // Search
     let mut total_search = 0;
@@ -755,7 +672,7 @@ pub fn clique_index_search_bench(mol: &Molecule, matches: Vec<(BitSet, BitSet)>)
     for i in 0..num_matches {
         subgraph.insert(i);
     }
-    //subgraph = kernelize_fast(&matches_graph, subgraph);
+    subgraph = kernelize_fast(&matches_graph, subgraph);
 
     // Search
     let mut total_search = 0;
