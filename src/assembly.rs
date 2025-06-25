@@ -119,7 +119,7 @@ impl CGraph {
         /*if ix + self.color_bound(&subgraph) <= best {
             return ix;
         }*/
-        if ix + self.cover_bound(&subgraph) <= best{
+        if ix + self.cover_bound(&subgraph, true) <= best{
             return ix;
         }
 
@@ -250,81 +250,28 @@ impl CGraph {
         largest.iter().sum::<usize>()
     }
 
-    pub fn cover_bound(&self, subgraph: &BitSet) -> usize {
-        // Greedy coloring
-        let mut colors: Vec<Option<Vec<usize>>> = vec![None; self.len()];
-        let mut col_weights = vec![];
-        let mut num_col = 0;
-
-        for v in (0..self.matches.len()).rev() {
-            if !subgraph.contains(v) {
-                continue;
-            }
-
-            let mut v_col = Vec::new();
-            let mut used = vec![0; num_col];
-
-            // Find colors used in neighborhood of v
-            for u in subgraph.intersection(&self.graph[v]) {
-                let Some(u_col) = &colors[u] else {
-                    continue;
-                };
-
-                for c in u_col {
-                    used[*c] = 1;
-                }
-            }
-
-            let mut total_weight = 0;
-            let v_val = self.weights[v];
-            // Find colors to give to v
-            for c in 0..num_col {
-                if used[c] == 1 {
-                    continue;
-                }
-
-                v_col.push(c);
-                total_weight += col_weights[c];
-
-                if total_weight >= v_val {
-                    break;
-                }
-            }
-
-            if total_weight == 0 {
-                v_col.push(num_col);
-                col_weights.push(v_val);
-                num_col += 1
-            }
-            else if total_weight < v_val {
-                let mut k = num_col - 1;
-                while used[k] == 1 {
-                    k -= 1
-                }
-                col_weights[k] += v_val - total_weight
-            }
-
-            colors[v] = Some(v_col);
-        };
-
-        col_weights.iter().sum()
+    pub fn cover_bound(&self, subgraph: &BitSet, sort: bool) -> usize {
+        // Sort vertices
+        if sort {
+            let mut vertices: Vec<(usize, usize)> = Vec::with_capacity(subgraph.len());;
+            for v in subgraph {
+                vertices.push((v, self.degree(v, subgraph)));
+            }   
+            vertices.sort_by(|a, b| b.1.cmp(&a.1));
+            self.cover_bound_helper(subgraph, vertices.iter().map(|(v, _)| *v))
+        }
+        else {
+            let vertices = (0..self.matches.len()).rev().filter(|v| subgraph.contains(*v));
+            self.cover_bound_helper(subgraph, vertices)
+        }
     }
 
-    pub fn cover_bound_sort(&self, subgraph: &BitSet) -> usize {
-        // Sort vertices
-        let mut vertices: Vec<(usize, usize)> = Vec::with_capacity(subgraph.len());;
-        for v in subgraph {
-            vertices.push((v, self.degree(v, subgraph)));
-        }
-
-        vertices.sort_by(|a, b| b.1.cmp(&a.1));
-
-        // Greedy coloring
+    fn cover_bound_helper(&self, subgraph: &BitSet, iter: impl Iterator<Item = usize>) -> usize {
         let mut colors: Vec<Option<Vec<usize>>> = vec![None; self.len()];
         let mut col_weights = vec![];
         let mut num_col = 0;
 
-        for (v, _) in vertices {
+        for v in iter {
             let mut v_col = Vec::new();
             let mut used = vec![0; num_col];
 
@@ -654,10 +601,10 @@ fn recurse_clique_index_search(mol: &Molecule,
     if ix >= best + matches_graph.frag_bound(&subgraph, fragments) {
         return ix;
     }
-    if ix >= best + matches_graph.cover_bound(&subgraph) {
+    if ix >= best + matches_graph.cover_bound(&subgraph, false) {
         return ix;
     }
-    if ix >= best + matches_graph.cover_bound_sort(&subgraph) {
+    if ix >= best + matches_graph.cover_bound(&subgraph, true) {
         return ix;
     }
     
