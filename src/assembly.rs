@@ -278,40 +278,63 @@ impl CGraph {
     }
 
     pub fn frag_bound(&self, subgraph: &BitSet, fragments: &[BitSet]) -> usize {
-        let mut num_bonds: Vec<usize> = fragments.iter().map(|x| x.len()).collect();
-        let mut has_bonds = fragments.len();
+        let total_bonds = fragments.iter().map(|x| x.len()).sum::<usize>();
         let mut bound = 0;
+        let m = self.weights[subgraph.iter().next().unwrap()] + 1;
 
-        for v in subgraph.iter() {
-            if has_bonds == 0 {
-                break;
-            }
-
+        /*let mut removes: Vec<Vec<usize>> = vec![Vec::new(); fragments.len()];
+        for v in subgraph {
             let m = &self.matches[v];
             let b = m.1.iter().next().unwrap();
-            let mut i = 0;
-            while !fragments[i].contains(b) {
-                i += 1;
+            let mut j = 0;
+            while !fragments[j].contains(b) {
+                j += 1;
             }
 
-            if num_bonds[i] > 0 {
-                let m_len = m.0.len();
-                if m_len + 1 > num_bonds[i] {
-                    bound += num_bonds[i] - 1;
-                    num_bonds[i] = 0;
+            removes[j].push(self.weights[v] + 1);
+        }
+        let num_bonds: Vec<usize> = fragments.iter().map(|x| x.len()).collect();
+        println!("{:?}", num_bonds);
+        println!("{:?}", removes);*/
+        
+        for i in 2..m + 1 {
+            let mut bound_temp = 0;
+            let mut largest = 0;
+            let mut has_bonds = fragments.len();
+            let mut num_bonds: Vec<usize> = fragments.iter().map(|x| x.len()).collect();
+            for v in subgraph.iter() {
+                if has_bonds == 0 {
+                    break;
                 }
-                else {
-                    bound += m_len;
-                    num_bonds[i] -= m_len + 1;
+                if self.weights[v] + 1 > i {
+                    continue;
                 }
 
-                if num_bonds[i] == 0 {
-                    has_bonds -= 1;
+                let dup = &self.matches[v];
+                let bond = dup.1.iter().next().unwrap();
+                let mut j = 0;
+                while !fragments[j].contains(bond) {
+                    j += 1;
+                }
+
+                if num_bonds[j] > 0 {
+                    let remove = std::cmp::min(dup.0.len(), num_bonds[j]);
+                    largest = std::cmp::max(largest, remove);
+                    bound_temp += 1;
+                    num_bonds[j] -= remove;
+
+                    if num_bonds[j] == 0 {
+                        has_bonds -= 1;
+                    }
                 }
             }
+
+            let log = (largest as f32).log2().ceil() as usize;
+            let leftover = num_bonds.iter().map(|x| (x / largest) + (x % largest != 0) as usize).sum::<usize>();
+            bound = std::cmp::max(bound, total_bonds - bound_temp - log - leftover);
         }
 
-        bound + 1
+        bound
     }
 }
 
@@ -515,8 +538,8 @@ fn recurse_clique_index_search(mol: &Molecule,
     // Branch and Bound
     for bound_type in bounds {
         let exceeds = match bound_type {
-            Bound::Log => ix - log_bound(fragments) >= best,
-            Bound::IntChain => false, // ix - addition_bound(fragments, largest_remove) >= best,
+            Bound::Log => false, //ix - log_bound(fragments) >= best,
+            Bound::IntChain => false, //ix - addition_bound(fragments, largest_remove) >= best,
             Bound::VecChainSimple => ix - vec_bound_simple(fragments, largest_remove, mol) >= best,
             Bound::VecChainSmallFrags => {
                 ix - vec_bound_small_frags(fragments, largest_remove, mol) >= best
@@ -532,14 +555,15 @@ fn recurse_clique_index_search(mol: &Molecule,
     /*if ix >= best + matches_graph.color_bound(&subgraph) {
         return ix;
     }*/
-    /*if ix >= best + matches_graph.frag_bound(&subgraph, fragments) {
+    if ix >= best + matches_graph.frag_bound(&subgraph, fragments) {
         return ix;
-    }*/
+    }
     if ix >= best + matches_graph.cover_bound(&subgraph) {
         return ix;
     }
     
-    /*println!("Neccesary: {}", ix - best);
+    /*println!("Neccesary: {}", {if ix >= best {ix - best} else { 0 }});
+    println!("Ground Truth: {}", savings_ground_truth(0, 0, &subgraph, matches_graph));
     println!("Weight Sum: {}", matches_graph.remaining_weight_bound(&subgraph));
     println!("Add: {}", addition_bound(fragments, largest_remove));
     println!("Frag: {}", matches_graph.frag_bound(&subgraph, fragments));
@@ -547,6 +571,17 @@ fn recurse_clique_index_search(mol: &Molecule,
     println!("Small Vec: {}", vec_bound_small_frags(fragments, largest_remove, mol));
     println!("Color: {}", matches_graph.color_bound(&subgraph));
     println!("Cover: {}\n", matches_graph.cover_bound(&subgraph));*/
+
+    /*if addition_bound(fragments, largest_remove) < matches_graph.frag_bound(&subgraph, fragments) && ix > best {
+        println!("Largest Remove: {}", largest_remove);
+        println!("Add: {}", addition_bound(fragments, largest_remove));
+        println!("Frag: {}", matches_graph.frag_bound(&subgraph, fragments));
+    }*/
+
+    /*if savings_ground_truth(0, 0, &subgraph, matches_graph) > matches_graph.frag_bound(&subgraph, fragments) {
+        println!("Ground Truth: {}", savings_ground_truth(0, 0, &subgraph, matches_graph));
+        println!("Frag: {}", matches_graph.frag_bound(&subgraph, fragments));
+    }*/
 
     // Search for duplicatable fragment
     for v in subgraph.iter() {
@@ -627,6 +662,42 @@ fn recurse_clique_index_search(mol: &Molecule,
             depth + 1,
         ));
         best = best.min(cx);
+    }
+
+    cx
+}
+
+fn savings_ground_truth (ix: usize,
+    mut best: usize,
+    subgraph: &BitSet,
+    matches_graph: &CGraph,
+) -> usize {
+    if subgraph.len() == 0 {
+        return ix;
+    }
+    let mut cx = ix;
+
+    /*if ix >= best + subgraph.iter().count() && ix >= best + matches_graph.remaining_weight_bound(&subgraph) {
+        return ix;
+    }*/
+    /*if ix >= best + matches_graph.color_bound(&subgraph) {
+        return ix;
+    }*/
+    if ix + matches_graph.cover_bound(&subgraph) <= best{
+        return ix;
+    }
+
+    // Search for duplicatable fragment
+    for v in subgraph.iter() {
+        let subgraph_clone = matches_graph.forward_neighbors(v, &subgraph);
+
+        cx = cx.max(savings_ground_truth(
+            matches_graph.weights[v],
+            best,
+            &subgraph_clone,
+            matches_graph,
+        ));
+        best = best.max(cx);
     }
 
     cx
