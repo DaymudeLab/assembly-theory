@@ -324,7 +324,18 @@ impl CGraph {
     pub fn frag_bound(&self, subgraph: &BitSet, fragments: &[BitSet]) -> usize {
         let total_bonds = fragments.iter().map(|x| x.len()).sum::<usize>();
         let mut bound = 0;
-        let m = self.weights[subgraph.iter().next().unwrap()] + 1;
+        let sizes = {
+            let mut vec = vec![];
+            let mut prev = 0;
+            for s in subgraph.iter().map(|v| self.weights[v] + 1) {
+                if s != prev {
+                    vec.push(s);
+                    prev = s;
+                }
+            }
+
+            vec
+        };
 
         /*let mut removes: Vec<Vec<usize>> = vec![Vec::new(); fragments.len()];
         for v in subgraph {
@@ -341,11 +352,11 @@ impl CGraph {
         println!("{:?}", num_bonds);
         println!("{:?}", removes);*/
         
-        for i in 2..m + 1 {
+        for i in sizes {
             let mut bound_temp = 0;
-            let mut largest = 0;
             let mut has_bonds = fragments.len();
             let mut num_bonds: Vec<usize> = fragments.iter().map(|x| x.len()).collect();
+
             for v in subgraph.iter() {
                 if has_bonds == 0 {
                     break;
@@ -353,6 +364,7 @@ impl CGraph {
                 if self.weights[v] + 1 > i {
                     continue;
                 }
+
 
                 let dup = &self.matches[v];
                 let bond = dup.1.iter().next().unwrap();
@@ -363,7 +375,6 @@ impl CGraph {
 
                 if num_bonds[j] > 0 {
                     let remove = std::cmp::min(dup.0.len(), num_bonds[j]);
-                    largest = std::cmp::max(largest, remove);
                     bound_temp += 1;
                     num_bonds[j] -= remove;
 
@@ -373,8 +384,21 @@ impl CGraph {
                 }
             }
 
-            let log = (largest as f32).log2().ceil() as usize;
-            let leftover = num_bonds.iter().map(|x| (x / largest) + (x % largest != 0) as usize).sum::<usize>();
+            /*let (leftover, x) = {
+                let mut tot = 0;
+                let mut largest = 0;
+                for s in num_bonds.iter() {
+                    tot += s;
+                    largest = std::cmp::max(largest, s);
+                }
+                (tot, largest)
+            };*/
+            let leftover = num_bonds.iter().sum::<usize>();
+            let x = match num_bonds.iter().max().unwrap() {
+                0 => 1,
+                y => *y,
+            };
+            let log = ((i as f32).log2() - (x as f32).log2()).ceil() as usize;
             bound = std::cmp::max(bound, total_bonds - bound_temp - log - leftover);
         }
 
@@ -616,8 +640,8 @@ fn recurse_clique_index_search(mol: &Molecule,
     println!("Vec: {}", vec_bound_simple(fragments, largest_remove, mol));
     println!("Small Vec: {}", vec_bound_small_frags(fragments, largest_remove, mol));
     println!("Color: {}", matches_graph.color_bound(&subgraph));
-    println!("Cover: {}", matches_graph.cover_bound(&subgraph));
-    println!("Cover Sort: {}\n", matches_graph.cover_bound_sort(&subgraph));*/
+    println!("Cover: {}", matches_graph.cover_bound(&subgraph, false));
+    println!("Cover Sort: {}\n", matches_graph.cover_bound(&subgraph, true));*/
 
     /*if addition_bound(fragments, largest_remove) < matches_graph.frag_bound(&subgraph, fragments) && ix > best {
         println!("Largest Remove: {}", largest_remove);
