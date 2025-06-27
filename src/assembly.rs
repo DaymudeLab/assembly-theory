@@ -38,6 +38,7 @@ struct EdgeType {
 }
 
 static PARALLEL_MATCH_SIZE_THRESHOLD: usize = 100;
+static ADD_CHAIN: &[usize] = &[0, 1, 2, 2, 3, 3, 4, 3, 4, 4];
 
 /// Enum to represent the different bounds available during the computation of molecular assembly
 /// indices.
@@ -384,15 +385,6 @@ impl CGraph {
                 }
             }
 
-            /*let (leftover, x) = {
-                let mut tot = 0;
-                let mut largest = 0;
-                for s in num_bonds.iter() {
-                    tot += s;
-                    largest = std::cmp::max(largest, s);
-                }
-                (tot, largest)
-            };*/
             let leftover = num_bonds.iter().sum::<usize>();
             let x = match num_bonds.iter().max().unwrap() {
                 0 => 1,
@@ -1140,14 +1132,21 @@ fn addition_bound(fragments: &[BitSet], m: usize) -> usize {
 
     // Test for all sizes m of largest removed duplicate
     for max in 2..m + 1 {
-        let log = (max as f32).log2().ceil();
+        let log = {
+            if max <= 10 {
+                ADD_CHAIN[max - 1]
+            }
+            else {
+                (max as f32).log2().ceil() as usize
+            }
+        };
         let mut aux_sum: usize = 0;
 
         for len in &frag_sizes {
             aux_sum += (len / max) + (len % max != 0) as usize
         }
 
-        max_s = max_s.max(size_sum - log as usize - aux_sum);
+        max_s = max_s.max(size_sum - log - aux_sum);
     }
 
     max_s
