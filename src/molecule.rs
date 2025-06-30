@@ -10,10 +10,12 @@ use std::{
 };
 
 use bit_set::BitSet;
+use graph_canon::CanonLabeling;
 use petgraph::{
     algo::{is_isomorphic, is_isomorphic_subgraph},
     dot::Dot,
     graph::{EdgeIndex, Graph, NodeIndex},
+    visit::IntoNeighbors,
     Undirected,
 };
 
@@ -430,23 +432,26 @@ impl Molecule {
     /// Return an iterator of bitsets from self containing all duplicate and
     /// non-overlapping pairs of isomorphic subgraphs
     pub fn matches(&self) -> impl Iterator<Item = (BitSet, BitSet)> {
-        let mut matches = BTreeSet::new();
+        let mut isomorphic_map = HashMap::<CanonLabeling, Vec<BitSet>>::new();
         for subgraph in self.enumerate_noninduced_subgraphs() {
             let mut h = self.graph().clone();
             h.retain_edges(|_, e| subgraph.contains(e.index()));
+            h.retain_nodes(|g, n| g.neighbors(n).count() > 0);
 
-            let h_prime = self.graph().map(
-                |_, n| *n,
-                |i, e| (!subgraph.contains(i.index())).then_some(*e),
-            );
-            for cert in noninduced_subgraph_isomorphism_iter(&h, &h_prime, |e1, e2| {
-                e2.is_some_and(|e| e == *e1)
-            }) {
-                matches.insert(if subgraph < cert {
-                    (subgraph.clone(), cert)
-                } else {
-                    (cert, subgraph.clone())
-                });
+            let repr = CanonLabeling::new(&h);
+            isomorphic_map
+                .entry(repr)
+                .and_modify(|bucket| bucket.push(subgraph))
+                .or_insert(vec![]);
+        }
+        let mut matches = Vec::new();
+        for bucket in isomorphic_map.values() {
+            for (i, first) in bucket.iter().enumerate() {
+                for second in &bucket[i..] {
+                    if first.is_disjoint(second) {
+                        matches.push((first.clone(), second.clone()));
+                    }
+                }
             }
         }
         matches.into_iter()
