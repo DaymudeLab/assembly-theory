@@ -357,6 +357,7 @@ impl CGraph {
             let mut bound_temp = 0;
             let mut has_bonds = fragments.len();
             let mut num_bonds: Vec<usize> = fragments.iter().map(|x| x.len()).collect();
+            let mut smallest_remove = i;
 
             for v in subgraph.iter() {
                 if has_bonds == 0 {
@@ -378,6 +379,7 @@ impl CGraph {
                     let remove = std::cmp::min(dup.0.len(), num_bonds[j]);
                     bound_temp += 1;
                     num_bonds[j] -= remove;
+                    smallest_remove = std::cmp::min(smallest_remove, remove);
 
                     if num_bonds[j] == 0 {
                         has_bonds -= 1;
@@ -386,12 +388,11 @@ impl CGraph {
             }
 
             let leftover = num_bonds.iter().sum::<usize>();
-            let x = match num_bonds.iter().max().unwrap() {
-                0 => 1,
-                y => *y,
-            };
-            let log = ((i as f32).log2() - (x as f32).log2()).ceil() as usize;
-            bound = std::cmp::max(bound, total_bonds - bound_temp - log - leftover);
+            if leftover > 0 {
+                smallest_remove = 1;
+            }
+            let log = (smallest_remove as f32).log2().ceil() as usize;
+            bound = std::cmp::max(bound, total_bonds - bound_temp - leftover - log);
         }
 
         bound
@@ -635,17 +636,6 @@ fn recurse_clique_index_search(mol: &Molecule,
     println!("Cover: {}", matches_graph.cover_bound(&subgraph, false));
     println!("Cover Sort: {}\n", matches_graph.cover_bound(&subgraph, true));*/
 
-    /*if addition_bound(fragments, largest_remove) < matches_graph.frag_bound(&subgraph, fragments) && ix > best {
-        println!("Largest Remove: {}", largest_remove);
-        println!("Add: {}", addition_bound(fragments, largest_remove));
-        println!("Frag: {}", matches_graph.frag_bound(&subgraph, fragments));
-    }*/
-
-    /*if savings_ground_truth(0, 0, &subgraph, matches_graph) > matches_graph.frag_bound(&subgraph, fragments) {
-        println!("Ground Truth: {}", savings_ground_truth(0, 0, &subgraph, matches_graph));
-        println!("Frag: {}", matches_graph.frag_bound(&subgraph, fragments));
-    }*/
-
     // Search for duplicatable fragment
     for v in subgraph.iter() {
         let (h1, h2) = matches_graph.get_match(v);
@@ -695,7 +685,7 @@ fn recurse_clique_index_search(mol: &Molecule,
                 println!("Kernel Time: {:?}", dur);
             }*/
             //println!("{}, {}", subgraph_clone.len(), matches_graph.density(&subgraph_clone));
-            if subgraph_clone.len() >= 10 && matches_graph.density(&subgraph_clone) >= 0.6 {
+            /*if subgraph_clone.len() >= 10 && matches_graph.density(&subgraph_clone) >= 0.6 {
                 println!("{}", subgraph_clone.len());
                 println!("{:?}", subgraph_clone);
                 println!("{:?}", subgraph_clone.iter().map(|v| matches_graph.weights[v]).collect::<Vec<usize>>());
@@ -707,7 +697,8 @@ fn recurse_clique_index_search(mol: &Molecule,
                 }
 
                 std::process::exit(1);
-            }
+            }*/
+            subgraph_clone = kernelize_fast(matches_graph, subgraph_clone);
         }*/
 
         cx = cx.min(recurse_clique_index_search(
@@ -734,7 +725,7 @@ pub fn clique_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize
 
     let start = Instant::now();
     let matches_graph = CGraph::new(matches);
-    let dur = start.elapsed();
+    //let dur = start.elapsed();
     //println!("Graph Time: {:?}", dur);
 
     let mut subgraph = BitSet::with_capacity(num_matches);
@@ -743,9 +734,9 @@ pub fn clique_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize
     }
 
     // Kernelization
-    let start = Instant::now();
+    //let start = Instant::now();
     subgraph = kernelize_fast(&matches_graph, subgraph);
-    let dur = start.elapsed();
+    //let dur = start.elapsed();
     //println!("Kernel Time: {:?}", dur);
 
     // Search
@@ -754,7 +745,7 @@ pub fn clique_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize
     init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
     let edge_count = mol.graph().edge_count();
 
-    let start = Instant::now();
+    //let start = Instant::now();
 
     let index = recurse_clique_index_search(
         mol, 
@@ -768,7 +759,7 @@ pub fn clique_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize
         1);
 
     let dur = start.elapsed();
-    println!("Search Time: {:?}", dur);
+    //println!("Search Time: {:?}", dur);
 
     (index as u32, num_matches as u32, total_search)
 }
@@ -1106,7 +1097,7 @@ pub fn serial_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize
     );
 
     let dur = start.elapsed();
-    println!("Search Time: {:?}", dur);
+    //println!("Search Time: {:?}", dur);
 
     (index as u32, matches.len() as u32, total_search)
 }
