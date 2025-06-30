@@ -120,9 +120,9 @@ impl CGraph {
         /*if ix + self.color_bound(&subgraph) <= best {
             return ix;
         }*/
-        if ix + self.cover_bound(&subgraph, true) <= best{
+        /*if ix + self.cover_bound(&subgraph, true) <= best{
             return ix;
-        }
+        }*/
 
         // Search for duplicatable fragment
         for v in subgraph.iter() {
@@ -388,14 +388,42 @@ impl CGraph {
             }
 
             let leftover = num_bonds.iter().sum::<usize>();
-            if leftover > 0 {
-                smallest_remove = 1;
-            }
-            let log = (smallest_remove as f32).log2().ceil() as usize;
+            let log = {
+                if leftover > 0 {
+                    0
+                }
+                else {
+                    (smallest_remove as f32).log2().ceil() as usize
+                }
+            };
             bound = std::cmp::max(bound, total_bonds - bound_temp - leftover - log);
         }
 
         bound
+    }
+
+    pub fn split_bound(&self, subgraph: &BitSet, fragments: &[BitSet]) -> usize {
+        let mut subs = vec![BitSet::with_capacity(self.len()); fragments.len()];
+        for v in subgraph.iter() {
+            let dup = &self.matches[v];
+            let bond = dup.1.iter().next().unwrap();
+            let mut j = 0;
+            while !fragments[j].contains(bond) {
+                j += 1;
+            }
+
+            subs[j].insert(v);
+        }
+
+        subs.iter().map(|g| 
+        {
+            if g.len() <= 10 {
+                self.savings_ground_truth(&g)
+            }
+            else {
+                self.cover_bound(&g, true)
+            }
+        }).sum()
     }
 }
 
@@ -587,6 +615,7 @@ fn recurse_clique_index_search(mol: &Molecule,
     subgraph: BitSet,
     matches_graph: &CGraph,
     depth: usize,
+    must_include: &Vec<usize>,
 ) -> usize {
     if subgraph.len() == 0 {
         return ix;
@@ -596,6 +625,9 @@ fn recurse_clique_index_search(mol: &Molecule,
     *states_searched += 1;
 
     // Branch and Bound
+    if ix >= best + matches_graph.frag_bound(&subgraph, fragments) {
+        return ix;
+    }
     for bound_type in bounds {
         let exceeds = match bound_type {
             Bound::Log => false, //ix - log_bound(fragments) >= best,
@@ -615,9 +647,6 @@ fn recurse_clique_index_search(mol: &Molecule,
     /*if ix >= best + matches_graph.color_bound(&subgraph) {
         return ix;
     }*/
-    if ix >= best + matches_graph.frag_bound(&subgraph, fragments) {
-        return ix;
-    }
     if ix >= best + matches_graph.cover_bound(&subgraph, false) {
         return ix;
     }
@@ -634,7 +663,8 @@ fn recurse_clique_index_search(mol: &Molecule,
     println!("Small Vec: {}", vec_bound_small_frags(fragments, largest_remove, mol));
     println!("Color: {}", matches_graph.color_bound(&subgraph));
     println!("Cover: {}", matches_graph.cover_bound(&subgraph, false));
-    println!("Cover Sort: {}\n", matches_graph.cover_bound(&subgraph, true));*/
+    println!("Cover Sort: {}", matches_graph.cover_bound(&subgraph, true));
+    println!("Split: {}\n", matches_graph.split_bound(&subgraph, fragments));*/
 
     // Search for duplicatable fragment
     for v in subgraph.iter() {
@@ -677,29 +707,11 @@ fn recurse_clique_index_search(mol: &Molecule,
         fractures.push(h1.clone());
 
         let mut subgraph_clone = matches_graph.forward_neighbors(v, &subgraph);
-        /*if depth == 1 {
-            /*if subgraph_clone.len() >= 260 {
-                let start = Instant::now();
-                subgraph_clone = kernelize(matches_graph, subgraph_clone);
-                let dur = start.elapsed();
-                println!("Kernel Time: {:?}", dur);
-            }*/
-            //println!("{}, {}", subgraph_clone.len(), matches_graph.density(&subgraph_clone));
-            /*if subgraph_clone.len() >= 10 && matches_graph.density(&subgraph_clone) >= 0.6 {
-                println!("{}", subgraph_clone.len());
-                println!("{:?}", subgraph_clone);
-                println!("{:?}", subgraph_clone.iter().map(|v| matches_graph.weights[v]).collect::<Vec<usize>>());
-                for (edges, v) in subgraph_clone.iter().map(|v| &matches_graph.graph[v]).zip(subgraph_clone.iter()) {
-                    let mut edges_clone = edges.clone();
-                    edges_clone.intersect_with(&subgraph_clone);
-                    edges_clone.insert(v);
-                    println!("{:?}", edges_clone.symmetric_difference(&subgraph_clone).collect::<Vec<usize>>());
-                }
-
-                std::process::exit(1);
-            }*/
-            subgraph_clone = kernelize_fast(matches_graph, subgraph_clone);
-        }*/
+        let mut must_include_clone = must_include.clone();
+        if depth == 1 {
+            subgraph_clone = deletion_kernel(matches_graph, subgraph_clone);
+            must_include_clone.append(&mut inclusion_kernel(matches_graph, &subgraph_clone));
+        }
 
         cx = cx.min(recurse_clique_index_search(
             mol,
@@ -711,8 +723,13 @@ fn recurse_clique_index_search(mol: &Molecule,
             subgraph_clone,
             matches_graph,
             depth + 1,
+            &must_include_clone,
         ));
         best = best.min(cx);
+
+        if must_include.contains(&v) {
+            return cx;
+        }
     }
 
     cx
@@ -735,9 +752,14 @@ pub fn clique_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize
 
     // Kernelization
     //let start = Instant::now();
-    subgraph = kernelize_fast(&matches_graph, subgraph);
+    subgraph = deletion_kernel(&matches_graph, subgraph);
     //let dur = start.elapsed();
     //println!("Kernel Time: {:?}", dur);
+
+    /*if test2(&matches_graph, &subgraph) != -1 {
+        println!("!!!");
+    }
+    std::process::exit(1);*/
 
     // Search
     let mut total_search = 0;
@@ -756,10 +778,11 @@ pub fn clique_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize
         &mut total_search,
         subgraph.clone(),
         &matches_graph,
-        1);
+        1,
+    &vec![]);
 
     let dur = start.elapsed();
-    //println!("Search Time: {:?}", dur);
+    println!("Search Time: {:?}", dur);
 
     (index as u32, num_matches as u32, total_search)
 }
@@ -774,7 +797,7 @@ pub fn clique_index_search_bench(mol: &Molecule, matches: Vec<(BitSet, BitSet)>)
     for i in 0..num_matches {
         subgraph.insert(i);
     }
-    subgraph = kernelize_fast(&matches_graph, subgraph);
+    subgraph = deletion_kernel(&matches_graph, subgraph);
 
     // Search
     let mut total_search = 0;
@@ -796,48 +819,13 @@ pub fn clique_index_search_bench(mol: &Molecule, matches: Vec<(BitSet, BitSet)>)
         &mut total_search,
         subgraph.clone(),
         &matches_graph,
-        1);
+        1,
+    &vec![]);
 
     (index as u32, num_matches as u32, total_search)
 }
 
-fn kernelize(g: &CGraph, mut subgraph: BitSet) -> BitSet {
-    let mut count = 0;
-    let subgraph_copy = subgraph.clone();
-
-    for v in subgraph_copy.iter() {
-        let v_val = g.weights[v];
-        let neighbors_v = g.neighbors(v, &subgraph);
-
-        let Some(w) = neighbors_v.iter().next() else {
-            continue;
-        };
-
-        for u in g.graph[w].intersection(&subgraph) {
-            if g.are_adjacent(v, u) || v == u {
-                continue;
-            }
-
-            let u_val = g.weights[u];
-            if v_val > u_val {
-                continue;
-            }
-
-            let neighbors_u = g.neighbors(u, &subgraph);
-
-            if neighbors_v.is_subset(&neighbors_u) {
-                count += 1;
-                subgraph.remove(v);
-                break;
-            }
-        }
-    }
-
-    //println!("Reduce count: {}", count);
-    subgraph
-}
-
-fn kernelize_fast(g: &CGraph, mut subgraph: BitSet) -> BitSet {
+fn deletion_kernel(g: &CGraph, mut subgraph: BitSet) -> BitSet {
     let mut count = 0;
     let subgraph_copy = subgraph.clone();
 
@@ -877,6 +865,44 @@ fn kernelize_fast(g: &CGraph, mut subgraph: BitSet) -> BitSet {
     //println!("Reduce count: {}", count);
     subgraph
 }
+
+fn inclusion_kernel(g: &CGraph, subgraph: &BitSet) -> Vec<usize> {
+    let mut kernel = Vec::new();
+    let tot = subgraph.iter().map(|v| g.weights[v]).sum::<usize>();
+
+    'outer: for v in subgraph {
+        let vw = g.weights[v];
+        let nw = g.graph[v].iter().map(|u| g.weights[u]).sum::<usize>();
+        if vw >= tot - nw - vw { 
+            kernel.push(v);
+            continue;
+        }
+
+        let mut neighbors: Vec<usize> = vec![];
+
+        for u in subgraph.difference(&g.graph[v]) {
+            if u == v {
+                continue;
+            }
+            if g.weights[u] > vw {
+                continue 'outer;
+            }
+
+            for w in neighbors.iter() {
+                if g.are_adjacent(u, *w) {
+                    continue 'outer;
+                }   
+            }
+
+            neighbors.push(u);
+        }
+
+        kernel.push(v);
+    }
+
+    kernel
+}
+
 
 #[allow(clippy::too_many_arguments)]
 fn parallel_recurse_index_search(
