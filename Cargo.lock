@@ -427,8 +427,7 @@ checksum = "a8d1add55171497b4705a648c6b583acafb01d58050a51727785f0b2c8e0a2b2"
 [[package]]
 name = "graph-canon"
 version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f38241cf77c5b7392729ca1920aae9e348f596cf5b2e298f22741e27997f0cb9"
+source = "git+https://github.com/AgentElement/graph-canon#b1765d363a22abb874560e6274e9f33451702abc"
 dependencies = [
  "bitvec",
  "nauty-Traces-sys",
