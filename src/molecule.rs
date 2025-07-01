@@ -15,6 +15,7 @@ use petgraph::{
     algo::{is_isomorphic, is_isomorphic_subgraph},
     dot::Dot,
     graph::{EdgeIndex, Graph, NodeIndex},
+    visit::EdgeCount,
     Undirected,
 };
 
@@ -305,17 +306,49 @@ impl Molecule {
     }
 
     pub fn enumerate_noninduced_subgraphs(&self) -> impl Iterator<Item = BitSet> {
-        let mut solutions = HashSet::new();
-        let remainder = BTreeSet::from_iter(self.graph.edge_indices());
-        self.generate_connected_noninduced_subgraphs(
-            remainder,
-            BTreeSet::new(),
-            BTreeSet::new(),
-            &mut solutions,
-        );
-        solutions.into_iter().filter_map(|s| {
-            (!s.is_empty()).then_some(BitSet::from_iter(s.iter().map(|i| i.index())))
-        })
+        let mut solutions = vec![];
+        for edge in self.graph.edge_indices() {
+            let mut current = BitSet::new();
+            current.insert(edge.index());
+            self.generate_connected_noninduced_subgraphs(&mut current, &mut solutions)
+        }
+        solutions.into_iter()
+    }
+
+    fn generate_connected_noninduced_subgraphs(
+        &self,
+        current: &mut BitSet,
+        solutions: &mut Vec<BitSet>,
+    ) {
+        if current.len() >= self.graph.edge_count() / 2 {
+            return;
+        }
+
+        let mut frontier = BitSet::new();
+        for edge in current.iter() {
+            let (src, dst) = self.graph.edge_endpoints(EdgeIndex::new(edge)).unwrap();
+            for n in self.graph.neighbors(src) {
+                let e = self.graph.find_edge(src, n).unwrap().index();
+                if !current.contains(e) {
+                    frontier.insert(e);
+                }
+            }
+            for n in self.graph.neighbors(dst) {
+                let e = self.graph.find_edge(dst, n).unwrap().index();
+                if !current.contains(e) {
+                    frontier.insert(e);
+                }
+            }
+        }
+
+        for edge in &frontier {
+            current.insert(edge);
+            if current.len() > 1 {
+                solutions.push(current.clone());
+            }
+            self.generate_connected_noninduced_subgraphs(current, solutions);
+            current.remove(edge);
+        }
     }
 
     /// Return `true` if self is not formed in a valid way
@@ -365,48 +398,6 @@ impl Molecule {
             neighbors.extend(self.graph.neighbors(*v));
             self.generate_connected_induced_subgraphs(remainder, subset, neighbors, solutions);
         } else if subset.len() > 2 {
-            solutions.insert(subset);
-        }
-    }
-
-    fn generate_connected_noninduced_subgraphs(
-        &self,
-        mut remainder: EdgeSet,
-        mut subset: EdgeSet,
-        mut neighbors: EdgeSet,
-        solutions: &mut HashSet<EdgeSet>,
-    ) {
-        let candidates = if subset.is_empty() {
-            remainder.clone()
-        } else {
-            remainder.intersection(&neighbors).cloned().collect()
-        };
-
-        if let Some(e) = candidates.first() {
-            remainder.remove(e);
-
-            self.generate_connected_noninduced_subgraphs(
-                remainder.clone(),
-                subset.clone(),
-                neighbors.clone(),
-                solutions,
-            );
-
-            subset.insert(*e);
-            let (src, dst) = self.graph.edge_endpoints(*e).expect("malformed input");
-            neighbors.extend(
-                self.graph
-                    .neighbors(src)
-                    .filter_map(|n| self.graph.find_edge(src, n)),
-            );
-            neighbors.extend(
-                self.graph
-                    .neighbors(dst)
-                    .filter_map(|n| self.graph.find_edge(dst, n)),
-            );
-
-            self.generate_connected_noninduced_subgraphs(remainder, subset, neighbors, solutions);
-        } else if subset.len() > 1 && subset.len() < self.graph.edge_count() / 2 + 1 {
             solutions.insert(subset);
         }
     }
