@@ -28,7 +28,7 @@ type NodeSet = BTreeSet<NodeIndex<Index>>;
 
 macro_rules! periodic_table {
     ( $(($element:ident, $name:literal),)* ) => {
-        #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+        #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
         /// Represents a chemical element.
         pub enum Element {
             $( $element, )*
@@ -182,7 +182,7 @@ periodic_table!(
 /// Atoms are the vertices of a [`Molecule`] graph.
 ///
 /// Atoms contain an element and have a (currently unused) `capacity` field.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Atom {
     element: Element,
     capacity: u32,
@@ -193,14 +193,14 @@ pub struct Atom {
 /// The `.mol` file spec describes seven types of bonds, but assembly theory literature
 /// only considers single, double, and triple bonds. Notably, aromatic rings are represented
 /// by alternating single and double bonds, instead of the aromatic bond type.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Bond {
     Single,
     Double,
     Triple,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum AtomOrBond {
     Atom(Atom),
     Bond(Bond),
@@ -460,15 +460,15 @@ impl Molecule {
     /// Return an iterator of bitsets from self containing all duplicate and
     /// non-overlapping pairs of isomorphic subgraphs
     pub fn matches(&self) -> impl Iterator<Item = (BitSet, BitSet)> {
-        let mut isomorphic_map = HashMap::<CanonLabeling, Vec<BitSet>>::new();
+        let mut isomorphic_map = HashMap::<CanonLabeling<AtomOrBond>, Vec<BitSet>>::new();
         for subgraph in self.enumerate_noninduced_subgraphs() {
             let cgraph = self.subgraph_to_cgraph(&subgraph);
             let repr = CanonLabeling::new(&cgraph);
 
             isomorphic_map
                 .entry(repr)
-                .and_modify(|bucket| bucket.push(subgraph))
-                .or_insert(vec![]);
+                .and_modify(|bucket| bucket.push(subgraph.clone()))
+                .or_insert(vec![subgraph.clone()]);
         }
         let mut matches = Vec::new();
         for bucket in isomorphic_map.values() {
