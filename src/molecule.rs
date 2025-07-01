@@ -306,7 +306,7 @@ impl Molecule {
     }
 
     pub fn enumerate_noninduced_subgraphs(&self) -> impl Iterator<Item = BitSet> {
-        let mut solutions = vec![];
+        let mut solutions = HashSet::new();
         for edge in self.graph.edge_indices() {
             let mut current = BitSet::new();
             current.insert(edge.index());
@@ -318,7 +318,7 @@ impl Molecule {
     fn generate_connected_noninduced_subgraphs(
         &self,
         current: &mut BitSet,
-        solutions: &mut Vec<BitSet>,
+        solutions: &mut HashSet<BitSet>,
     ) {
         if current.len() >= self.graph.edge_count() / 2 {
             return;
@@ -344,7 +344,7 @@ impl Molecule {
         for edge in &frontier {
             current.insert(edge);
             if current.len() > 1 {
-                solutions.push(current.clone());
+                solutions.insert(current.clone());
             }
             self.generate_connected_noninduced_subgraphs(current, solutions);
             current.remove(edge);
