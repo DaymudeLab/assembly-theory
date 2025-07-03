@@ -114,30 +114,27 @@ jobs:
           update: true
           install: >-
             mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-python
             mingw-w64-x86_64-python-pip
             mingw-w64-x86_64-rust
-          path-type: inherit
-      - name: Build wheels
+            ca-certificates
+          path-type: strict
+      - name: Build and test
         shell: msys2 {0}
         env:
           CARGO_NET_GIT_FETCH_WITH_CLI: "true"
         run: |
+          python -m venv .venv
+          source .venv/Scripts/activate
           pip install maturin
           maturin build --release --out dist --find-interpreter
+          pip install assembly-theory --find-links dist --force-reinstall
+          pip install pytest
+          pytest
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-windows-${{ matrix.platform.target }}
           path: dist
-      - name: Pytest
-        shell: msys2 {0}
-        run: |
-          python -m venv .venv
-          source .venv/Scripts/activate
-          pip install assembly-theory --find-links dist --force-reinstall
-          pip install pytest
-          pytest
 
   macos:
     runs-on: ${{ matrix.platform.runner }}
