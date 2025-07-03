@@ -111,29 +111,27 @@ jobs:
       - uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
-          install: mingw-w64-x86_64-gcc
           update: true
+          install: >-
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-python
+            mingw-w64-x86_64-python-pip
+            mingw-w64-x86_64-rust
           path-type: inherit
-      - uses: actions/setup-python@v5
-        with:
-          python-version: 3.x
-          architecture: ${{ matrix.platform.target }}
-      - name: Install Rust and build
+      - name: Build wheels
         shell: msys2 {0}
         run: |
-          rustup target add x86_64-pc-windows-gnu
           pip install maturin
-          maturin build --target x86_64-pc-windows-gnu --release --out dist --find-interpreter
+          maturin build --release --out dist --find-interpreter
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-windows-${{ matrix.platform.target }}
           path: dist
-      - name: pytest
-        shell: bash
+      - name: Pytest
+        shell: msys2 {0}
         run: |
-          set -e
-          python3 -m venv .venv
+          python -m venv .venv
           source .venv/Scripts/activate
           pip install assembly-theory --find-links dist --force-reinstall
           pip install pytest
