@@ -113,19 +113,17 @@ jobs:
           msystem: MINGW64
           install: mingw-w64-x86_64-gcc
           update: true
+          path-type: inherit
       - uses: actions/setup-python@v5
         with:
           python-version: 3.x
           architecture: ${{ matrix.platform.target }}
-      - name: Install Rust GNU target
-        run: rustup target add x86_64-pc-windows-gnu
-      - name: Build wheels
-        uses: PyO3/maturin-action@v1
-        with:
-          target: x86_64-pc-windows-gnu
-          args: --release --out dist --find-interpreter
-          sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+      - name: Install Rust and build
         shell: msys2 {0}
+        run: |
+          rustup target add x86_64-pc-windows-gnu
+          pip install maturin
+          maturin build --target x86_64-pc-windows-gnu --release --out dist --find-interpreter
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
