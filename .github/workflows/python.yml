@@ -39,7 +39,7 @@ jobs:
         with:
           target: ${{ matrix.platform.target }}
           manylinux: manylinux_2_28
-          before-script-linux: dnf install -y clang-devel
+          before-script-linux: dnf install -y clang-devel gcc
           command: build
           args: --release --out dist --find-interpreter
           sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
@@ -76,7 +76,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.platform.target }}
-          before-script-linux: apt-get update && apt-get install -y clang
+          before-script-linux: apt-get update && apt-get install -y clang gcc
           command: build
           args: --release --out dist --find-interpreter
           sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
