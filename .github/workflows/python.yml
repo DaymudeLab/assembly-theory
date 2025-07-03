@@ -39,8 +39,9 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.platform.target }}
-          # Install clang in the manylinux container before building
-          command: bash -c "yum install -y clang-devel && maturin build --release --out dist --find-interpreter"
+          before-script: yum install -y clang-devel
+          command: build
+          args: --release --out dist --find-interpreter
           sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
           manylinux: auto
       - name: Upload wheels
@@ -90,8 +91,9 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.platform.target }}
-          # Install clang in the musllinux container before building
-          command: sh -c "apk add clang-dev && maturin build --release --out dist --find-interpreter"
+          before-script: apk add clang-dev
+          command: build
+          args: --release --out dist --find-interpreter
           sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
           manylinux: musllinux_1_2
       - name: Upload wheels
