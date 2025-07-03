@@ -114,6 +114,8 @@ jobs:
           architecture: ${{ matrix.platform.target }}
       - name: Install LLVM
         run: choco install llvm mingw
+      - name: Install Rust GNU target
+        run: rustup target add x86_64-pc-windows-gnu
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -209,5 +211,3 @@ jobs:
         with:
           command: upload
           args: --non-interactive --skip-existing wheels-*/*
-
-    
