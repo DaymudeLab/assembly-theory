@@ -108,25 +108,24 @@ jobs:
             target: x64
     steps:
       - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          install: mingw-w64-x86_64-gcc
+          update: true
       - uses: actions/setup-python@v5
         with:
           python-version: 3.x
           architecture: ${{ matrix.platform.target }}
       - name: Install Rust GNU target
         run: rustup target add x86_64-pc-windows-gnu
-      - name: Install MinGW
-        run: choco install mingw
-      - name: Add MinGW to PATH
-        run: echo "C:\tools\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Build wheels
         uses: PyO3/maturin-action@v1
-        env:
-          CC_x86_64-pc-windows-gnu: gcc
-          RUSTFLAGS: -C linker=gcc
         with:
           target: x86_64-pc-windows-gnu
           args: --release --out dist --find-interpreter
           sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        shell: msys2 {0}
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
