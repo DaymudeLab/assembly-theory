@@ -153,7 +153,7 @@ jobs:
           python-version: 3.x
           architecture: ${{ matrix.platform.target }}
       - name: Install LLVM
-        run: choco install llvm gcc-x86_64-windows-windows
+        run: choco install llvm mingw
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
