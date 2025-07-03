@@ -117,6 +117,7 @@ jobs:
             mingw-w64-x86_64-python-pip
             mingw-w64-x86_64-rust
             ca-certificates
+            git
           path-type: strict
       - name: Build and test
         shell: msys2 {0}
