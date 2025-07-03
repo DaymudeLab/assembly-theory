@@ -38,11 +38,11 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.platform.target }}
-          before-script-linux: yum install -y clang-devel
+          manylinux: manylinux_2_28
+          before-script-linux: dnf install -y clang-devel
           command: build
           args: --release --out dist --find-interpreter
           sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
-          manylinux: auto
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
