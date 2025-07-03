@@ -112,14 +112,19 @@ jobs:
         with:
           python-version: 3.x
           architecture: ${{ matrix.platform.target }}
-      - name: Install LLVM
-        run: choco install llvm mingw
       - name: Install Rust GNU target
         run: rustup target add x86_64-pc-windows-gnu
+      - name: Install MinGW
+        run: choco install mingw
+      - name: Add MinGW to PATH
+        run: echo "C:\tools\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Build wheels
         uses: PyO3/maturin-action@v1
+        env:
+          CC_x86_64-pc-windows-gnu: gcc
+          RUSTFLAGS: -C linker=gcc
         with:
-          target: ${{ matrix.platform.target }}
+          target: x86_64-pc-windows-gnu
           args: --release --out dist --find-interpreter
           sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
       - name: Upload wheels
