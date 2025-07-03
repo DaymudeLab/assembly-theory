@@ -124,7 +124,7 @@ jobs:
           CARGO_NET_GIT_FETCH_WITH_CLI: "true"
         run: |
           python -m venv .venv
-          source .venv/Scripts/activate
+          source .venv/bin/activate
           pip install maturin
           maturin build --release --out dist --find-interpreter
           pip install assembly-theory --find-links dist --force-reinstall
