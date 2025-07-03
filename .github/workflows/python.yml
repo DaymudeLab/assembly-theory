@@ -123,6 +123,7 @@ jobs:
         shell: msys2 {0}
         env:
           CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+          CFLAGS: -I/mingw64/include
         run: |
           python -m venv .venv
           source .venv/bin/activate
