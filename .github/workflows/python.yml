@@ -125,6 +125,8 @@ jobs:
           python-version: '3.x'
           architecture: ${{ matrix.platform.target }}
       - uses: PyO3/maturin-action@v1
+        env:
+          CFLAGS: -I/mingw64/include
         with:
           rust-toolchain: stable-gnu
           args: --release --out dist --find-interpreter
@@ -133,7 +135,6 @@ jobs:
         shell: bash
         env:
           CARGO_NET_GIT_FETCH_WITH_CLI: "true"
-          CFLAGS: -I/mingw64/include
         run: |
           set -e
           python -m venv .venv
