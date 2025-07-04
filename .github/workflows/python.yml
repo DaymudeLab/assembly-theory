@@ -112,21 +112,25 @@ jobs:
         with:
           python-version: 3.x
           architecture: ${{ matrix.platform.target }}
+      - name: Install MinGW
+        run: choco install mingw --no-progress
+      - name: Set up PATH
+        run: echo "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
-          target: ${{ matrix.platform.target }}
+          target: x86_64-pc-windows-gnu
           args: --release --out dist
           sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
       - uses: actions/setup-python@v5
         with:
-          python-version: 3.13t
+          python-version: '3.13'
           architecture: ${{ matrix.platform.target }}
       - name: Build free-threaded wheels
         uses: PyO3/maturin-action@v1
         with:
-          target: ${{ matrix.platform.target }}
-          args: --release --out dist -i python3.13t
+          target: x86_64-pc-windows-gnu
+          args: --release --out dist -i python3.13
           sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
       - name: Upload wheels
         uses: actions/upload-artifact@v4
