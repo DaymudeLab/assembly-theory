@@ -133,6 +133,7 @@ jobs:
         shell: bash
         env:
           CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+          CFLAGS: -I/mingw64/include
         run: |
           set -e
           python -m venv .venv
