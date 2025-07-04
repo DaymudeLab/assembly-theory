@@ -116,10 +116,12 @@ jobs:
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         env:
-          CFLAGS_x86_64_pc_windows_gnu: "-USYS_UNIX -DWIN32"
+          CFLAGS_x86_64_pc_windows_gnu: "-I${{ github.workspace }}/dummy_headers"
         with:
           target: x86_64-pc-windows-gnu
           before-script-linux: |
+            mkdir -p ${{ github.workspace }}/dummy_headers/sys
+            touch ${{ github.workspace }}/dummy_headers/sys/times.h
             sudo apt-get update
             sudo apt-get install -y mingw-w64
             rustup target add x86_64-pc-windows-gnu
