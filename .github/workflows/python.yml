@@ -110,20 +110,16 @@ jobs:
       - uses: actions/checkout@v4
       - uses: msys2/setup-msys2@v2
         with:
-          msystem: MSYS
+          msystem: MINGW64
           update: true
           install: >-
             mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-python-pip
-            mingw-w64-x86_64-rust
-            ca-certificates
-            git
           path-type: inherit
       - name: Build and test
         shell: msys2 {0}
         env:
           CARGO_NET_GIT_FETCH_WITH_CLI: "true"
-          CFLAGS: -I/mingw64/include/sys
+          CFLAGS: -I/mingw64/include
         run: |
           set -e
           python -m venv .venv
