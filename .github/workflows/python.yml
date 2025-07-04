@@ -116,7 +116,7 @@ jobs:
             mingw-w64-x86_64-toolchain
             mingw-w64-x86_64-python-pip
             mingw-w64-x86_64-rust
-            mingw-w64-x86_64-headers
+            mingw-w64-x86_64-cross-headers
             mingw-w64-x86_64-gcc
             ca-certificates
             git
@@ -125,6 +125,7 @@ jobs:
         shell: msys2 {0}
         env:
           CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+          CFLAGS: -I/mingw64/include
         run: |
           python -m venv .venv
           source .venv/Scripts/activate
