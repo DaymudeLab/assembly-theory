@@ -123,7 +123,7 @@ jobs:
         run: |
           set -e
           python -m venv .venv
-          source .venv/Scripts/activate
+          source .venv/bin/activate
           rustup toolchain install stable-gnu
           rustup default stable-gnu
           pip install maturin pytest
