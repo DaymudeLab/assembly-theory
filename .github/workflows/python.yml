@@ -100,7 +100,6 @@ jobs:
             pytest
 
   windows:
-    runs-on: ${{ matrix.platform.runner }}
     strategy:
       matrix:
         platform:
@@ -108,34 +107,29 @@ jobs:
             target: x64
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: msys2/setup-msys2@v2
         with:
-          python-version: 3.x
-          architecture: ${{ matrix.platform.target }}
-      - name: Install MinGW
-        run: choco install mingw --no-progress
-      - name: Set up PATH
-        run: echo "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          update: true
+          install: >-
+            git
+            python
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-python
+
       - name: Build wheels
-        uses: PyO3/maturin-action@v1
-        with:
-          target: x86_64-pc-windows-gnu
-          args: --release --out dist
-          sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-          architecture: ${{ matrix.platform.target }}
+        shell: msys2 {0}
+        run: |
+          maturin build --release --out dist --find-interpreter
       - name: Build free-threaded wheels
-        uses: PyO3/maturin-action@v1
-        with:
-          target: x86_64-pc-windows-gnu
-          args: --release --out dist -i python3.13
-          sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        shell: msys2 {0}
+        run: |
+          pacman -S --noconfirm mingw-w64-x86_64-python-free-threading
+          maturin build --release --out dist -i python3.13
+
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-windows-${{ matrix.platform.target }}
+          name: wheels-windows-x64
           path: dist
 
   macos:
