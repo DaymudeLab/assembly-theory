@@ -122,6 +122,7 @@ jobs:
           before-script-linux: |
             mkdir -p ${{ github.workspace }}/dummy_headers/sys
             touch ${{ github.workspace }}/dummy_headers/sys/times.h
+            touch ${{ github.workspace }}/dummy_headers/sys/wait.h
             sudo apt-get update
             sudo apt-get install -y mingw-w64
             rustup target add x86_64-pc-windows-gnu
