@@ -110,28 +110,33 @@ jobs:
       - uses: actions/checkout@v4
       - uses: msys2/setup-msys2@v2
         with:
+          msystem: MSYS
           update: true
           install: >-
-            git
-            python
             mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-python
-
-      - name: Build wheels
+            mingw-w64-x86_64-python-pip
+            mingw-w64-x86_64-rust
+            mingw-w64-x86_64-headers
+            ca-certificates
+            git
+          path-type: inherit
+      - name: Build and test
         shell: msys2 {0}
+        env:
+          CARGO_NET_GIT_FETCH_WITH_CLI: "true"
         run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install maturin
           maturin build --release --out dist --find-interpreter
-      - name: Build free-threaded wheels
-        shell: msys2 {0}
-        run: |
-          pacman -S --noconfirm mingw-w64-x86_64-python-free-threading
-          maturin build --release --out dist -i python3.13
-
+          pip install assembly-theory --find-links dist --force-reinstall
+          pip install pytest
+          pytest
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-windows-x64
-          path: dist
+          name: wheels-windows-${{ matrix.platform.target }}
+        path: dist
 
   macos:
     runs-on: ${{ matrix.platform.runner }}
