@@ -130,7 +130,7 @@ jobs:
           rustup toolchain install stable-gnu
           rustup default stable-gnu
           pip install maturin pytest
-          CFLAGS="-I/mingw64/include" maturin build --release --out dist --find-interpreter
+          CFLAGS="-I/usr/include" maturin build --release --out dist --find-interpreter
           pip install assembly-theory --find-links dist --force-reinstall
           pytest
       - name: Upload wheels
