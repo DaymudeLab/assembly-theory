@@ -555,7 +555,7 @@ impl Molecule {
     /// Pretty-printable string representation of self
     pub fn info(&self) -> String {
         let dot = Dot::new(&self.graph);
-        format!("{:?}", dot)
+        format!("{dot:?}")
     }
 }
 
