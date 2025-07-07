@@ -15,7 +15,6 @@ use petgraph::{
     algo::{is_isomorphic, is_isomorphic_subgraph},
     dot::Dot,
     graph::{EdgeIndex, Graph, NodeIndex},
-    visit::EdgeCount,
     Undirected,
 };
 
@@ -324,7 +323,7 @@ impl Molecule {
         let candidate = if subset.is_empty() {
             remainder.iter().next()
         } else {
-            remainder.intersection(&neighbors).into_iter().next()
+            remainder.intersection(&neighbors).next()
         };
 
         if let Some(e) = candidate {
