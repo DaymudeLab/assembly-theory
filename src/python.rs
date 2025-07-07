@@ -26,7 +26,7 @@ impl FromStr for PyBounds {
             "log" => Ok(PyBounds::Log),
             "intchain" => Ok(PyBounds::IntChain),
             "vecchain" => Ok(PyBounds::VecChain),
-            _ => Err(PyValueError::new_err(format!("Invalid bound: {}", s))),
+            _ => Err(PyValueError::new_err(format!("Invalid bound: {s}"))),
         }
     }
 }

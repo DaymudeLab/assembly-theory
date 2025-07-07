@@ -10,6 +10,7 @@ use std::{
 };
 
 use bit_set::BitSet;
+use graph_canon::CanonLabeling;
 use petgraph::{
     algo::{is_isomorphic, is_isomorphic_subgraph},
     dot::Dot,
@@ -17,19 +18,17 @@ use petgraph::{
     Undirected,
 };
 
-use crate::{
-    utils::{edge_induced_subgraph, is_subset_connected},
-    vf3::noninduced_subgraph_isomorphism_iter,
-};
+use crate::utils::{edge_induced_subgraph, is_subset_connected};
 
 pub(crate) type Index = u32;
 pub(crate) type MGraph = Graph<Atom, Bond, Undirected, Index>;
+type CGraph = Graph<AtomOrBond, (), Undirected, Index>;
 type EdgeSet = BTreeSet<EdgeIndex<Index>>;
 type NodeSet = BTreeSet<NodeIndex<Index>>;
 
 macro_rules! periodic_table {
     ( $(($element:ident, $name:literal),)* ) => {
-        #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+        #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
         /// Represents a chemical element.
         pub enum Element {
             $( $element, )*
@@ -183,7 +182,7 @@ periodic_table!(
 /// Atoms are the vertices of a [`Molecule`] graph.
 ///
 /// Atoms contain an element and have a (currently unused) `capacity` field.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Atom {
     element: Element,
     capacity: u32,
@@ -194,11 +193,17 @@ pub struct Atom {
 /// The `.mol` file spec describes seven types of bonds, but assembly theory literature
 /// only considers single, double, and triple bonds. Notably, aromatic rings are represented
 /// by alternating single and double bonds, instead of the aromatic bond type.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Bond {
     Single,
     Double,
     Triple,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum AtomOrBond {
+    Atom(Atom),
+    Bond(Bond),
 }
 
 /// Thrown when `from::<usize>()` does not recieve a 1, 2, or 3.
@@ -301,16 +306,62 @@ impl Molecule {
 
     pub fn enumerate_noninduced_subgraphs(&self) -> impl Iterator<Item = BitSet> {
         let mut solutions = HashSet::new();
-        let remainder = BTreeSet::from_iter(self.graph.edge_indices());
-        self.generate_connected_noninduced_subgraphs(
-            remainder,
-            BTreeSet::new(),
-            BTreeSet::new(),
-            &mut solutions,
-        );
-        solutions.into_iter().filter_map(|s| {
-            (!s.is_empty()).then_some(BitSet::from_iter(s.iter().map(|i| i.index())))
-        })
+        let remainder = BitSet::from_iter(self.graph.edge_indices().map(|ix| ix.index()));
+        let subset = BitSet::new();
+        let neighbors = BitSet::new();
+        self.generate_connected_noninduced_subgraphs(remainder, subset, neighbors, &mut solutions);
+        solutions.into_iter()
+    }
+
+    fn generate_connected_noninduced_subgraphs(
+        &self,
+        mut remainder: BitSet,
+        mut subset: BitSet,
+        mut neighbors: BitSet,
+        solutions: &mut HashSet<BitSet>,
+    ) {
+        let candidate = if subset.is_empty() {
+            remainder.iter().next()
+        } else {
+            remainder.intersection(&neighbors).next()
+        };
+
+        if let Some(e) = candidate {
+            remainder.remove(e);
+
+            self.generate_connected_noninduced_subgraphs(
+                remainder.clone(),
+                subset.clone(),
+                neighbors.clone(),
+                solutions,
+            );
+
+            subset.insert(e);
+            let (src, dst) = self
+                .graph
+                .edge_endpoints(EdgeIndex::new(e))
+                .expect("malformed input");
+
+            if subset.len() < self.graph.edge_count() / 2 + 1 {
+                neighbors.extend(
+                    self.graph
+                        .neighbors(src)
+                        .filter_map(|n| self.graph.find_edge(src, n).map(|ix| ix.index())),
+                );
+
+                neighbors.extend(
+                    self.graph
+                        .neighbors(dst)
+                        .filter_map(|n| self.graph.find_edge(dst, n).map(|ix| ix.index())),
+                );
+
+                self.generate_connected_noninduced_subgraphs(
+                    remainder, subset, neighbors, solutions,
+                );
+            }
+        } else if subset.len() > 1 {
+            solutions.insert(subset);
+        }
     }
 
     /// Return `true` if self is not formed in a valid way
@@ -364,48 +415,6 @@ impl Molecule {
         }
     }
 
-    fn generate_connected_noninduced_subgraphs(
-        &self,
-        mut remainder: EdgeSet,
-        mut subset: EdgeSet,
-        mut neighbors: EdgeSet,
-        solutions: &mut HashSet<EdgeSet>,
-    ) {
-        let candidates = if subset.is_empty() {
-            remainder.clone()
-        } else {
-            remainder.intersection(&neighbors).cloned().collect()
-        };
-
-        if let Some(e) = candidates.first() {
-            remainder.remove(e);
-
-            self.generate_connected_noninduced_subgraphs(
-                remainder.clone(),
-                subset.clone(),
-                neighbors.clone(),
-                solutions,
-            );
-
-            subset.insert(*e);
-            let (src, dst) = self.graph.edge_endpoints(*e).expect("malformed input");
-            neighbors.extend(
-                self.graph
-                    .neighbors(src)
-                    .filter_map(|n| self.graph.find_edge(src, n)),
-            );
-            neighbors.extend(
-                self.graph
-                    .neighbors(dst)
-                    .filter_map(|n| self.graph.find_edge(dst, n)),
-            );
-
-            self.generate_connected_noninduced_subgraphs(remainder, subset, neighbors, solutions);
-        } else if subset.len() > 1 && subset.len() < self.graph.edge_count() / 2 + 1 {
-            solutions.insert(subset);
-        }
-    }
-
     #[allow(dead_code)]
     fn print_edgelist(&self, list: &[EdgeIndex], name: &str) {
         println!(
@@ -427,26 +436,52 @@ impl Molecule {
         );
     }
 
+    fn subgraph_to_cgraph(&self, subgraph: &BitSet) -> CGraph {
+        let mut h = CGraph::with_capacity(subgraph.len(), 2 * subgraph.len());
+        let mut vtx_map = HashMap::<NodeIndex, NodeIndex>::new();
+        for e in subgraph {
+            let eix = EdgeIndex::new(e);
+            let (src, dst) = self.graph.edge_endpoints(eix).unwrap();
+            let src_w = self.graph.node_weight(src).unwrap();
+            let dst_w = self.graph.node_weight(dst).unwrap();
+            let e_w = self.graph.edge_weight(eix).unwrap();
+
+            let h_enode = h.add_node(AtomOrBond::Bond(*e_w));
+
+            let h_src = vtx_map
+                .entry(src)
+                .or_insert(h.add_node(AtomOrBond::Atom(*src_w)));
+            h.add_edge(*h_src, h_enode, ());
+
+            let h_dst = vtx_map
+                .entry(dst)
+                .or_insert(h.add_node(AtomOrBond::Atom(*dst_w)));
+            h.add_edge(*h_dst, h_enode, ());
+        }
+        h
+    }
+
     /// Return an iterator of bitsets from self containing all duplicate and
     /// non-overlapping pairs of isomorphic subgraphs
     pub fn matches(&self) -> impl Iterator<Item = (BitSet, BitSet)> {
-        let mut matches = BTreeSet::new();
+        let mut isomorphic_map = HashMap::<CanonLabeling<AtomOrBond>, Vec<BitSet>>::new();
         for subgraph in self.enumerate_noninduced_subgraphs() {
-            let mut h = self.graph().clone();
-            h.retain_edges(|_, e| subgraph.contains(e.index()));
+            let cgraph = self.subgraph_to_cgraph(&subgraph);
+            let repr = CanonLabeling::new(&cgraph);
 
-            let h_prime = self.graph().map(
-                |_, n| *n,
-                |i, e| (!subgraph.contains(i.index())).then_some(*e),
-            );
-            for cert in noninduced_subgraph_isomorphism_iter(&h, &h_prime, |e1, e2| {
-                e2.is_some_and(|e| e == *e1)
-            }) {
-                matches.insert(if subgraph < cert {
-                    (subgraph.clone(), cert)
-                } else {
-                    (cert, subgraph.clone())
-                });
+            isomorphic_map
+                .entry(repr)
+                .and_modify(|bucket| bucket.push(subgraph.clone()))
+                .or_insert(vec![subgraph.clone()]);
+        }
+        let mut matches = Vec::new();
+        for bucket in isomorphic_map.values() {
+            for (i, first) in bucket.iter().enumerate() {
+                for second in &bucket[i..] {
+                    if first.is_disjoint(second) {
+                        matches.push((first.clone(), second.clone()));
+                    }
+                }
             }
         }
         matches.into_iter()
@@ -520,12 +555,14 @@ impl Molecule {
     /// Pretty-printable string representation of self
     pub fn info(&self) -> String {
         let dot = Dot::new(&self.graph);
-        format!("{:?}", dot)
+        format!("{dot:?}")
     }
 }
 
 mod tests {
     #![allow(unused_imports)]
+    use petgraph::algo::is_isomorphic_matching;
+
     use super::*;
 
     #[test]
@@ -537,5 +574,51 @@ mod tests {
     fn element_from_string() {
         assert!(str::parse("H") == Ok(Element::Hydrogen));
         assert!(str::parse::<Element>("Foo").is_err());
+    }
+
+    #[test]
+    fn noncanonical() {
+        let mut p3_010 = Graph::<u8, (), Undirected>::new_undirected();
+        let n0 = p3_010.add_node(0);
+        let n1 = p3_010.add_node(1);
+        let n2 = p3_010.add_node(0);
+        p3_010.add_edge(n0, n1, ());
+        p3_010.add_edge(n1, n2, ());
+
+        let mut p3_001 = Graph::<u8, (), Undirected>::new_undirected();
+        let n0 = p3_001.add_node(0);
+        let n1 = p3_001.add_node(0);
+        let n2 = p3_001.add_node(1);
+        p3_001.add_edge(n0, n1, ());
+        p3_001.add_edge(n1, n2, ());
+
+        let repr_a = CanonLabeling::new(&p3_010);
+        let repr_b = CanonLabeling::new(&p3_001);
+
+        assert_ne!(repr_a, repr_b);
+    }
+
+    #[test]
+    fn nonisomorphic() {
+        let mut p3_010 = Graph::<u8, (), Undirected>::new_undirected();
+        let n0 = p3_010.add_node(0);
+        let n1 = p3_010.add_node(1);
+        let n2 = p3_010.add_node(0);
+        p3_010.add_edge(n0, n1, ());
+        p3_010.add_edge(n1, n2, ());
+
+        let mut p3_001 = Graph::<u8, (), Undirected>::new_undirected();
+        let n0 = p3_001.add_node(0);
+        let n1 = p3_001.add_node(0);
+        let n2 = p3_001.add_node(1);
+        p3_001.add_edge(n0, n1, ());
+        p3_001.add_edge(n1, n2, ());
+
+        assert!(!is_isomorphic_matching(
+            &p3_001,
+            &p3_010,
+            |e0, e1| e0 == e1,
+            |n0, n1| n0 == n1
+        ))
     }
 }
