@@ -15,8 +15,10 @@ Here, we provide usage examples of each; in the next section, we demonstrate tes
 
 ### Building and Running the Executable
 
+This crate currently only builds on unix-like systems (MacOS and Linux).
+Windows is supported through [WSL](https://learn.microsoft.com/en-us/windows/wsl/install).
 Rust provides the `cargo` build system and package manager for dependency management, compilation, packaging, and versioning.
-To build the standalone executable, run:
+To build the standalone executable, first install [clang](https://clang.llvm.org/), then run:
 
 ```shell
 cargo build --release
