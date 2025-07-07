@@ -9,13 +9,8 @@ def test_timeout_pass():
     assert at.molecular_assembly_verbose(mol, timeout=5.0) == {
         "duplicates": 20,
         "index": 8,
-        "space": 36,
-    } or at.molecular_assembly_verbose(mol, timeout=5.0) == {
-        "duplicates": 20,
-        "index": 8,
         "space": 35,
     }
-
     aspirin_smi = "O=C(C)Oc1ccccc1C(=O)O"
     mol = rdkit.Chem.MolFromSmiles(aspirin_smi)
     assert at.molecular_assembly(mol, timeout=5.0) == 8
