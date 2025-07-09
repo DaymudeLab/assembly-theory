@@ -2,7 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
-use assembly_theory::assembly::{index_search, serial_index_search, Bound};
+use assembly_theory::assembly::{clique_index_search, index_search, serial_index_search, Bound, Kernel};
 use assembly_theory::{loader, molecule::Molecule};
 use clap::{Args, Parser, ValueEnum};
 
@@ -11,6 +11,18 @@ enum Bounds {
     Log,
     IntChain,
     VecChain,
+    Weight,
+    Color,
+    Cover,
+    Fragment,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, ValueEnum, Ord, Debug)]
+pub enum KernelOption {
+    Never,
+    Once,
+    Depth1,
+    All,
 }
 
 #[derive(Parser, Debug)]
@@ -32,6 +44,12 @@ struct Cli {
     #[arg(long)]
     /// Disable all parallelism
     serial: bool,
+
+    #[arg(long)]
+    kernel_method: Option<KernelOption>,
+
+    #[arg(long)]
+    no_clique: bool,
 }
 
 #[derive(Args, Debug)]
@@ -53,17 +71,23 @@ fn make_boundlist(u: &[Bounds]) -> Vec<Bound> {
             Bounds::Log => vec![Bound::Log],
             Bounds::IntChain => vec![Bound::IntChain],
             Bounds::VecChain => vec![Bound::VecChainSimple, Bound::VecChainSmallFrags],
+            Bounds::Weight => vec![Bound::Weight],
+            Bounds::Color => vec![Bound::Color],
+            Bounds::Cover => vec![Bound::CoverNoSort, Bound::CoverSort],
+            Bounds::Fragment => vec![Bound::Fragment],
         })
         .collect::<Vec<_>>();
     boundlist.dedup();
     boundlist
 }
 
-fn index_message(mol: &Molecule, bounds: &[Bound], verbose: bool, serial: bool) -> String {
+fn index_message(mol: &Molecule, bounds: &[Bound], verbose: bool, serial: bool, no_clique: bool, kernel: Kernel) -> String {
     let (index, duplicates, space) = if serial {
         serial_index_search(mol, bounds)
-    } else {
+    } else if no_clique {
         index_search(mol, bounds)
+    } else {
+        clique_index_search(mol, bounds, kernel)
     };
     if verbose {
         let mut message = String::new();
@@ -89,6 +113,16 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
+    let kernel = match cli.kernel_method {
+        Some(x) => match x {
+            KernelOption::Never => Kernel::Never,
+            KernelOption::Once => Kernel::Once,
+            KernelOption::Depth1 => Kernel::Depth1,
+            KernelOption::All => Kernel::All,
+        }
+        None => Kernel::Once,
+    };
+
     let output = match cli.boundgroup {
         None => index_message(
             &molecule,
@@ -99,14 +133,16 @@ fn main() -> Result<()> {
             ],
             cli.verbose,
             cli.serial,
+            cli.no_clique,
+            kernel
         ),
         Some(BoundGroup {
             no_bounds: true, ..
-        }) => index_message(&molecule, &[], cli.verbose, cli.serial),
+        }) => index_message(&molecule, &[], cli.verbose, cli.serial, cli.no_clique, kernel),
         Some(BoundGroup {
             no_bounds: false,
             bounds,
-        }) => index_message(&molecule, &make_boundlist(&bounds), cli.verbose, cli.serial),
+        }) => index_message(&molecule, &make_boundlist(&bounds), cli.verbose, cli.serial, cli.no_clique, kernel),
     };
 
     println!("{output}");

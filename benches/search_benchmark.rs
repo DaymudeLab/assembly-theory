@@ -44,7 +44,7 @@ pub fn reference_datasets(c: &mut Criterion) {
                         for mol in mol_list.iter() {
                             let matches: Vec<(BitSet, BitSet)> = mol.matches().collect();
                             let start = Instant::now();
-                            clique_index_search_bench(mol, matches);
+                            clique_index_search_bench(mol, matches, assembly_theory::assembly::Kernel::Once);
                             total += start.elapsed()
                         }
                     }
@@ -60,7 +60,7 @@ pub fn reference_datasets(c: &mut Criterion) {
 
 criterion_group! {
     name = benchmark;
-    config = Criterion::default().sample_size(20);
+    config = Criterion::default().sample_size(10);
     targets = reference_datasets
 }
 criterion_main!(benchmark);
