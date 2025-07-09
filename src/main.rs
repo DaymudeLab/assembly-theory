@@ -114,12 +114,10 @@ fn main() -> Result<()> {
     }
 
     let kernel = match cli.kernel_method {
-        Some(x) => match x {
-            KernelOption::Never => Kernel::Never,
-            KernelOption::Once => Kernel::Once,
-            KernelOption::Depth1 => Kernel::Depth1,
-            KernelOption::All => Kernel::All,
-        }
+        Some(KernelOption::Never) => Kernel::Never,
+        Some(KernelOption::Once) => Kernel::Once,
+        Some(KernelOption::Depth1) => Kernel::Depth1,
+        Some(KernelOption::All) => Kernel::All,
         None => Kernel::Once,
     };
 
@@ -127,9 +125,12 @@ fn main() -> Result<()> {
         None => index_message(
             &molecule,
             &[
+                Bound::Fragment,
                 Bound::IntChain,
                 Bound::VecChainSimple,
                 Bound::VecChainSmallFrags,
+                Bound::CoverNoSort,
+                Bound::CoverSort,
             ],
             cli.verbose,
             cli.serial,

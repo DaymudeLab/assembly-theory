@@ -115,7 +115,7 @@ impl CompatGraph {
         }
     }
 
-    pub fn savings_ground_truth(&self, subgraph: &BitSet) -> usize {
+    /*pub fn savings_ground_truth(&self, subgraph: &BitSet) -> usize {
         self.savings_ground_truth_recurse(0, 0, subgraph)
     }
 
@@ -148,7 +148,7 @@ impl CompatGraph {
         }
 
         cx
-    }
+    }*/
 
     pub fn len(&self) -> usize {
         self.matches.len()
@@ -716,7 +716,7 @@ pub fn clique_index_search(mol: &Molecule, bounds: &[Bound], kernel_method: Kern
     (index as u32, num_matches as u32, total_search)
 }
 
-pub fn clique_index_search_bench(mol: &Molecule, matches: Vec<(BitSet, BitSet)>, kernel_method: Kernel) -> (u32, u32, usize) {
+pub fn clique_index_search_bench(mol: &Molecule, matches: Vec<(BitSet, BitSet)>, bounds: &[Bound], kernel_method: Kernel) -> (u32, u32, usize) {
     // Graph Initialization
     let num_matches = matches.len();
     let matches_graph = CompatGraph::new(matches);
@@ -736,11 +736,6 @@ pub fn clique_index_search_bench(mol: &Molecule, matches: Vec<(BitSet, BitSet)>,
     let mut init = BitSet::new();
     init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
     let edge_count = mol.graph().edge_count();
-    let bounds = vec![
-        Bound::IntChain,
-        Bound::VecChainSimple,
-        Bound::VecChainSmallFrags,
-    ];
 
     let index = recurse_clique_index_search(
         mol, 
@@ -1076,7 +1071,7 @@ fn addition_bound(fragments: &[BitSet], m: usize) -> usize {
     // Test for all sizes m of largest removed duplicate
     for max in 2..m + 1 {
         let log = {
-            if max <= 10 {
+            if max <= ADD_CHAIN.len() {
                 ADD_CHAIN[max - 1]
             }
             else {

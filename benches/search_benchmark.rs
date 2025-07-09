@@ -6,7 +6,7 @@ use std::fs;
 use std::path::Path;
 
 use assembly_theory::{
-    assembly::{clique_index_search_bench},
+    assembly::{clique_index_search_bench, Kernel, Bound},
     loader,
     molecule::Molecule,
 };
@@ -17,6 +17,10 @@ pub fn reference_datasets(c: &mut Criterion) {
 
     // Define datasets, bounds, and labels.
     let datasets = ["gdb13_1201", "gdb17_200", "coconut_55"];
+    let bounds = [
+        Bound::IntChain,
+    ];
+    let kernel = Kernel::Never;
 
     // Loop over all datasets of interest.
     for dataset in datasets.iter() {
@@ -44,7 +48,7 @@ pub fn reference_datasets(c: &mut Criterion) {
                         for mol in mol_list.iter() {
                             let matches: Vec<(BitSet, BitSet)> = mol.matches().collect();
                             let start = Instant::now();
-                            clique_index_search_bench(mol, matches, assembly_theory::assembly::Kernel::Once);
+                            clique_index_search_bench(mol, matches, &bounds, kernel);
                             total += start.elapsed()
                         }
                     }
