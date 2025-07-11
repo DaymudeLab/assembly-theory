@@ -1,7 +1,8 @@
 use crate::molecule::{AtomOrBond, CGraph, Molecule};
+use bit_set::BitSet;
 use lexical_sort::{lexical_cmp, lexical_only_alnum_cmp, natural_cmp, StringSort};
 use petgraph::{
-    graph::NodeIndex,
+    graph::{EdgeIndex, NodeIndex},
     Direction::{Incoming, Outgoing},
     Graph,
 };
@@ -47,13 +48,13 @@ impl MolAtomNode {
     }
 }
 
-// Compute the assembly index of a molecule
-pub fn canonize(molecule: &Molecule) -> String {
+pub fn canonize(molecule: &Molecule, subgraph: &BitSet) -> String {
     let mgraph = molecule.graph();
     let mut mol_graph = CGraph::new_undirected();
     let mut vtx_map = vec![NodeIndex::default(); mgraph.node_count()];
 
-    for bond_idx in mgraph.edge_indices() {
+    for subgraph_bond_idx in subgraph {
+        let bond_idx = EdgeIndex::new(subgraph_bond_idx);
         let bond = mgraph.edge_weight(bond_idx).unwrap();
         let (start_atom_idx, end_atom_idx) = mgraph.edge_endpoints(bond_idx).unwrap();
         let start_atom = mgraph.node_weight(start_atom_idx).unwrap();
@@ -596,7 +597,10 @@ mod tests {
         let path = PathBuf::from(format!("./data/checks/benzene.mol"));
         let molfile = fs::read_to_string(path).expect("Cannot read the data file");
         let molecule = loader::parse_molfile_str(&molfile).expect("Cannot parse molfile.");
-        let canonical_repr = canonize(&molecule);
+        let canonical_repr = canonize(
+            &molecule,
+            &BitSet::from_iter(molecule.graph().edge_indices().map(|e| e.index())),
+        );
 
         println!("{}", canonical_repr);
 
@@ -611,7 +615,10 @@ mod tests {
         let path = PathBuf::from(format!("./data/checks/anthracene.mol"));
         let molfile = fs::read_to_string(path).expect("Cannot read the data file");
         let molecule = loader::parse_molfile_str(&molfile).expect("Cannot parse molfile.");
-        let canonical_repr = canonize(&molecule);
+        let canonical_repr = canonize(
+            &molecule,
+            &BitSet::from_iter(molecule.graph().edge_indices().map(|e| e.index())),
+        );
 
         println!("{}", canonical_repr);
 
