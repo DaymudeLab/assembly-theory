@@ -43,6 +43,9 @@ pub mod assembly;
 // Utility functions
 mod utils;
 
+// Canonization function
+pub mod canonize;
+
 // Python library
 #[cfg(feature = "python")]
 pub mod python;
