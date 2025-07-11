@@ -220,7 +220,7 @@ impl Display for AtomOrBond {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
             AtomOrBond::Atom(atom) => write!(f, "{}", atom.element()),
-            AtomOrBond::Bond(bond) => write!(f, "{}", bond),
+            AtomOrBond::Bond(bond) => write!(f, "{bond}"),
         }
     }
 }

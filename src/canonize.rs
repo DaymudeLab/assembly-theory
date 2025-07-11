@@ -204,8 +204,8 @@ pub fn canonize(molecule: &Molecule) -> String {
 fn canonize_signature(
     mol_graph: &CGraph,
     dag: &mut Graph::<DAGVert, &str>,
-    extended_molg_atom_map: &mut Vec<MolAtomNode>,
-    dag_level_list: &Vec<Vec<NodeIndex>>,
+    extended_molg_atom_map: &mut [MolAtomNode],
+    dag_level_list: &[Vec<NodeIndex>],
     max_level: u32,
     color_c: u32,
     s_max: String,
@@ -274,7 +274,7 @@ fn print_signature_string(
     vertex: NodeIndex,
     dag: &Graph::<DAGVert, &str>,
     mol_graph: &CGraph,
-    extended_molg_atom_map: &Vec<MolAtomNode>,
+    extended_molg_atom_map: &[MolAtomNode],
     edges: &mut Vec<(NodeIndex, NodeIndex)>
 ) -> String {
     let mut print_sign = String::new();
@@ -320,8 +320,8 @@ fn print_signature_string(
 fn invariant_atom(
     mol_graph: &CGraph,
     dag: &mut Graph::<DAGVert, &str>,
-    extended_molg_atom_map: &mut Vec<MolAtomNode>,
-    dag_level_list: &Vec<Vec<NodeIndex>>,
+    extended_molg_atom_map: &mut [MolAtomNode],
+    dag_level_list: &[Vec<NodeIndex>],
     max_level: u32,
 ) {
     let mut count = 0;
