@@ -22,7 +22,7 @@ use crate::utils::{edge_induced_subgraph, is_subset_connected};
 
 pub(crate) type Index = u32;
 pub(crate) type MGraph = Graph<Atom, Bond, Undirected, Index>;
-type CGraph = Graph<AtomOrBond, (), Undirected, Index>;
+pub(crate) type CGraph = Graph<AtomOrBond, (), Undirected, Index>;
 type EdgeSet = BTreeSet<EdgeIndex<Index>>;
 type NodeSet = BTreeSet<NodeIndex<Index>>;
 
@@ -200,10 +200,29 @@ pub enum Bond {
     Triple,
 }
 
+impl Display for Bond {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            Bond::Single => write!(f, "1"),
+            Bond::Double => write!(f, "2"),
+            Bond::Triple => write!(f, "3"),
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum AtomOrBond {
+pub enum AtomOrBond {
     Atom(Atom),
     Bond(Bond),
+}
+
+impl Display for AtomOrBond {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            AtomOrBond::Atom(atom) => write!(f, "{}", atom.element().to_string()),
+            AtomOrBond::Bond(bond) => write!(f, "{}", bond.to_string()),
+        }
+    }
 }
 
 /// Thrown when `from::<usize>()` does not recieve a 1, 2, or 3.
