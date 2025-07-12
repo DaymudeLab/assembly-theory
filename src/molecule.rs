@@ -425,6 +425,10 @@ impl Molecule {
                     let mut next = subgraph.clone();
                     next.insert(neighbor);
 
+                    if next_set.contains_key(&next) {
+                        continue;
+                    }
+
                     let mut next_neighborhood = neighborhood.clone();
                     next_neighborhood.extend(
                         edge_neighbors(&self.graph, EdgeIndex::new(neighbor)).map(|e| e.index()),
