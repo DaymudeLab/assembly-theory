@@ -412,12 +412,16 @@ impl Molecule {
                 (set, neighborhood)
             }));
 
-        let mut isomorphic_map = HashMap::<CanonLabeling<AtomOrBond>, Vec<BitSet>>::new();
+        let mut matches = Vec::new();
 
         for _ in 0..(self.graph().edge_count() / 2) {
             let mut next_set = HashMap::new();
             for (subgraph, neighborhood) in solutions {
                 for neighbor in neighborhood.difference(&subgraph) {
+                    if subgraph.contains(neighbor) {
+                        continue;
+                    }
+
                     let mut next = subgraph.clone();
                     next.insert(neighbor);
 
@@ -441,29 +445,24 @@ impl Molecule {
                     .or_insert(vec![subgraph.clone()]);
             }
 
-            //for (_, sets) in &local_isomorphic_map {
-            //    if sets.len() == 1 {
-            //        next_set.remove(&sets[0]);
-            //    }
-            //}
-            isomorphic_map.extend(
-                local_isomorphic_map
-                    .into_iter()
-                    .filter(|(_, v)| v.len() > 1),
-            );
-            solutions = next_set;
-        }
+            for (_, sets) in &local_isomorphic_map {
+                if sets.len() == 1 {
+                    next_set.remove(&sets[0]);
+                }
+            }
 
-        let mut matches = Vec::new();
-        for bucket in isomorphic_map.values() {
-            for (i, first) in bucket.iter().enumerate() {
-                for second in &bucket[i..] {
-                    if first.is_disjoint(second) {
-                        matches.push((first.clone(), second.clone()));
+            solutions = next_set;
+            for bucket in local_isomorphic_map.values().filter(|v| v.len() > 1) {
+                for (i, first) in bucket.iter().enumerate() {
+                    for second in &bucket[i..] {
+                        if first.is_disjoint(second) {
+                            matches.push((first.clone(), second.clone()));
+                        }
                     }
                 }
             }
         }
+
         matches.into_iter()
     }
 
