@@ -15,10 +15,11 @@ use petgraph::{
     algo::{is_isomorphic, is_isomorphic_subgraph},
     dot::Dot,
     graph::{EdgeIndex, Graph, NodeIndex},
+    visit::EdgeCount,
     Undirected,
 };
 
-use crate::utils::{edge_induced_subgraph, is_subset_connected};
+use crate::utils::{edge_induced_subgraph, edge_neighbors, is_subset_connected};
 
 pub(crate) type Index = u32;
 pub(crate) type MGraph = Graph<Atom, Bond, Undirected, Index>;
@@ -311,6 +312,56 @@ impl Molecule {
         let neighbors = BitSet::new();
         self.generate_connected_noninduced_subgraphs(remainder, subset, neighbors, &mut solutions);
         solutions.into_iter()
+    }
+
+    pub fn matches_by_iterative_expansion(&self) -> impl Iterator<Item = (BitSet, BitSet)> {
+        let mut solutions: HashSet<BitSet> =
+            HashSet::from_iter(self.graph.edge_indices().map(|ix| {
+                let mut set = BitSet::new();
+                set.insert(ix.index());
+                set
+            }));
+
+        let mut isomorphic_map = HashMap::<CanonLabeling<AtomOrBond>, Vec<BitSet>>::new();
+
+        for _ in 0..(self.graph().edge_count() / 2) {
+            let mut next_set = HashSet::new();
+            for subgraph in solutions {
+                let mut neighborhood = BitSet::new();
+                for edge in &subgraph {
+                    neighborhood.extend(
+                        edge_neighbors(&self.graph, EdgeIndex::new(edge)).map(|e| e.index()),
+                    )
+                }
+                for neighbor in neighborhood.difference(&subgraph) {
+                    let mut next = subgraph.clone();
+                    next.insert(neighbor);
+                    next_set.insert(next);
+                }
+            }
+            for subgraph in &next_set {
+                let cgraph = self.subgraph_to_cgraph(&subgraph);
+                let repr = CanonLabeling::new(&cgraph);
+
+                isomorphic_map
+                    .entry(repr)
+                    .and_modify(|bucket| bucket.push(subgraph.clone()))
+                    .or_insert(vec![subgraph.clone()]);
+            }
+            solutions = next_set;
+        }
+
+        let mut matches = Vec::new();
+        for bucket in isomorphic_map.values() {
+            for (i, first) in bucket.iter().enumerate() {
+                for second in &bucket[i..] {
+                    if first.is_disjoint(second) {
+                        matches.push((first.clone(), second.clone()));
+                    }
+                }
+            }
+        }
+        matches.into_iter()
     }
 
     fn generate_connected_noninduced_subgraphs(

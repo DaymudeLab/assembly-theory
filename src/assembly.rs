@@ -360,7 +360,7 @@ pub fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize) {
     init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
 
     // Create and sort matches array
-    let mut matches: Vec<(BitSet, BitSet)> = mol.matches().collect();
+    let mut matches: Vec<(BitSet, BitSet)> = mol.matches_by_iterative_expansion().collect();
     matches.sort_by(|e1, e2| e2.0.len().cmp(&e1.0.len()));
 
     let edge_count = mol.graph().edge_count();
@@ -427,7 +427,7 @@ pub fn serial_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize
     init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
 
     // Create and sort matches array
-    let mut matches: Vec<(BitSet, BitSet)> = mol.matches().collect();
+    let mut matches: Vec<(BitSet, BitSet)> = mol.matches_by_iterative_expansion().collect();
     matches.sort_by(|e1, e2| e2.0.len().cmp(&e1.0.len()));
 
     let edge_count = mol.graph().edge_count();
