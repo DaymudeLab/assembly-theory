@@ -559,6 +559,41 @@ impl Molecule {
     }
 }
 
+impl Molecule {
+    /// Build a linear-chain Molecule from a 3-character string:
+    /// - 'H' → Carbon
+    /// - '-' → Nitrogen
+    /// - 'E' → Oxygen
+    ///
+    /// Each character becomes one atom, and successive atoms are joined by single bonds.
+    pub fn from_char_chain(s: &str) -> Result<Molecule, ParseElementError> {
+        // Create an undirected Graph<Atom, Bond, _, Index>
+        let mut graph: MGraph = Graph::new_undirected();
+        let mut nodes = Vec::<NodeIndex<Index>>::with_capacity(s.len());
+
+        // Map each char to an Atom and add to graph
+        for ch in s.chars() {
+            let element = match ch {
+                'H' => Element::Carbon,
+                '-' => Element::Nitrogen,
+                'E' => Element::Oxygen,
+                _invalid => return Err(ParseElementError),
+            };
+            let atom = Atom::new(element, 0);
+            let idx = graph.add_node(atom);
+            nodes.push(idx);
+        }
+
+        // Connect successive atoms with single bonds
+        for win in nodes.windows(2) {
+            graph.add_edge(win[0], win[1], Bond::Single);
+        }
+
+        // Wrap in Molecule and return
+        Ok(Molecule::from_graph(graph))
+    }
+}
+
 mod tests {
     #![allow(unused_imports)]
     use petgraph::algo::is_isomorphic_matching;

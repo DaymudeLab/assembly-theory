@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 use crate::assembly::Bound as AssemblyBound;
 use crate::assembly::{index_search, serial_index_search};
+use crate::molecule::{Molecule, ParseElementError};
 use crate::loader::parse_molfile_str;
 
 // TODO This needs to be combined with the Bounds Enum in main but I'm not sure the
@@ -147,6 +148,59 @@ pub fn _molecule_info(mol_block: String) -> PyResult<String> {
     Ok(mol.info()) // Retrieve molecular info
 }
 
+#[pyfunction]
+pub fn _chain_assembly(
+    chain: String,
+    bound_set: HashSet<String>,
+    serial: bool,
+) -> PyResult<u32> {
+    // Parse the chain; any bad char now gives your ParseElementError
+    let mol = Molecule::from_char_chain(&chain)
+        .map_err(|_| PyValueError::new_err("invalid chain character"))?;
+
+    let py_bounds = process_bound_set(bound_set)?;
+    let (index, _, _) = if serial {
+        serial_index_search(&mol, &make_boundlist(&py_bounds))
+    } else {
+        index_search(&mol, &make_boundlist(&py_bounds))
+    };
+
+    Ok(index)
+}
+
+#[pyfunction]
+pub fn _chain_assembly_verbose(
+    chain: String,
+    bound_set: HashSet<String>,
+    serial: bool,
+) -> PyResult<HashMap<String, usize>> {
+    let mol = Molecule::from_char_chain(&chain)
+        .map_err(|_| PyValueError::new_err("invalid chain character"))?;
+
+    let py_bounds = process_bound_set(bound_set)?;
+    let (ix, duplicates, space) = if serial {
+        serial_index_search(&mol, &make_boundlist(&py_bounds))
+    } else {
+        index_search(&mol, &make_boundlist(&py_bounds))
+    };
+
+    let mut data = HashMap::new();
+    data.insert("index".to_string(), ix as usize);
+    data.insert("duplicates".to_string(), duplicates as usize);
+    data.insert("space".to_string(), space);
+
+    Ok(data)
+}
+
+#[pyfunction]
+pub fn _chain_info(chain: String) -> PyResult<String> {
+    let mol = Molecule::from_char_chain(&chain)
+        .map_err(|_| PyValueError::new_err("invalid chain character"))?;
+
+    Ok(mol.info())
+}
+
+
 // Registers the Rust functions as a Python module.
 //
 // This function must match the `lib.name` setting in `Cargo.toml`,
@@ -156,5 +210,8 @@ fn _pyat(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_molecular_assembly, m)?)?;
     m.add_function(wrap_pyfunction!(_molecular_assembly_verbose, m)?)?;
     m.add_function(wrap_pyfunction!(_molecule_info, m)?)?;
+    m.add_function(wrap_pyfunction!(_chain_assembly, m)?)?;
+    m.add_function(wrap_pyfunction!(_chain_assembly_verbose, m)?)?;
+    m.add_function(wrap_pyfunction!(_chain_info, m)?)?;
     Ok(())
 }

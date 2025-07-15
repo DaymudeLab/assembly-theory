@@ -134,3 +134,77 @@ def _validate_bounds(bounds: Optional[Set[str]], no_bounds: bool) -> Set[str]:
         raise ValueError("bounds specified but `no_bounds` is True.")
 
     return bounds
+
+def chain_assembly(
+    chain: str,
+    bounds: Optional[Set[str]] = None,
+    no_bounds: bool = False,
+    timeout: Optional[int] = None,
+    serial: bool = False,
+) -> int:
+    """
+    Computes the molecular assembly index (MA) for a simple character chain.
+
+    Parameters:
+    - chain (str): A string like "H-EH" where each character maps to an atom.
+    - bounds (Optional[Set[str]]): Bounds to consider. If None, defaults are chosen based on `no_bounds`.
+    - no_bounds (bool): If True, disables bounds (overrides `bounds`).
+    - timeout (Optional[int]): Time limit in seconds; raises TimeoutError if exceeded.
+    - serial (bool): If True, use the serial search; otherwise parallel.
+
+    Returns:
+    - int: The computed assembly index.
+
+    Raises:
+    - ValueError: If both `bounds` and `no_bounds=True`.
+    - TimeoutError: On timeout.
+    """
+    # Validate and initialize bounds
+    bounds = _validate_bounds(bounds, no_bounds)
+
+    if timeout is None:
+        return _pyat._chain_assembly(chain, bounds, serial)
+    else:
+        return timer.run_with_timeout(
+            _pyat._chain_assembly, timeout, chain, bounds, serial
+        )
+
+
+def chain_assembly_verbose(
+    chain: str,
+    bounds: Optional[Set[str]] = None,
+    no_bounds: bool = False,
+    timeout: Optional[int] = None,
+    serial: bool = False,
+) -> Dict[str, int]:
+    """
+    Computes a verbose molecular assembly index for a character chain.
+
+    Returns a dict with keys:
+      - "index"    : the assembly index
+      - "duplicates": count of duplicated isomorphic subgraphs
+      - "space"    : total search space considered
+
+    Parameters are the same as `chain_assembly`.
+    """
+    bounds = _validate_bounds(bounds, no_bounds)
+
+    if timeout is None:
+        return _pyat._chain_assembly_verbose(chain, bounds, serial)
+    else:
+        return timer.run_with_timeout(
+            _pyat._chain_assembly_verbose, timeout, chain, bounds, serial
+        )
+
+
+def chain_info(chain: str) -> str:
+    """
+    Retrieve a pretty‐printed graph description for a character chain.
+
+    Parameters:
+    - chain (str): The input string.
+
+    Returns:
+    - str: DOT-format info of the underlying graph.
+    """
+    return _pyat._chain_info(chain)
