@@ -27,5 +27,8 @@ dependencies = ["rdkit~=2024.9"]
 repository = "https://github.com/DaymudeLab/assembly-theory"
 
 [tool.maturin]
-module-name = "_pyat"
+module-name = "_pyat" # , "assembly_theory"]
 features = ["pyo3/extension-module"]
+python-source = "."                  # or "python", "src", etc., where your code lives
+python-packages = ["assembly_theory"]     # list all pure-Python packages to include
+
