@@ -18,12 +18,9 @@
 //! # }
 //! ```
 
-use std::{
-    collections::BTreeSet,
-    sync::{
-        atomic::{AtomicUsize, Ordering::Relaxed},
-        Arc,
-    },
+use std::sync::{
+    atomic::{AtomicUsize, Ordering::Relaxed},
+    Arc,
 };
 
 use bit_set::BitSet;
@@ -43,92 +40,26 @@ use crate::{
 
 static PARALLEL_MATCH_SIZE_THRESHOLD: usize = 100;
 
-pub fn naive_assembly_depth(mol: &Molecule) -> u32 {
+/// Computes assembly depth; see
+/// [Pagel et al. (2024)](https://arxiv.org/abs/2409.05993).
+pub fn assembly_depth(mol: &Molecule) -> u32 {
     let mut ix = u32::MAX;
     for (left, right) in mol.partitions().unwrap() {
         let l = if left.is_basic_unit() {
             0
         } else {
-            naive_assembly_depth(&left)
+            assembly_depth(&left)
         };
 
         let r = if right.is_basic_unit() {
             0
         } else {
-            naive_assembly_depth(&right)
+            assembly_depth(&right)
         };
 
         ix = ix.min(l.max(r) + 1)
     }
     ix
-}
-
-fn recurse_naive_index_search(
-    mol: &Molecule,
-    matches: &BTreeSet<(BitSet, BitSet)>,
-    fragments: &[BitSet],
-    ix: usize,
-) -> usize {
-    let mut cx = ix;
-    for (h1, h2) in matches {
-        let mut fractures = fragments.to_owned();
-        let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
-        let f2 = fragments.iter().enumerate().find(|(_, c)| h2.is_subset(c));
-
-        let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) else {
-            continue;
-        };
-
-        // All of these clones are on bitsets and cheap enough
-        if i1 == i2 {
-            let mut union = h1.clone();
-            union.union_with(h2);
-            let mut difference = f1.clone();
-            difference.difference_with(&union);
-            let c = connected_components_under_edges(mol.graph(), &difference);
-            fractures.extend(c);
-            fractures.swap_remove(i1);
-            fractures.push(h1.clone());
-        } else {
-            let mut f1r = f1.clone();
-            f1r.difference_with(h1);
-            let mut f2r = f2.clone();
-            f2r.difference_with(h2);
-
-            let c1 = connected_components_under_edges(mol.graph(), &f1r);
-            let c2 = connected_components_under_edges(mol.graph(), &f2r);
-
-            fractures.extend(c1);
-            fractures.extend(c2);
-
-            fractures.swap_remove(i1.max(i2));
-            fractures.swap_remove(i1.min(i2));
-
-            fractures.push(h1.clone());
-        }
-        cx = cx.min(recurse_naive_index_search(
-            mol,
-            matches,
-            &fractures,
-            ix - h1.len() + 1,
-        ));
-    }
-    cx
-}
-
-/// Calculates the assembly index of a molecule without using any bounding strategy or
-/// parallelization. This function is very inefficient and should only be used as a performance
-/// benchmark against other strategies.
-pub fn naive_index_search(mol: &Molecule) -> u32 {
-    let mut init = BitSet::new();
-    init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
-
-    recurse_naive_index_search(
-        mol,
-        &mol.matches().collect(),
-        &[init],
-        mol.graph().edge_count() - 1,
-    ) as u32
 }
 
 #[allow(clippy::too_many_arguments)]

@@ -2,7 +2,11 @@ use std::fs;
 use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
-use assembly_theory::assembly::{index_search, serial_index_search};
+use assembly_theory::assembly::{
+    assembly_depth,
+    index_search,
+    serial_index_search,
+};
 use assembly_theory::bounds::Bound;
 use assembly_theory::loader;
 use clap::{Args, Parser, ValueEnum};
@@ -17,10 +21,13 @@ struct Cli {
     #[arg(long)]
     molinfo: bool,
 
-    /// Print the assembly index, number of non-overlapping isomorphic subgraph
-    /// pairs, and number of fragment structures searched (i.e., the "search
-    /// space"). Note that the search space may be nondeterministic when run
-    /// using parallelism.
+    /// Calculate and print the molecule's assembly depth.
+    #[arg(long)]
+    depth: bool,
+
+    /// Print the assembly index, assembly depth, number of non-overlapping
+    /// isomorphic subgraph pairs, and size of the search space. Note that the
+    /// search space size is nondeterministic owing to some `HashMap` details.
     #[arg(long)]
     verbose: bool,
 
@@ -156,15 +163,21 @@ fn main() -> Result<()> {
     // Load the .mol file as a molecule::Molecule.
     let molfile = fs::read_to_string(&cli.molpath)
         .context("Cannot read input file.")?;
-    let molecule = loader::parse_molfile_str(&molfile)
+    let mol = loader::parse_molfile_str(&molfile)
         .context("Cannot parse molfile.")?;
-    if molecule.is_malformed() {
+    if mol.is_malformed() {
         bail!("Bad input! Molecule has self-loops or multi-edges.")
     }
 
     // If --molinfo is set, print molecule graph and exit.
     if cli.molinfo {
-        println!("{}", molecule.info());
+        println!("{}", mol.info());
+        return Ok(());
+    }
+
+    // If --depth is set, calculate and print assembly depth and exit.
+    if cli.depth {
+        println!("{}", assembly_depth(&mol));
         return Ok(());
     }
 
@@ -231,15 +244,15 @@ fn main() -> Result<()> {
     // Call index calculation with all the various options.
     // TODO: Rework with the full list of options.
     let (index, dup_pairs, search_size) = if parallel {
-        index_search(&molecule, boundlist)
+        index_search(&mol, boundlist)
     } else {
-        serial_index_search(&molecule, boundlist)
+        serial_index_search(&mol, boundlist)
     };
 
     // Print final output, depending on --verbose.
     if cli.verbose {
         println!("Assembly Index: {index}");
-        println!("# Non-Overlapping Isomorphic Subgraph Pairs: {dup_pairs}");
+        println!("Non-Overlapping Isomorphic Subgraph Pairs: {dup_pairs}");
         println!("Search Space Size: {search_size}");
     } else {
         println!("{index}");
