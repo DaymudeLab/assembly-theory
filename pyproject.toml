@@ -29,3 +29,5 @@ repository = "https://github.com/DaymudeLab/assembly-theory"
 [tool.maturin]
 module-name = "_pyat"
 features = ["pyo3/extension-module"]
+python-source   = "."                # ← project root
+python-packages = ["assembly_theory"]  # ← now will pick up ./assembly_theory
