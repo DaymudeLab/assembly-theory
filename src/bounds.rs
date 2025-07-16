@@ -1,9 +1,10 @@
 use bit_set::BitSet;
+use clap::ValueEnum;
 
 use crate::molecule::{Bond, Element, Molecule};
 
 /// Bounding strategies for the search phase of assembly index calcluation.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum Bound {
     /// Trivial bound of log_2(# remaining bonds/edges).
     Log,

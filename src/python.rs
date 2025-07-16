@@ -8,9 +8,9 @@ use crate::assembly::{index_search, serial_index_search};
 use crate::bounds::Bound as PyBound;
 use crate::loader::parse_molfile_str;
 
-/// Mirrors the `BoundOption` enum in main.rs.
+/// Mirrors the `bounds::Bound` enum.
 // TODO: Is there a clean way of combining these so we don't have to maintain
-// two identical lists? Move to utils?
+// two identical lists?
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum PyBoundOption {
     Log,

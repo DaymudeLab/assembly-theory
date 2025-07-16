@@ -101,28 +101,7 @@ struct BoundsGroup {
 
     /// Apply the specified bounding strategies during the search phase.
     #[arg(long, num_args = 1..)]
-    bounds: Vec<BoundOption>,
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
-enum BoundOption {
-    /// Trivial bound of log_2(# remaining bonds/edges).
-    Log,
-    /// Bound using the length of the shortest integer addition chain defined
-    /// using fragment sizes.
-    Int,
-    /// Bound using the length of the shortest vector addition chain defined
-    /// using fragments' number and types of edges.
-    VecSimple,
-    /// Bound using the length of the shortest vector addition chain defined
-    /// using information about the molecule's number of fragments of size 2.
-    VecSmallFrags,
-    /// TODO
-    CoverSort,
-    /// TODO
-    CoverNoSort,
-    /// TODO
-    CliqueBudget,
+    bounds: Vec<Bound>,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
@@ -135,25 +114,6 @@ enum KernelMode {
     DepthOne,
     /// Perform kernelization at every recursive step.
     Always,
-}
-
-/// Convert CLI `BoundOption`s to a list of `bounds::Bound`s.
-fn make_boundlist(bounds: &[BoundOption]) -> Vec<Bound> {
-    let mut boundlist = bounds
-        .iter()
-        .flat_map(|b| match b {
-            BoundOption::Log => vec![Bound::Log],
-            BoundOption::Int => vec![Bound::Int],
-            BoundOption::VecSimple => vec![Bound::VecSimple],
-            BoundOption::VecSmallFrags => vec![Bound::VecSmallFrags],
-            _ => {
-                println!("WARNING: Ignoring bound not implemented yet");
-                vec![]
-            },
-        })
-        .collect::<Vec<_>>();
-    boundlist.dedup();
-    boundlist
 }
 
 fn main() -> Result<()> {
@@ -238,7 +198,7 @@ fn main() -> Result<()> {
         // Otherwise, use the bounds that were specified.
         Some(BoundsGroup {
             no_bounds: false, bounds,
-        }) => &make_boundlist(&bounds),
+        }) => &bounds.clone(),
     };
 
     // Call index calculation with all the various options.
