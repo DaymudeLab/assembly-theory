@@ -2,7 +2,8 @@ use std::fs;
 use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
-use assembly_theory::assembly::{index_search, serial_index_search, Bound};
+use assembly_theory::assembly::{index_search, serial_index_search};
+use assembly_theory::bounds::Bound;
 use assembly_theory::loader;
 use clap::{Args, Parser, ValueEnum};
 
@@ -98,13 +99,16 @@ struct BoundsGroup {
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
 enum BoundOption {
-    /// The trivial bound of log_2(b), where b is # of remaining bonds.
+    /// Trivial bound of log_2(# remaining bonds/edges).
     Log,
-    /// TODO
+    /// Bound using the length of the shortest integer addition chain defined
+    /// using fragment sizes.
     Int,
-    /// TODO
+    /// Bound using the length of the shortest vector addition chain defined
+    /// using fragments' number and types of edges.
     VecSimple,
-    /// TODO
+    /// Bound using the length of the shortest vector addition chain defined
+    /// using information about the molecule's number of fragments of size 2.
     VecSmallFrags,
     /// TODO
     CoverSort,
@@ -126,15 +130,15 @@ enum KernelMode {
     Always,
 }
 
-/// Convert CLI BoundOptions to a list of assembly::Bounds.
+/// Convert CLI `BoundOption`s to a list of `bounds::Bound`s.
 fn make_boundlist(bounds: &[BoundOption]) -> Vec<Bound> {
     let mut boundlist = bounds
         .iter()
         .flat_map(|b| match b {
             BoundOption::Log => vec![Bound::Log],
-            BoundOption::Int => vec![Bound::IntChain],
-            BoundOption::VecSimple => vec![Bound::VecChainSimple],
-            BoundOption::VecSmallFrags => vec![Bound::VecChainSmallFrags],
+            BoundOption::Int => vec![Bound::Int],
+            BoundOption::VecSimple => vec![Bound::VecSimple],
+            BoundOption::VecSmallFrags => vec![Bound::VecSmallFrags],
             _ => {
                 println!("WARNING: Ignoring bound not implemented yet");
                 vec![]
@@ -210,9 +214,9 @@ fn main() -> Result<()> {
     let boundlist: &[Bound] = match cli.boundsgroup {
         // By default, use a combination of the integer and vector bounds.
         None => &[
-            Bound::IntChain,
-            Bound::VecChainSimple,
-            Bound::VecChainSmallFrags,
+            Bound::Int,
+            Bound::VecSimple,
+            Bound::VecSmallFrags,
         ],
         // If --no-bounds is set, do not use any bounds.
         Some(BoundsGroup {

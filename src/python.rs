@@ -4,86 +4,99 @@ use pyo3::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
-use crate::assembly::Bound as AssemblyBound;
 use crate::assembly::{index_search, serial_index_search};
+use crate::bounds::Bound as PyBound;
 use crate::loader::parse_molfile_str;
 
-// TODO This needs to be combined with the Bounds Enum in main but I'm not sure the
-// best way to do that. Could move it to utils
+/// Mirrors the `BoundOption` enum in main.rs.
+// TODO: Is there a clean way of combining these so we don't have to maintain
+// two identical lists? Move to utils?
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum PyBounds {
+enum PyBoundOption {
     Log,
-    IntChain,
-    VecChain,
+    Int,
+    VecSimple,
+    VecSmallFrags,
+    CoverSort,
+    CoverNoSort,
+    CliqueBudget,
 }
 
-/// Implements conversion from `&str` to `PyBounds`
-impl FromStr for PyBounds {
+/// Converts bound options in `&str` format to `PyBoundOption`.
+impl FromStr for PyBoundOption {
     type Err = PyErr;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "log" => Ok(PyBounds::Log),
-            "intchain" => Ok(PyBounds::IntChain),
-            "vecchain" => Ok(PyBounds::VecChain),
+            "log" => Ok(PyBoundOption::Log),
+            "int" => Ok(PyBoundOption::Int),
+            "vecsimple" => Ok(PyBoundOption::VecSimple),
+            "vecsmallfrags" => Ok(PyBoundOption::VecSmallFrags),
+            "coversort" => Ok(PyBoundOption::CoverSort),
+            "covernosort" => Ok(PyBoundOption::CoverNoSort),
+            "cliquebudget" => Ok(PyBoundOption::CliqueBudget),
             _ => Err(PyValueError::new_err(format!("Invalid bound: {s}"))),
         }
     }
 }
 
-/// Converts a slice of `PyBounds` to a vector of `AssemblyBound`
-fn make_boundlist(u: &[PyBounds]) -> Vec<AssemblyBound> {
-    let mut boundlist = u
-        .iter()
-        .flat_map(|b| match b {
-            PyBounds::Log => vec![AssemblyBound::Log],
-            PyBounds::IntChain => vec![AssemblyBound::IntChain],
-            PyBounds::VecChain => vec![
-                AssemblyBound::VecChainSimple,
-                AssemblyBound::VecChainSmallFrags,
-            ],
-        })
-        .collect::<Vec<_>>();
-
-    boundlist.dedup(); // Ensure no duplicate bounds
-    boundlist
-}
-
-/// Processes a `HashSet<String>` from Python and converts it into a `Vec<PyBounds>`
-/// Raises an error if any string is invalid.
-fn process_bound_set(bound_set: HashSet<String>) -> PyResult<Vec<PyBounds>> {
-    bound_set
+/// Converts a `HashSet<String>` of bound strings from Python into a
+/// `Vec<PyBoundOption>`, raising an error if any bound string is invalid.
+fn process_bound_strs(bound_strs: HashSet<String>)
+    -> PyResult<Vec<PyBoundOption>> {
+    bound_strs
         .iter()
         .map(|s| s.parse())
-        .collect::<Result<_, _>>() // Try parsing each string
+        .collect::<Result<_, _>>()
+}
+
+/// Converts a slice of `PyBoundOption`s into a vector of `bounds::Bound`s.
+fn make_boundlist(pybounds: &[PyBoundOption]) -> Vec<PyBound> {
+    let mut boundlist = pybounds
+        .iter()
+        .flat_map(|b| match b {
+            PyBoundOption::Log => vec![PyBound::Log],
+            PyBoundOption::Int => vec![PyBound::Int],
+            PyBoundOption::VecSimple => vec![PyBound::VecSimple],
+            PyBoundOption::VecSmallFrags => vec![PyBound::VecSmallFrags],
+            _ => {
+                println!("WARNING: Ignoring bound not implemented yet");
+                vec![]
+            },
+        })
+        .collect::<Vec<_>>();
+    boundlist.dedup();
+    boundlist
 }
 
 /// Computes the molecular assembly index using specified bounds.
 ///
 /// # Parameters
 /// - `mol_block`: The contents of a .mol file as a string.
-/// - `bound_set`: A set of bounds as strings (from Python).
+/// - `bound_strs`: A set of bounds as strings (from Python).
 ///
 /// # Returns
 /// - The computed molecular index as a `u32`.
 #[pyfunction]
 pub fn _molecular_assembly(
     mol_block: String,
-    bound_set: HashSet<String>,
+    bound_strs: HashSet<String>,
     serial: bool,
 ) -> PyResult<u32> {
+    // Parse the .mol file contents as a molecule::Molecule.
     let mol_result = parse_molfile_str(&mol_block);
-    let py_bounds = process_bound_set(bound_set)?;
-
     let mol = match mol_result {
         Ok(mol) => mol,
         Err(e) => return Err(e.into()), // Convert the error to PyErr
     };
 
+    // Parse bound options and compute assembly index.
+    let pybounds = process_bound_strs(bound_strs)?;
+    let boundlist = make_boundlist(&pybounds);
     let (index, _, _) = if serial {
-        serial_index_search(&mol, &make_boundlist(&py_bounds))
+        serial_index_search(&mol, &boundlist)
     } else {
-        index_search(&mol, &make_boundlist(&py_bounds))
+        index_search(&mol, &boundlist)
     };
 
     Ok(index)
@@ -93,7 +106,7 @@ pub fn _molecular_assembly(
 ///
 /// # Parameters
 /// - `mol_block`: The contents of a .mol file as a string.
-/// - `bound_set`: A set of bounds as strings (from Python).
+/// - `bound_strs`: A set of bounds as strings (from Python).
 ///
 /// # Returns
 /// - A `HashMap<String, u32>` containing:
@@ -103,25 +116,28 @@ pub fn _molecular_assembly(
 #[pyfunction]
 pub fn _molecular_assembly_verbose(
     mol_block: String,
-    bound_set: HashSet<String>,
+    bound_strs: HashSet<String>,
     serial: bool,
 ) -> PyResult<HashMap<String, usize>> {
+    // Parse the .mol file contents as a molecule::Molecule.
     let mol_result = parse_molfile_str(&mol_block);
-    let py_bounds = process_bound_set(bound_set)?;
-
     let mol = match mol_result {
         Ok(mol) => mol,
-        Err(e) => return Err(e.into()), // Convert error to PyErr
+        Err(e) => return Err(e.into()), // Convert the error to PyErr
     };
 
-    let (ix, duplicates, space) = if serial {
-        serial_index_search(&mol, &make_boundlist(&py_bounds))
+    // Parse bound options and compute assembly index.
+    let pybounds = process_bound_strs(bound_strs)?;
+    let boundlist = make_boundlist(&pybounds);
+    let (index, duplicates, space) = if serial {
+        serial_index_search(&mol, &boundlist)
     } else {
-        index_search(&mol, &make_boundlist(&py_bounds))
+        index_search(&mol, &boundlist)
     };
 
+    // Package results and return.
     let mut data = HashMap::new();
-    data.insert("index".to_string(), ix as usize);
+    data.insert("index".to_string(), index as usize);
     data.insert("duplicates".to_string(), duplicates as usize);
     data.insert("space".to_string(), space);
 
@@ -137,14 +153,15 @@ pub fn _molecular_assembly_verbose(
 /// - A `String` containing molecular information.
 #[pyfunction]
 pub fn _molecule_info(mol_block: String) -> PyResult<String> {
+    // Parse the .mol file contents as a molecule::Molecule.
     let mol_result = parse_molfile_str(&mol_block);
-
     let mol = match mol_result {
         Ok(mol) => mol,
-        Err(e) => return Err(e.into()), // Convert error to PyErr
+        Err(e) => return Err(e.into()), // Convert the error to PyErr
     };
 
-    Ok(mol.info()) // Retrieve molecular info
+    // Return molecule info.
+    Ok(mol.info())
 }
 
 // Registers the Rust functions as a Python module.

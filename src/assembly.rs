@@ -1,20 +1,23 @@
 //! Compute assembly indices of molecules.
+//!
 //! # Example
 //! ```
-//! # use std::fs;
-//! # use std::path::PathBuf;
-//! # use assembly_theory::*;
-//! # fn main() -> Result<(), std::io::Error> {
-//! # let path = PathBuf::from(format!("./data/checks/benzene.mol"));
-//! // Read a molecule data file
-//! let molfile = fs::read_to_string(path)?;
-//! let benzene = loader::parse_molfile_str(&molfile).expect("Cannot parse molfile.");
+//! # use std::{fs, path::PathBuf};
+//! use assembly_theory::assembly::index;
+//! use assembly_theory::loader::parse_molfile_str;
 //!
-//! // Compute assembly index of benzene
-//! assert_eq!(assembly::index(&benzene), 3);
+//! # fn main() -> Result<(), std::io::Error> {
+//! // Load a molecule from a .mol file.
+//! let path = PathBuf::from(format!("./data/checks/anthracene.mol"));
+//! let molfile = fs::read_to_string(path)?;
+//! let anthracene = parse_molfile_str(&molfile).expect("Parsing failure.");
+//!
+//! // Compute the molecule's assembly index.
+//! assert_eq!(index(&anthracene), 6);
 //! # Ok(())
 //! # }
 //! ```
+
 use std::{
     collections::BTreeSet,
     sync::{
@@ -27,34 +30,18 @@ use bit_set::BitSet;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
-    molecule::Bond, molecule::Element, molecule::Molecule, utils::connected_components_under_edges,
+    bounds::{
+        Bound,
+        log_bound,
+        int_bound,
+        vec_simple_bound,
+        vec_small_frags_bound
+    },
+    molecule::Molecule,
+    utils::connected_components_under_edges,
 };
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct EdgeType {
-    bond: Bond,
-    ends: (Element, Element),
-}
-
 static PARALLEL_MATCH_SIZE_THRESHOLD: usize = 100;
-
-/// Enum to represent the different bounds available during the computation of molecular assembly
-/// indices.
-/// Bounds are used by `index_search()` to speed up assembly index computations.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Bound {
-    /// `Log` bounds by the logarithm base 2 of remaining edges
-    Log,
-    /// `IntChain` bounds by the length of the smallest addition chain to create the remaining
-    /// fragments
-    IntChain,
-    /// 'VecChainSimple' bounds using addition chain length with the information of the edge types
-    /// in a molecule
-    VecChainSimple,
-    /// 'VecChainSmallFrags' bounds using information on the number of fragments of size 2 in the
-    /// molecule
-    VecChainSmallFrags,
-}
 
 pub fn naive_assembly_depth(mol: &Molecule) -> u32 {
     let mut ix = u32::MAX;
@@ -163,11 +150,13 @@ fn recurse_index_search(
     for bound_type in bounds {
         let exceeds = match bound_type {
             Bound::Log => ix - log_bound(fragments) >= best,
-            Bound::IntChain => ix - addition_bound(fragments, largest_remove) >= best,
-            Bound::VecChainSimple => ix - vec_bound_simple(fragments, largest_remove, mol) >= best,
-            Bound::VecChainSmallFrags => {
-                ix - vec_bound_small_frags(fragments, largest_remove, mol) >= best
+            Bound::Int => ix - int_bound(fragments, largest_remove) >= best,
+            Bound::VecSimple => ix - vec_simple_bound(fragments, largest_remove, mol) >= best,
+            Bound::VecSmallFrags => {
+                ix - vec_small_frags_bound(fragments, largest_remove, mol) >= best
             }
+            // TODO: Remove after all bounds are implemented.
+            _ => false,
         };
         if exceeds {
             return ix;
@@ -250,11 +239,13 @@ fn parallel_recurse_index_search(
         let best = best.load(Relaxed);
         let exceeds = match bound_type {
             Bound::Log => ix - log_bound(fragments) >= best,
-            Bound::IntChain => ix - addition_bound(fragments, largest_remove) >= best,
-            Bound::VecChainSimple => ix - vec_bound_simple(fragments, largest_remove, mol) >= best,
-            Bound::VecChainSmallFrags => {
-                ix - vec_bound_small_frags(fragments, largest_remove, mol) >= best
+            Bound::Int => ix - int_bound(fragments, largest_remove) >= best,
+            Bound::VecSimple => ix - vec_simple_bound(fragments, largest_remove, mol) >= best,
+            Bound::VecSmallFrags => {
+                ix - vec_small_frags_bound(fragments, largest_remove, mol) >= best
             }
+            // TODO: Remove after all bounds are implemented.
+            _ => false,
         };
         if exceeds {
             return ix;
@@ -319,7 +310,8 @@ fn parallel_recurse_index_search(
     cx.load(Relaxed)
 }
 
-/// Computes information related to the assembly index of a molecule using the provided bounds.
+/// Computes a molecule's assembly index and related information using the
+/// specified strategy.
 ///
 /// The first result in the returned tuple is the assembly index of the molecule. The second result
 /// gives the number of duplicatable subgraphs (pairs of disjoint and isomorphic subgraphs) in the
@@ -334,24 +326,25 @@ fn parallel_recurse_index_search(
 ///
 /// # Example
 /// ```
-/// # use std::fs;
-/// # use std::path::PathBuf;
-/// # use assembly_theory::*;
-/// use assembly_theory::assembly::{Bound, index_search};
+/// # use std::{fs, path::PathBuf};
+/// use assembly_theory::assembly::index_search;
+/// use assembly_theory::bounds::Bound;
+/// use assembly_theory::loader::parse_molfile_str;
 /// # fn main() -> Result<(), std::io::Error> {
-/// # let path = PathBuf::from(format!("./data/checks/benzene.mol"));
-/// // Read a molecule data file
-/// let molfile = fs::read_to_string(path).expect("Cannot read input file.");
-/// let benzene = loader::parse_molfile_str(&molfile).expect("Cannot parse molfile.");
+/// // Load a molecule from a .mol file.
+/// let path = PathBuf::from(format!("./data/checks/anthracene.mol"));
+/// let molfile = fs::read_to_string(path)?;
+/// let anthracene = parse_molfile_str(&molfile).expect("Parsing failure.");
 ///
-/// // Compute assembly index of benzene naively, with no bounds.
-/// let (slow_index, _, _) = index_search(&benzene, &[]);
+/// // Compute the molecule's assembly index with no bounds.
+/// let (slow_index, _, _) = index_search(&anthracene, &[]);
 ///
-/// // Compute assembly index of benzene with the log and integer chain bounds
-/// let (fast_index, _, _) = index_search(&benzene, &[Bound::Log, Bound::IntChain]);
+/// // Compute the molecule's assembly index with the log and integer bounds.
+/// let (fast_index, _, _) =
+///     index_search(&anthracene, &[Bound::Log, Bound::Int]);
 ///
-/// assert_eq!(slow_index, 3);
-/// assert_eq!(fast_index, 3);
+/// assert_eq!(slow_index, 6);
+/// assert_eq!(fast_index, 6);
 /// # Ok(())
 /// # }
 /// ```
@@ -401,24 +394,25 @@ pub fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize) {
 ///
 /// # Example
 /// ```
-/// # use std::fs;
-/// # use std::path::PathBuf;
-/// # use assembly_theory::*;
-/// use assembly_theory::assembly::{Bound, serial_index_search};
+/// # use std::{fs, path::PathBuf};
+/// use assembly_theory::assembly::serial_index_search;
+/// use assembly_theory::bounds::Bound;
+/// use assembly_theory::loader::parse_molfile_str;
 /// # fn main() -> Result<(), std::io::Error> {
-/// # let path = PathBuf::from(format!("./data/checks/benzene.mol"));
-/// // Read a molecule data file
-/// let molfile = fs::read_to_string(path).expect("Cannot read input file.");
-/// let benzene = loader::parse_molfile_str(&molfile).expect("Cannot parse molfile.");
+/// // Load a molecule from a .mol file.
+/// let path = PathBuf::from(format!("./data/checks/anthracene.mol"));
+/// let molfile = fs::read_to_string(path)?;
+/// let anthracene = parse_molfile_str(&molfile).expect("Parsing failure.");
 ///
-/// // Compute assembly index of benzene naively, with no bounds.
-/// let (slow_index, _, _) = serial_index_search(&benzene, &[]);
+/// // Compute the molecule's assembly index with no bounds.
+/// let (slow_index, _, _) = serial_index_search(&anthracene, &[]);
 ///
-/// // Compute assembly index of benzene with the log and integer chain bounds
-/// let (fast_index, _, _) = serial_index_search(&benzene, &[Bound::Log, Bound::IntChain]);
+/// // Compute the molecule's assembly index with the log and integer bounds.
+/// let (fast_index, _, _) = 
+///     serial_index_search(&anthracene, &[Bound::Log, Bound::Int]);
 ///
-/// assert_eq!(slow_index, 3);
-/// assert_eq!(fast_index, 3);
+/// assert_eq!(slow_index, 6);
+/// assert_eq!(fast_index, 6);
 /// # Ok(())
 /// # }
 /// ```
@@ -445,173 +439,25 @@ pub fn serial_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize
     (index as u32, matches.len() as u32, total_search)
 }
 
-fn log_bound(fragments: &[BitSet]) -> usize {
-    let mut size = 0;
-    for f in fragments {
-        size += f.len();
-    }
-
-    size - (size as f32).log2().ceil() as usize
-}
-
-fn addition_bound(fragments: &[BitSet], m: usize) -> usize {
-    let mut max_s: usize = 0;
-    let mut frag_sizes: Vec<usize> = Vec::new();
-
-    for f in fragments {
-        frag_sizes.push(f.len());
-    }
-
-    let size_sum: usize = frag_sizes.iter().sum();
-
-    // Test for all sizes m of largest removed duplicate
-    for max in 2..m + 1 {
-        let log = (max as f32).log2().ceil();
-        let mut aux_sum: usize = 0;
-
-        for len in &frag_sizes {
-            aux_sum += (len / max) + (len % max != 0) as usize
-        }
-
-        max_s = max_s.max(size_sum - log as usize - aux_sum);
-    }
-
-    max_s
-}
-
-// Count number of unique edges in a fragment
-// Helper function for vector bounds
-fn unique_edges(fragment: &BitSet, mol: &Molecule) -> Vec<EdgeType> {
-    let g = mol.graph();
-    let mut nodes: Vec<Element> = Vec::new();
-    for v in g.node_weights() {
-        nodes.push(v.element());
-    }
-    let edges: Vec<petgraph::prelude::EdgeIndex> = g.edge_indices().collect();
-    let weights: Vec<Bond> = g.edge_weights().copied().collect();
-
-    // types will hold an element for every unique edge type in fragment
-    let mut types: Vec<EdgeType> = Vec::new();
-    for idx in fragment.iter() {
-        let bond = weights[idx];
-        let e = edges[idx];
-
-        let (e1, e2) = g.edge_endpoints(e).expect("bad");
-        let e1 = nodes[e1.index()];
-        let e2 = nodes[e2.index()];
-        let ends = if e1 < e2 { (e1, e2) } else { (e2, e1) };
-
-        let edge_type = EdgeType { bond, ends };
-
-        if types.contains(&edge_type) {
-            continue;
-        } else {
-            types.push(edge_type);
-        }
-    }
-
-    types
-}
-
-fn vec_bound_simple(fragments: &[BitSet], m: usize, mol: &Molecule) -> usize {
-    // Calculate s (total number of edges)
-    // Calculate z (number of unique edges)
-    let mut s = 0;
-    for f in fragments {
-        s += f.len();
-    }
-
-    let mut union_set = BitSet::new();
-    for f in fragments {
-        union_set.union_with(f);
-    }
-    let z = unique_edges(&union_set, mol).len();
-
-    (s - z) - ((s - z) as f32 / m as f32).ceil() as usize
-}
-
-fn vec_bound_small_frags(fragments: &[BitSet], m: usize, mol: &Molecule) -> usize {
-    let mut size_two_fragments: Vec<BitSet> = Vec::new();
-    let mut large_fragments: Vec<BitSet> = fragments.to_owned();
-    let mut indices_to_remove: Vec<usize> = Vec::new();
-
-    // Find and remove fragments of size 2
-    for (i, frag) in fragments.iter().enumerate() {
-        if frag.len() == 2 {
-            indices_to_remove.push(i);
-        }
-    }
-    for &index in indices_to_remove.iter().rev() {
-        let removed_bitset = large_fragments.remove(index);
-        size_two_fragments.push(removed_bitset);
-    }
-
-    // Compute z = num unique edges of large_fragments NOT also in size_two_fragments
-    let mut fragments_union = BitSet::new();
-    let mut size_two_fragments_union = BitSet::new();
-    for f in fragments {
-        fragments_union.union_with(f);
-    }
-    for f in size_two_fragments.iter() {
-        size_two_fragments_union.union_with(f);
-    }
-    let z = unique_edges(&fragments_union, mol).len()
-        - unique_edges(&size_two_fragments_union, mol).len();
-
-    // Compute s = total number of edges in fragments
-    // Compute sl = total number of edges in large fragments
-    let mut s = 0;
-    let mut sl = 0;
-    for f in fragments {
-        s += f.len();
-    }
-    for f in large_fragments {
-        sl += f.len();
-    }
-
-    // Find number of unique size two fragments
-    let mut size_two_types: Vec<(EdgeType, EdgeType)> = Vec::new();
-    for f in size_two_fragments.iter() {
-        let mut types = unique_edges(f, mol);
-        types.sort();
-        if types.len() == 1 {
-            size_two_types.push((types[0], types[0]));
-        } else {
-            size_two_types.push((types[0], types[1]));
-        }
-    }
-    size_two_types.sort();
-    size_two_types.dedup();
-
-    s - (z + size_two_types.len() + size_two_fragments.len())
-        - ((sl - z) as f32 / m as f32).ceil() as usize
-}
-
-/// Computes the assembly index of a molecule using an effecient bounding strategy
+/// Computes a molecule's assembly index using an efficient default strategy.
+///
 /// # Example
 /// ```
-/// # use std::fs;
-/// # use std::path::PathBuf;
-/// # use assembly_theory::*;
-/// # fn main() -> Result<(), std::io::Error> {
-/// # let path = PathBuf::from(format!("./data/checks/benzene.mol"));
-/// // Read a molecule data file
-/// let molfile = fs::read_to_string(path).expect("Cannot read input file.");
-/// let benzene = loader::parse_molfile_str(&molfile).expect("Cannot parse molfile.");
+/// # use std::{fs, path::PathBuf};
+/// use assembly_theory::assembly::index;
+/// use assembly_theory::loader::parse_molfile_str;
 ///
-/// // Compute assembly index of benzene
-/// assert_eq!(assembly::index(&benzene), 3);
+/// # fn main() -> Result<(), std::io::Error> {
+/// // Load a molecule from a .mol file.
+/// let path = PathBuf::from(format!("./data/checks/anthracene.mol"));
+/// let molfile = fs::read_to_string(path)?;
+/// let anthracene = parse_molfile_str(&molfile).expect("Parsing failure.");
+///
+/// // Compute the molecule's assembly index.
+/// assert_eq!(index(&anthracene), 6);
 /// # Ok(())
 /// # }
 /// ```
-pub fn index(m: &Molecule) -> u32 {
-    index_search(
-        m,
-        &[
-            Bound::IntChain,
-            Bound::VecChainSimple,
-            Bound::VecChainSmallFrags,
-        ],
-    )
-    .0
+pub fn index(mol: &Molecule) -> u32 {
+    index_search(mol, &[Bound::Int, Bound::VecSimple, Bound::VecSmallFrags]).0
 }

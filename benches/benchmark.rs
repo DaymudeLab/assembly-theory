@@ -5,7 +5,8 @@ use std::iter::zip;
 use std::path::Path;
 
 use assembly_theory::{
-    assembly::{index_search, Bound},
+    assembly::index_search,
+    bounds::Bound,
     loader,
     molecule::Molecule,
 };
@@ -19,12 +20,8 @@ pub fn reference_datasets(c: &mut Criterion) {
     let bounds = [
         vec![],
         vec![Bound::Log],
-        vec![Bound::IntChain],
-        vec![
-            Bound::IntChain,
-            Bound::VecChainSimple,
-            Bound::VecChainSmallFrags,
-        ],
+        vec![Bound::Int],
+        vec![Bound::Int, Bound::VecSimple, Bound::VecSmallFrags],
     ];
     let bound_strs = ["naive", "logbound", "intbound", "allbounds"];
 

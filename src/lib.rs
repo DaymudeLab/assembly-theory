@@ -40,6 +40,9 @@ pub mod loader;
 // The hard bit: compute assembly index
 pub mod assembly;
 
+// Bounding strategies for the search phase.
+pub mod bounds;
+
 // Utility functions
 mod utils;
 
