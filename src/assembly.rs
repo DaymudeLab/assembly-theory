@@ -16,7 +16,8 @@
 //! # }
 //! ```
 use std::{
-    collections::BTreeSet, sync::{
+    collections::{BTreeSet, HashMap}, 
+    sync::{
         atomic::{AtomicUsize, Ordering::Relaxed},
         Arc,
     }
@@ -575,10 +576,12 @@ fn recurse_clique_index_search(mol: &Molecule,
     depth: usize,
     must_include: &Vec<usize>,
     kernel_method: &Kernel,
+    cache: &mut HashMap<Vec<BitSet>, usize>,
 ) -> usize {
     if subgraph.len() == 0 {
         return ix;
     }
+
     let mut cx = ix;
     let largest_remove = matches_graph.weights[subgraph.iter().next().unwrap()] + 1;
     *states_searched += 1;
@@ -646,8 +649,21 @@ fn recurse_clique_index_search(mol: &Molecule,
         fractures.retain(|i| i.len() > 1);
         fractures.push(h1.clone());
 
-        // Sort fragments (for dynamic programming)
-        fractures.sort_by(|a, b| a.iter().next().cmp(b.iter.next()));
+        // Dynamic programming
+        fractures.sort_by(|a, b| a.iter().next().cmp(&b.iter().next()));
+        match cache.get_mut(&fractures) {
+            None => {
+                cache.insert(fractures.clone(), ix);
+            },
+            Some(x) => {
+                if *x <= ix {
+                    return cx;
+                }
+                else {
+                    *x = ix;
+                }
+            }
+        }
 
         let mut subgraph_clone = matches_graph.forward_neighbors(v, &subgraph);
         let mut must_include_clone = must_include.clone();
@@ -670,6 +686,7 @@ fn recurse_clique_index_search(mol: &Molecule,
             depth + 1,
             &must_include_clone,
             kernel_method,
+            cache,
         ));
         best = best.min(cx);
 
@@ -714,7 +731,8 @@ pub fn clique_index_search(mol: &Molecule, bounds: &[Bound], kernel_method: Kern
         &matches_graph,
         1,
     &vec![],
-        &kernel_method,);
+        &kernel_method,
+        &mut HashMap::<Vec<BitSet>, usize>::new());
 
     (index as u32, num_matches as u32, total_search)
 }
@@ -751,7 +769,8 @@ pub fn clique_index_search_bench(mol: &Molecule, matches: Vec<(BitSet, BitSet)>,
         &matches_graph,
         1,
         &vec![],
-        &kernel_method,);
+        &kernel_method,
+        &mut HashMap::<Vec<BitSet>, usize>::new());
 
     (index as u32, num_matches as u32, total_search)
 }
