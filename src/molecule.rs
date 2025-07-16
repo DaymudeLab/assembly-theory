@@ -479,7 +479,12 @@ impl Molecule {
             for (i, first) in bucket.iter().enumerate() {
                 for second in &bucket[i..] {
                     if first.is_disjoint(second) {
-                        matches.push((first.clone(), second.clone()));
+                        if first > second {
+                            matches.push((first.clone(), second.clone()));
+                        }
+                        else {
+                            matches.push((second.clone(), first.clone()));
+                        }
                     }
                 }
             }

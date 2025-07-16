@@ -80,7 +80,20 @@ struct CompatGraph {
 impl CompatGraph {
     pub fn new(mut init_matches: Vec<(BitSet, BitSet)>) -> Self{
         let size = init_matches.len();
-        init_matches.sort_by(|e1, e2| e2.0.len().cmp(&e1.0.len()));
+        init_matches.sort_by(|e1, e2| 
+        {   
+            let ord = vec![
+                e2.0.len().cmp(&e1.0.len()),
+                e1.0.cmp(&e2.0),
+                e1.1.cmp(&e2.1),
+            ];
+
+            let mut i = 0;
+            while ord[i] == std::cmp::Ordering::Equal {
+                i += 1;
+            }
+            ord[i]
+        });
 
         // Initialize weights and empty graph
         let mut init_graph: Vec<BitSet> = Vec::with_capacity(size);
@@ -650,17 +663,18 @@ fn recurse_clique_index_search(mol: &Molecule,
         fractures.push(h1.clone());
 
         // Dynamic programming
+        let val = ix - matches_graph.weights[v];
         fractures.sort_by(|a, b| a.iter().next().cmp(&b.iter().next()));
         match cache.get_mut(&fractures) {
             None => {
-                cache.insert(fractures.clone(), ix);
+                cache.insert(fractures.clone(), val);
             },
             Some(x) => {
-                if *x <= ix {
-                    return cx;
+                if *x <= val {
+                    continue;
                 }
                 else {
-                    *x = ix;
+                    *x = val;
                 }
             }
         }
@@ -730,7 +744,7 @@ pub fn clique_index_search(mol: &Molecule, bounds: &[Bound], kernel_method: Kern
         subgraph.clone(),
         &matches_graph,
         1,
-    &vec![],
+        &vec![],
         &kernel_method,
         &mut HashMap::<Vec<BitSet>, usize>::new());
 
