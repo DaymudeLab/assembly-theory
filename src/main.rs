@@ -1,15 +1,17 @@
-use std::fs;
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 
 use anyhow::{bail, Context, Result};
 use assembly_theory::assembly::{
+    ParallelMode,
+    KernelMode,
     assembly_depth,
     index_search,
     serial_index_search,
 };
 use assembly_theory::bounds::Bound;
-use assembly_theory::loader;
-use clap::{Args, Parser, ValueEnum};
+use assembly_theory::loader::parse_molfile_str;
+use assembly_theory::molecule::{EnumerateMode, CanonizeMode};
+use clap::{Args, Parser};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -56,42 +58,6 @@ struct Cli {
     kernel: KernelMode,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
-enum EnumerateMode {
-    /// Grow connected subgraphs from each edge using BFS.
-    Bfs,
-    /// Like Bfs, but at each level of the BFS, prune any subgraphs that do not
-    /// have isomorphic components since these will not be useful later.
-    BfsPrune,
-    /// From a subgraph, choose an edge from its frontier and recursively grow
-    /// the subgraph by this edge or erode it by discarding the edge.
-    GrowErode,
-    /// An iterative (memory-efficient) implementation of GrowErode.
-    GrowErodeIterative,
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
-enum CanonizeMode {
-    /// Use the Nauty algorithm of McKay & Piperno (2014).
-    Nauty,
-    /// Use the algorithm of Faulon et al. (2004).
-    Faulon,
-    /// Use a fast tree canonization algorithm if applicable; else use Nauty.
-    TreeNauty,
-    /// Use a fast tree canonization algorithm if applicable; else use Faulon.
-    TreeFaulon,
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
-enum ParallelMode {
-    /// No parallelism.
-    None,
-    /// Create a task pool form the recursion's first level only.
-    DepthOne,
-    /// Spawn a new thread at every recursive call.
-    Always,
-}
-
 #[derive(Args, Debug)]
 #[group(required = false, multiple = false)]
 struct BoundsGroup {
@@ -104,18 +70,6 @@ struct BoundsGroup {
     bounds: Vec<Bound>,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
-enum KernelMode {
-    /// No kernelization.
-    None,
-    /// Only kernelize the original molecule.
-    Once,
-    /// Kernelize the original molecule and the recursion's first level only.
-    DepthOne,
-    /// Perform kernelization at every recursive step.
-    Always,
-}
-
 fn main() -> Result<()> {
     // Parse command line arguments.
     let cli = Cli::parse();
@@ -123,7 +77,7 @@ fn main() -> Result<()> {
     // Load the .mol file as a molecule::Molecule.
     let molfile = fs::read_to_string(&cli.molpath)
         .context("Cannot read input file.")?;
-    let mol = loader::parse_molfile_str(&molfile)
+    let mol = parse_molfile_str(&molfile)
         .context("Cannot parse molfile.")?;
     if mol.is_malformed() {
         bail!("Bad input! Molecule has self-loops or multi-edges.")

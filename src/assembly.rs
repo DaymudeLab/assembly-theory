@@ -24,6 +24,7 @@ use std::sync::{
 };
 
 use bit_set::BitSet;
+use clap::ValueEnum;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
@@ -37,6 +38,30 @@ use crate::{
     molecule::Molecule,
     utils::connected_components_under_edges,
 };
+
+/// Parallelization strategy for the search phase.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum ParallelMode {
+    /// No parallelism.
+    None,
+    /// Create a task pool form the recursion's first level only.
+    DepthOne,
+    /// Spawn a new thread at every recursive call.
+    Always,
+}
+
+/// Graph kernelization strategy when searching using the clique reduction.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum KernelMode {
+    /// No kernelization.
+    None,
+    /// Only kernelize the original molecule.
+    Once,
+    /// Kernelize the original molecule and the recursion's first level only.
+    DepthOne,
+    /// Perform kernelization at every recursive step.
+    Always,
+}
 
 static PARALLEL_MATCH_SIZE_THRESHOLD: usize = 100;
 

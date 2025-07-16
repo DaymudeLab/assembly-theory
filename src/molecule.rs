@@ -10,6 +10,7 @@ use std::{
 };
 
 use bit_set::BitSet;
+use clap::ValueEnum;
 use graph_canon::CanonLabeling;
 use petgraph::{
     algo::{is_isomorphic, is_isomorphic_subgraph},
@@ -25,6 +26,34 @@ pub(crate) type MGraph = Graph<Atom, Bond, Undirected, Index>;
 type CGraph = Graph<AtomOrBond, (), Undirected, Index>;
 type EdgeSet = BTreeSet<EdgeIndex<Index>>;
 type NodeSet = BTreeSet<NodeIndex<Index>>;
+
+/// Strategy for enumerating connected, non-induced subgraphs.
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
+pub enum EnumerateMode {
+    /// Grow connected subgraphs from each edge using BFS.
+    Bfs,
+    /// Like Bfs, but at each level of the BFS, prune any subgraphs that do not
+    /// have isomorphic components since these will not be useful later.
+    BfsPrune,
+    /// From a subgraph, choose an edge from its frontier and recursively grow
+    /// the subgraph by this edge or erode it by discarding the edge.
+    GrowErode,
+    /// An iterative (memory-efficient) implementation of GrowErode.
+    GrowErodeIterative,
+}
+
+/// Algorithm for graph canonization.
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
+pub enum CanonizeMode {
+    /// Use the Nauty algorithm of McKay & Piperno (2014).
+    Nauty,
+    /// Use the algorithm of Faulon et al. (2004).
+    Faulon,
+    /// Use a fast tree canonization algorithm if applicable; else use Nauty.
+    TreeNauty,
+    /// Use a fast tree canonization algorithm if applicable; else use Faulon.
+    TreeFaulon,
+}
 
 macro_rules! periodic_table {
     ( $(($element:ident, $name:literal),)* ) => {
