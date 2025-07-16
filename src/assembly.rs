@@ -646,6 +646,9 @@ fn recurse_clique_index_search(mol: &Molecule,
         fractures.retain(|i| i.len() > 1);
         fractures.push(h1.clone());
 
+        // Sort fragments (for dynamic programming)
+        fractures.sort_by(|a, b| a.iter().next().cmp(b.iter.next()));
+
         let mut subgraph_clone = matches_graph.forward_neighbors(v, &subgraph);
         let mut must_include_clone = must_include.clone();
 
