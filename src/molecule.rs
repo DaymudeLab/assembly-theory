@@ -15,7 +15,6 @@ use petgraph::{
     algo::{is_isomorphic, is_isomorphic_subgraph},
     dot::Dot,
     graph::{EdgeIndex, Graph, NodeIndex},
-    visit::EdgeCount,
     Undirected,
 };
 
@@ -339,6 +338,10 @@ impl Molecule {
 
             subset.insert(e);
 
+            if solutions.contains(&subset) {
+                return;
+            }
+
             if subset.len() < self.graph.edge_count() / 2 + 1 {
                 neighbors
                     .extend(edge_neighbors(&self.graph, EdgeIndex::new(e)).map(|ix| ix.index()));
@@ -350,6 +353,41 @@ impl Molecule {
         } else if subset.len() > 1 {
             solutions.insert(subset);
         }
+    }
+
+    fn iterative_enumerate_noninduced_subgraphs(&self) -> impl Iterator<Item = BitSet> {
+        let remainder = BitSet::from_iter(self.graph.edge_indices().map(|ix| ix.index()));
+        let subset = BitSet::new();
+        let neighbors = BitSet::new();
+        let mut stack = vec![(subset, neighbors, remainder)];
+
+        let mut solutions = HashSet::new();
+
+        while let Some((mut subset, mut neighbors, mut remainder)) = stack.pop() {
+            let candidate = if subset.is_empty() {
+                remainder.iter().next()
+            } else {
+                remainder.intersection(&neighbors).next()
+            };
+
+            if let Some(e) = candidate {
+                remainder.remove(e);
+                stack.push((subset.clone(), neighbors.clone(), remainder.clone()));
+
+                subset.insert(e);
+                if solutions.contains(&subset) || subset.len() > self.graph().edge_count() / 2 {
+                    continue;
+                }
+
+                neighbors
+                    .extend(edge_neighbors(&self.graph, EdgeIndex::new(e)).map(|ix| ix.index()));
+                stack.push((subset, neighbors, remainder));
+
+            } else if subset.len() > 1 {
+                solutions.insert(subset);
+            }
+        }
+        solutions.into_iter()
     }
 
     pub fn slow_matches_by_iterative_expansion(&self) -> impl Iterator<Item = (BitSet, BitSet)> {
@@ -470,7 +508,6 @@ impl Molecule {
         matches.into_iter()
     }
 
-
     /// Return `true` if self is not formed in a valid way
     ///
     /// In particular, a molecule is considered to be malformed if it contains
@@ -572,7 +609,7 @@ impl Molecule {
     /// non-overlapping pairs of isomorphic subgraphs
     pub fn matches(&self) -> impl Iterator<Item = (BitSet, BitSet)> {
         let mut isomorphic_map = HashMap::<CanonLabeling<AtomOrBond>, Vec<BitSet>>::new();
-        for subgraph in self.enumerate_noninduced_subgraphs() {
+        for subgraph in self.iterative_enumerate_noninduced_subgraphs() {
             let cgraph = self.subgraph_to_cgraph(&subgraph);
             let repr = CanonLabeling::new(&cgraph);
 
