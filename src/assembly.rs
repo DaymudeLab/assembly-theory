@@ -39,6 +39,7 @@ use crate::{
     bounds::{bound_exceeded, Bound},
     canonize::{canonize, CanonizeMode},
     enumerate::{enumerate_subgraphs, EnumerateMode},
+    kernels::KernelMode,
     molecule::{AtomOrBond, Molecule},
     utils::connected_components_under_edges,
 };
@@ -51,19 +52,6 @@ pub enum ParallelMode {
     /// Create a task pool form the recursion's first level only.
     DepthOne,
     /// Spawn a new thread at every recursive call.
-    Always,
-}
-
-/// Graph kernelization strategy when searching using the clique reduction.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
-pub enum KernelMode {
-    /// No kernelization.
-    None,
-    /// Only kernelize the original molecule.
-    Once,
-    /// Kernelize the original molecule and the recursion's first level only.
-    DepthOne,
-    /// Perform kernelization at every recursive step.
     Always,
 }
 
@@ -281,8 +269,8 @@ fn recurse_index_search_parallel(
 /// Computes a molecule's assembly index and related information using a top-
 /// down recursive search, parameterized by the specified options.
 ///
-/// See [`EnumerateMode`], [`CanonizeMode`], [`ParallelMode`], and [`Bound`]
-/// for details on how to customize the top-down algorithm.
+/// See [`EnumerateMode`], [`CanonizeMode`], [`ParallelMode`], [`KernelMode`],
+/// and [`Bound`] for details on how to customize the top-down algorithm.
 ///
 /// Notably, bounds are applied in the order they appear in the `bounds` slice.
 /// It is generally better to provide bounds that are quick to compute first.
@@ -301,6 +289,7 @@ fn recurse_index_search_parallel(
 ///     bounds::Bound,
 ///     canonize::CanonizeMode,
 ///     enumerate::EnumerateMode,
+///     kernels::KernelMode,
 ///     loader::parse_molfile_str,
 /// };
 /// # fn main() -> Result<(), std::io::Error> {
@@ -309,13 +298,16 @@ fn recurse_index_search_parallel(
 /// let molfile = fs::read_to_string(path)?;
 /// let anthracene = parse_molfile_str(&molfile).expect("Parsing failure.");
 ///
-/// // Compute the molecule's assembly index without parallelism or bounds.
+/// // Compute the molecule's assembly index without parallelism,
+/// // kernelization, bounds, or memoization.
 /// let (slow_index, _, _) = index_search(
 ///     &anthracene,
 ///     EnumerateMode::GrowErode,
 ///     CanonizeMode::Nauty,
 ///     ParallelMode::None,
-///     &[]);
+///     KernelMode::None,
+///     &[],
+///     false);
 ///
 /// // Compute the molecule's assembly index with parallelism and some bounds.
 /// let (fast_index, _, _) = index_search(
@@ -323,7 +315,9 @@ fn recurse_index_search_parallel(
 ///     EnumerateMode::GrowErode,
 ///     CanonizeMode::Nauty,
 ///     ParallelMode::Always,
-///     &[Bound::Log, Bound::Int]);
+///     KernelMode::None,
+///     &[Bound::Log, Bound::Int],
+///     false);
 ///
 /// assert_eq!(slow_index, 6);
 /// assert_eq!(fast_index, 6);
@@ -335,11 +329,19 @@ pub fn index_search(
     enumerate_mode: EnumerateMode,
     canonize_mode: CanonizeMode,
     parallel_mode: ParallelMode,
+    kernel_mode: KernelMode,
     bounds: &[Bound],
+    memoize: bool,
 ) -> (u32, u32, usize) {
-    // Validate parallel mode.
+    // Catch not-yet-implemented modes.
     if parallel_mode == ParallelMode::DepthOne {
         panic!("The chosen --parallel mode is not implemented yet!")
+    }
+    if kernel_mode != KernelMode::None {
+        panic!("The chosen --kernel mode is not implemented yet!")
+    }
+    if memoize {
+        panic!("--memoize is not implemented yet!")
     }
 
     // Enumerate and sort array of non-overlapping, isomorphic subgraph pairs.
@@ -415,6 +417,8 @@ pub fn index(mol: &Molecule) -> u32 {
         EnumerateMode::GrowErode,
         CanonizeMode::Nauty,
         ParallelMode::Always,
-        &[Bound::Int, Bound::VecSimple, Bound::VecSmallFrags]
+        KernelMode::None,
+        &[Bound::Int, Bound::VecSimple, Bound::VecSmallFrags],
+        false
     ).0
 }

@@ -7,6 +7,7 @@ use assembly_theory::{
     bounds::Bound,
     canonize::CanonizeMode,
     enumerate::EnumerateMode,
+    kernels::KernelMode,
     loader::parse_molfile_str,
     molecule::Molecule,
 };
@@ -57,7 +58,9 @@ pub fn reference_datasets(c: &mut Criterion) {
                                 EnumerateMode::GrowErode,
                                 CanonizeMode::Nauty,
                                 ParallelMode::Always,
-                                &bound);
+                                KernelMode::None,
+                                &bound,
+                                false);
                         }
                     });
             });

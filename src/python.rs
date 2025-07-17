@@ -4,11 +4,14 @@ use pyo3::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
-use crate::assembly::{index, index_search, ParallelMode};
-use crate::bounds::Bound as OurBound;
-use crate::canonize::CanonizeMode;
-use crate::enumerate::EnumerateMode;
-use crate::loader::parse_molfile_str;
+use crate::{
+    assembly::{index, index_search, ParallelMode},
+    bounds::Bound as OurBound,
+    canonize::CanonizeMode,
+    enumerate::EnumerateMode,
+    kernels::KernelMode,
+    loader::parse_molfile_str,
+};
 
 // TODO: Is there a clean way of avoiding the duplication of all our various
 // algorithm variant enums?
@@ -35,6 +38,15 @@ enum PyCanonizeMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum PyParallelMode {
     None,
+    DepthOne,
+    Always,
+}
+
+/// Mirrors the `kernels::KernelMode` enum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum PyKernelMode {
+    None,
+    Once,
     DepthOne,
     Always,
 }
@@ -95,6 +107,21 @@ impl FromStr for PyParallelMode {
     }
 }
 
+/// Converts bound options in `&str` format to `PyKernelMode`.
+impl FromStr for PyKernelMode {
+    type Err = PyErr;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "none" => Ok(PyKernelMode::None),
+            "once" => Ok(PyKernelMode::Once),
+            "depthone" => Ok(PyKernelMode::DepthOne),
+            "always" => Ok(PyKernelMode::Always),
+            _ => Err(PyValueError::new_err(format!("Invalid kernel: {s}"))),
+        }
+    }
+}
+
 /// Converts bound options in `&str` format to `PyBound`.
 impl FromStr for PyBound {
     type Err = PyErr;
@@ -148,6 +175,8 @@ fn make_boundlist(pybounds: &[PyBound]) -> Vec<OurBound> {
 ///
 /// # Returns
 /// - A `String` containing molecular information.
+///
+/// TODO: Add Python example.
 #[pyfunction]
 pub fn _mol_info(mol_block: String) -> PyResult<String> {
     // Parse the .mol file contents as a molecule::Molecule.
@@ -168,6 +197,8 @@ pub fn _mol_info(mol_block: String) -> PyResult<String> {
 ///
 /// # Returns
 /// - The molecule's assembly index as a `u32`.
+///
+/// TODO: Add Python example.
 #[pyfunction]
 pub fn _index(mol_block: String) -> PyResult<u32> {
     // Parse the .mol file contents as a molecule::Molecule.
@@ -189,17 +220,23 @@ pub fn _index(mol_block: String) -> PyResult<u32> {
 /// - `enumerate_str`: The enumeration mode as a string.
 /// - `canonize_str`: The canonization mode as a string.
 /// - `parallel_str`: The parallelization mode as a string.
+/// - `kernel_str`: The kernelization mode as a string.
 /// - `bound_strs`: A set of bounds as strings (from Python).
+/// - `memoize`: True iff memoization should be used in search.
 ///
 /// # Returns
 /// - The molecule's assembly index as a `u32`.
+///
+/// TODO: Add Python example.
 #[pyfunction]
 pub fn _index_search(
     mol_block: String,
     enumerate_str: String,
     canonize_str: String,
     parallel_str: String,
+    kernel_str: String,
     bound_strs: HashSet<String>,
+    memoize: bool,
 ) -> PyResult<u32> {
     // Parse the .mol file contents as a molecule::Molecule.
     let mol_result = parse_molfile_str(&mol_block);
@@ -236,6 +273,15 @@ pub fn _index_search(
             panic!("Unrecognized parallel mode {parallel_str}.")
         }
     };
+    let kernel_mode = match PyKernelMode::from_str(&kernel_str) {
+        Ok(PyKernelMode::None) => KernelMode::None,
+        Ok(PyKernelMode::Once) => KernelMode::Once,
+        Ok(PyKernelMode::DepthOne) => KernelMode::DepthOne,
+        Ok(PyKernelMode::Always) => KernelMode::Always,
+        _ => {
+            panic!("Unrecognized parallel mode {parallel_str}.")
+        }
+    };
     let pybounds = process_bound_strs(bound_strs)?;
     let boundlist = make_boundlist(&pybounds);
 
@@ -245,7 +291,9 @@ pub fn _index_search(
         enumerate_mode,
         canonize_mode,
         parallel_mode,
-        &boundlist);
+        kernel_mode,
+        &boundlist,
+        memoize);
 
     Ok(index)
 }
@@ -258,7 +306,9 @@ pub fn _index_search(
 /// - `enumerate_str`: The enumeration mode as a string.
 /// - `canonize_str`: The canonization mode as a string.
 /// - `parallel_str`: The parallelization mode as a string.
+/// - `kernel_str`: The kernelization mode as a string.
 /// - `bound_strs`: A set of bounds as strings (from Python).
+/// - `memoize`: True iff memoization should be used in search.
 ///
 /// # Returns
 /// - A `HashMap<String, usize>` containing:
@@ -266,13 +316,17 @@ pub fn _index_search(
 ///   - `"num_matches"`: The molecule's number of non-overlapping isomorphic
 ///   subgraph pairs.
 ///   - `"search_size"`: The number of states in the search space.
+///
+/// TODO: Add Python example.
 #[pyfunction]
 pub fn _index_search_verbose(
     mol_block: String,
     enumerate_str: String,
     canonize_str: String,
     parallel_str: String,
+    kernel_str: String,
     bound_strs: HashSet<String>,
+    memoize: bool
 ) -> PyResult<HashMap<String, usize>> {
     // Parse the .mol file contents as a molecule::Molecule.
     let mol_result = parse_molfile_str(&mol_block);
@@ -309,6 +363,15 @@ pub fn _index_search_verbose(
             panic!("Unrecognized parallel mode {parallel_str}.")
         }
     };
+    let kernel_mode = match PyKernelMode::from_str(&kernel_str) {
+        Ok(PyKernelMode::None) => KernelMode::None,
+        Ok(PyKernelMode::Once) => KernelMode::Once,
+        Ok(PyKernelMode::DepthOne) => KernelMode::DepthOne,
+        Ok(PyKernelMode::Always) => KernelMode::Always,
+        _ => {
+            panic!("Unrecognized parallel mode {parallel_str}.")
+        }
+    };
     let pybounds = process_bound_strs(bound_strs)?;
     let boundlist = make_boundlist(&pybounds);
 
@@ -318,7 +381,9 @@ pub fn _index_search_verbose(
         enumerate_mode,
         canonize_mode,
         parallel_mode,
-        &boundlist);
+        kernel_mode,
+        &boundlist,
+        memoize);
 
     // Package results and return.
     let mut data = HashMap::new();

@@ -3,14 +3,14 @@ use std::{fs, path::PathBuf};
 use anyhow::{bail, Context, Result};
 use assembly_theory::{
     assembly::{
-        ParallelMode,
-        KernelMode,
         assembly_depth,
         index_search,
+        ParallelMode,
     },
     bounds::Bound,
     canonize::CanonizeMode,
     enumerate::EnumerateMode,
+    kernels::KernelMode,
     loader::parse_molfile_str,
 };
 use clap::{Args, Parser};
@@ -116,8 +116,14 @@ fn main() -> Result<()> {
     };
 
     // Call index calculation with all the various options.
-    let (index, dup_pairs, search_size) =
-        index_search(&mol, cli.enumerate, cli.canonize, cli.parallel, boundlist);
+    let (index, dup_pairs, search_size) = index_search(
+        &mol,
+        cli.enumerate,
+        cli.canonize,
+        cli.parallel,
+        cli.kernel,
+        boundlist,
+        cli.memoize);
 
     // Print final output, depending on --verbose.
     if cli.verbose {

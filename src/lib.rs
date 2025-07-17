@@ -49,6 +49,9 @@ pub mod enumerate;
 // Molecule graph canonization algorithms.
 pub mod canonize;
 
+// Graph kernelization algorithms.
+pub mod kernels;
+
 // Utility functions
 mod utils;
 

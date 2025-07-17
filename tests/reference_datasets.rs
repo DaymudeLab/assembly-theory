@@ -14,6 +14,7 @@ use assembly_theory::{
     bounds::Bound,
     canonize::CanonizeMode,
     enumerate::EnumerateMode,
+    kernels::KernelMode,
     loader::parse_molfile_str,
 };
 
@@ -75,7 +76,9 @@ fn test_reference_dataset(dataset: &str, bounds: &[Bound], serial: bool) {
             EnumerateMode::GrowErode,
             CanonizeMode::Nauty,
             pmode,
-            bounds);
+            KernelMode::None,
+            bounds,
+            false);
 
         // Compare calculated assembly index to ground truth.
         let molname = name.file_name().unwrap().to_str().unwrap().to_string();
