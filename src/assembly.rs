@@ -23,24 +23,19 @@ use std::{
     sync::{
         atomic::{AtomicUsize, Ordering::Relaxed},
         Arc,
-    }
+    },
 };
 
 use bit_set::BitSet;
 use clap::ValueEnum;
-use graph_canon::CanonLabeling;
-use rayon::iter::{
-    IndexedParallelIterator,
-    IntoParallelRefIterator,
-    ParallelIterator,
-};
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
     bounds::{bound_exceeded, Bound},
     canonize::{canonize, CanonizeMode},
     enumerate::{enumerate_subgraphs, EnumerateMode},
     kernels::KernelMode,
-    molecule::{AtomOrBond, Molecule},
+    molecule::Molecule,
     utils::connected_components_under_edges,
 };
 
@@ -80,7 +75,7 @@ pub fn assembly_depth(mol: &Molecule) -> u32 {
 }
 
 /// Return an iterator over all pairs of non-overlapping, isomorphic subgraphs
-/// in the given molecule. 
+/// in the given molecule.
 fn matches(
     mol: &Molecule,
     enumerate_mode: EnumerateMode,
@@ -88,8 +83,7 @@ fn matches(
 ) -> impl Iterator<Item = (BitSet, BitSet)> {
     // Enumerate all connected, non-induced subgraphs and bin them into
     // isomorphism classes using canonization.
-    let mut isomorphic_map =
-        HashMap::<CanonLabeling<AtomOrBond>, Vec<BitSet>>::new();
+    let mut isomorphic_map = HashMap::<_, Vec<BitSet>>::new();
     for subgraph in enumerate_subgraphs(mol, enumerate_mode) {
         isomorphic_map
             .entry(canonize(mol, &subgraph, canonize_mode))
@@ -113,7 +107,7 @@ fn matches(
 
 /// Recursive helper for the serial version of index_search.
 ///
-/// Inputs: 
+/// Inputs:
 /// - `mol`: The molecule whose assembly index is being calculated.
 /// - `matches`: The remaining non-overlapping isomorphic subgraph pairs.
 /// - `fragments`: TODO
@@ -147,7 +141,7 @@ fn recurse_index_search_serial(
         state_index,
         best_index,
         largest_remove,
-        bounds
+        bounds,
     ) {
         return state_index;
     }
@@ -210,7 +204,7 @@ fn recurse_index_search_serial(
 
 /// Recursive helper for the parallel version of index_search.
 ///
-/// Inputs: 
+/// Inputs:
 /// - `mol`: The molecule whose assembly index is being calculated.
 /// - `matches`: The remaining non-overlapping isomorphic subgraph pairs.
 /// - `fragments`: TODO
@@ -244,7 +238,7 @@ fn recurse_index_search_parallel(
         state_index,
         best_index.load(Relaxed),
         largest_remove,
-        bounds
+        bounds,
     ) {
         return state_index;
     }
@@ -387,8 +381,7 @@ pub fn index_search(
     }
 
     // Enumerate and sort array of non-overlapping, isomorphic subgraph pairs.
-    let mut matches: Vec<(BitSet, BitSet)> =
-        matches(mol, enumerate_mode, canonize_mode).collect();
+    let mut matches = matches(mol, enumerate_mode, canonize_mode).collect::<Vec<_>>();
     matches.sort_by(|e1, e2| e2.0.len().cmp(&e1.0.len()));
 
     // Initialize fragments as all individual edges.
@@ -401,35 +394,34 @@ pub fn index_search(
     // number of non-overlapping, isomorphic subgraph pairs is large enough;
     // otherwise, run serially.
     let (index, states_searched) =
-        if matches.len() > PARALLEL_MATCH_SIZE_THRESHOLD &&
-            parallel_mode == ParallelMode::Always {
-        let states_searched = Arc::new(AtomicUsize::from(0));
-        let index = recurse_index_search_parallel(
-            mol,
-            &matches,
-            &[init],
-            edge_count - 1,
-            (edge_count - 1).into(),
-            edge_count,
-            bounds,
-            states_searched.clone(),
-        );
-        let states_searched = states_searched.load(Relaxed);
-        (index as u32, states_searched)
-    } else {
-        let mut states_searched = 0;
-        let index = recurse_index_search_serial(
-            mol,
-            &matches,
-            &[init],
-            edge_count - 1,
-            edge_count - 1,
-            edge_count,
-            bounds,
-            &mut states_searched,
-        );
-        (index as u32, states_searched)
-    };
+        if matches.len() > PARALLEL_MATCH_SIZE_THRESHOLD && parallel_mode == ParallelMode::Always {
+            let states_searched = Arc::new(AtomicUsize::from(0));
+            let index = recurse_index_search_parallel(
+                mol,
+                &matches,
+                &[init],
+                edge_count - 1,
+                (edge_count - 1).into(),
+                edge_count,
+                bounds,
+                states_searched.clone(),
+            );
+            let states_searched = states_searched.load(Relaxed);
+            (index as u32, states_searched)
+        } else {
+            let mut states_searched = 0;
+            let index = recurse_index_search_serial(
+                mol,
+                &matches,
+                &[init],
+                edge_count - 1,
+                edge_count - 1,
+                edge_count,
+                bounds,
+                &mut states_searched,
+            );
+            (index as u32, states_searched)
+        };
 
     (index, matches.len() as u32, states_searched)
 }
@@ -461,6 +453,7 @@ pub fn index(mol: &Molecule) -> u32 {
         ParallelMode::Always,
         KernelMode::None,
         &[Bound::Int, Bound::VecSimple, Bound::VecSmallFrags],
-        false
-    ).0
+        false,
+    )
+    .0
 }

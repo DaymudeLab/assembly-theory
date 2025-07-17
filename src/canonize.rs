@@ -1,8 +1,6 @@
 //! Create canonical labelings for molecular graphs.
 
-use std::{
-    collections::HashMap,
-};
+use std::{collections::HashMap, hash::Hash};
 
 use bit_set::BitSet;
 use clap::ValueEnum;
@@ -12,9 +10,7 @@ use petgraph::{
     Undirected,
 };
 
-use crate::{
-    molecule::{AtomOrBond, Index, Molecule},
-};
+use crate::molecule::{AtomOrBond, Index, Molecule};
 
 /// Algorithm for graph canonization.
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
@@ -29,16 +25,26 @@ pub enum CanonizeMode {
     TreeFaulon,
 }
 
+/// Label returned by our canonization function
+#[derive(Hash, PartialEq, Eq, Debug)]
+pub enum Labeling {
+    /// Use the label returned by the graph_canon crate
+    NautyLabel(CanonLabeling<AtomOrBond>),
+
+    /// Use the string returned by our implementation of Faulon's code
+    // TODO: This should be a `Vec<u8>`
+    FaulonLabel(String),
+}
+
 /// Obtain a canonical labeling of the specified `subgraph` using the
 /// algorithm specified by `mode`.
 // TODO: Should return a Box<dyn Hash> to flexibly extend over different
 // canonization algorithms.
-pub fn canonize(mol: &Molecule, subgraph: &BitSet, mode: CanonizeMode)
-    -> CanonLabeling<AtomOrBond> {
+pub fn canonize(mol: &Molecule, subgraph: &BitSet, mode: CanonizeMode) -> Labeling {
     match mode {
         CanonizeMode::Nauty => {
             let cgraph = subgraph_to_cgraph(mol, subgraph);
-            CanonLabeling::new(&cgraph)
+            Labeling::NautyLabel(CanonLabeling::new(&cgraph))
         }
         _ => {
             panic!("The chosen --canonize mode is not implemented yet!")
@@ -74,4 +80,3 @@ fn subgraph_to_cgraph(mol: &Molecule, subgraph: &BitSet) -> CGraph {
     }
     h
 }
-
