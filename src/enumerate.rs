@@ -25,10 +25,9 @@ pub enum EnumerateMode {
 
 /// Return an interator over all connected, non-induced subgraphs of the
 /// molecular graph `mol` using the algorithm specified by `mode`.
-pub fn enumerate_subgraphs(mol: &Molecule, mode: EnumerateMode)
-    -> impl Iterator<Item = BitSet> {
+pub fn enumerate_subgraphs(mol: &Molecule, mode: EnumerateMode) -> impl Iterator<Item = BitSet> {
     match mode {
-        EnumerateMode::GrowErode => grow_erode(&mol).into_iter(),
+        EnumerateMode::GrowErode => grow_erode(mol).into_iter(),
         _ => {
             panic!("The chosen --enumerate mode is not implemented yet!");
         }
@@ -46,11 +45,7 @@ fn grow_erode(mol: &Molecule) -> HashSet<BitSet> {
 
     // The remainder is all edges not in the current subset; initially, this is
     // everything.
-    let remainder = BitSet::from_iter(mol
-        .graph()
-        .edge_indices()
-        .map(|ix| ix.index())
-    );
+    let remainder = BitSet::from_iter(mol.graph().edge_indices().map(|ix| ix.index()));
 
     // Set up a set of subgraphs enumerated so far.
     let mut subgraphs = HashSet::new();
@@ -65,7 +60,7 @@ fn grow_erode_recurse(
     mut subset: BitSet,
     mut subsetplus: BitSet,
     mut remainder: BitSet,
-    subgraphs: &mut HashSet<BitSet>
+    subgraphs: &mut HashSet<BitSet>,
 ) {
     // Get the next edge from the current subset's boundary or, if the subset
     // is empty, from the remainder.
@@ -83,7 +78,8 @@ fn grow_erode_recurse(
             subset.clone(),
             subsetplus.clone(),
             remainder.clone(),
-            subgraphs);
+            subgraphs,
+        );
 
         // The other recursive branch will add the candidate edge to the
         // current subset and update the boundary accordingly. However, since
@@ -99,21 +95,15 @@ fn grow_erode_recurse(
                 .graph()
                 .edge_endpoints(EdgeIndex::new(e))
                 .expect("malformed input");
-            subsetplus.extend(mol
-                .graph()
-                .neighbors(src)
-                .filter_map(|n| mol
-                    .graph()
-                    .find_edge(src, n)
-                    .map(|ix| ix.index())),
+            subsetplus.extend(
+                mol.graph()
+                    .neighbors(src)
+                    .filter_map(|n| mol.graph().find_edge(src, n).map(|ix| ix.index())),
             );
-            subsetplus.extend(mol
-                .graph()
-                .neighbors(dst)
-                .filter_map(|n| mol
-                    .graph()
-                    .find_edge(dst, n)
-                    .map(|ix| ix.index())),
+            subsetplus.extend(
+                mol.graph()
+                    .neighbors(dst)
+                    .filter_map(|n| mol.graph().find_edge(dst, n).map(|ix| ix.index())),
             );
 
             // Recurse.
@@ -125,4 +115,3 @@ fn grow_erode_recurse(
         subgraphs.insert(subset);
     }
 }
-

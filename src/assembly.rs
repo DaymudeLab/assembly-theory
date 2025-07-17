@@ -314,8 +314,8 @@ fn recurse_index_search_parallel(
 /// - `u32`: The molecule's assembly index.
 /// - `u32`: The molecule's count of non-overlapping isomorphic subgraph pairs.
 /// - `usize`: The total number of assembly states searched, where an assembly
-/// state is a collection of fragments; note that some states may be searched
-/// and thus counted by this value multiple times.
+///     state is a collection of fragments; note that some states may be
+///     searched and thus counted by this value multiple times.
 ///
 /// # Example
 /// ```

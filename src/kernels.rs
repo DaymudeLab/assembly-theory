@@ -16,4 +16,3 @@ pub enum KernelMode {
     /// Perform kernelization at every recursive step.
     Always,
 }
-

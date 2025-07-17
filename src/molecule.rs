@@ -272,7 +272,7 @@ impl Molecule {
                     .is_some_and(|(src, dst)| src != dst)
         })
     }
-    
+
     /// Return `true` iff this molecule comprises only one bond (of any type).
     pub fn is_basic_unit(&self) -> bool {
         self.graph.edge_count() == 1 && self.graph.node_count() == 2
@@ -316,8 +316,7 @@ impl Molecule {
 
     /// Return an iterator over all ways of partitioning this molecule into two
     /// submolecules.
-    pub fn partitions(&self) ->
-        Option<impl Iterator<Item = (Molecule, Molecule)> + '_> {
+    pub fn partitions(&self) -> Option<impl Iterator<Item = (Molecule, Molecule)> + '_> {
         let mut solutions = HashSet::new();
         let remaining_edges = self.graph.edge_indices().collect();
         self.backtrack(

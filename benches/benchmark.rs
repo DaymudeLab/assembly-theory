@@ -40,29 +40,28 @@ pub fn reference_datasets(c: &mut Criterion) {
                 parse_molfile_str(
                     &fs::read_to_string(name.clone())
                         .expect(&format!("Could not read file {name:?}")),
-                ).expect(&format!("Failed to parse {name:?}")),
+                )
+                .expect(&format!("Failed to parse {name:?}")),
             );
         }
 
         // For each of the bounds options, run the benchmark over all molecules
         // in this dataset.
         for (bound, bound_str) in zip(&bounds, &bound_strs) {
-            group.bench_with_input(
-                BenchmarkId::new(*dataset, &bound_str),
-                bound,
-                |b, bound| {
-                    b.iter(|| {
-                        for mol in &mol_list {
-                            index_search(
-                                &mol,
-                                EnumerateMode::GrowErode,
-                                CanonizeMode::Nauty,
-                                ParallelMode::Always,
-                                KernelMode::None,
-                                &bound,
-                                false);
-                        }
-                    });
+            group.bench_with_input(BenchmarkId::new(*dataset, &bound_str), bound, |b, bound| {
+                b.iter(|| {
+                    for mol in &mol_list {
+                        index_search(
+                            &mol,
+                            EnumerateMode::GrowErode,
+                            CanonizeMode::Nauty,
+                            ParallelMode::Always,
+                            KernelMode::None,
+                            &bound,
+                            false,
+                        );
+                    }
+                });
             });
         }
     }

@@ -142,8 +142,7 @@ impl FromStr for PyBound {
 
 /// Converts a `HashSet<String>` of bound strings from Python into a
 /// `Vec<PyBound>`, raising an error if any bound string is invalid.
-fn process_bound_strs(bound_strs: HashSet<String>)
-    -> PyResult<Vec<PyBound>> {
+fn process_bound_strs(bound_strs: HashSet<String>) -> PyResult<Vec<PyBound>> {
     bound_strs
         .iter()
         .map(|s| s.parse())
@@ -250,8 +249,7 @@ pub fn _index_search(
         Ok(PyEnumerateMode::Bfs) => EnumerateMode::Bfs,
         Ok(PyEnumerateMode::BfsPrune) => EnumerateMode::BfsPrune,
         Ok(PyEnumerateMode::GrowErode) => EnumerateMode::GrowErode,
-        Ok(PyEnumerateMode::GrowErodeIterative) =>
-            EnumerateMode::GrowErodeIterative,
+        Ok(PyEnumerateMode::GrowErodeIterative) => EnumerateMode::GrowErodeIterative,
         _ => {
             panic!("Unrecognized enumerate mode {enumerate_str}.")
         }
@@ -293,7 +291,8 @@ pub fn _index_search(
         parallel_mode,
         kernel_mode,
         &boundlist,
-        memoize);
+        memoize,
+    );
 
     Ok(index)
 }
@@ -326,7 +325,7 @@ pub fn _index_search_verbose(
     parallel_str: String,
     kernel_str: String,
     bound_strs: HashSet<String>,
-    memoize: bool
+    memoize: bool,
 ) -> PyResult<HashMap<String, usize>> {
     // Parse the .mol file contents as a molecule::Molecule.
     let mol_result = parse_molfile_str(&mol_block);
@@ -340,8 +339,7 @@ pub fn _index_search_verbose(
         Ok(PyEnumerateMode::Bfs) => EnumerateMode::Bfs,
         Ok(PyEnumerateMode::BfsPrune) => EnumerateMode::BfsPrune,
         Ok(PyEnumerateMode::GrowErode) => EnumerateMode::GrowErode,
-        Ok(PyEnumerateMode::GrowErodeIterative) =>
-            EnumerateMode::GrowErodeIterative,
+        Ok(PyEnumerateMode::GrowErodeIterative) => EnumerateMode::GrowErodeIterative,
         _ => {
             panic!("Unrecognized enumerate mode {enumerate_str}.")
         }
@@ -383,7 +381,8 @@ pub fn _index_search_verbose(
         parallel_mode,
         kernel_mode,
         &boundlist,
-        memoize);
+        memoize,
+    );
 
     // Package results and return.
     let mut data = HashMap::new();

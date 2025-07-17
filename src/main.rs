@@ -2,11 +2,7 @@ use std::{fs, path::PathBuf};
 
 use anyhow::{bail, Context, Result};
 use assembly_theory::{
-    assembly::{
-        assembly_depth,
-        index_search,
-        ParallelMode,
-    },
+    assembly::{assembly_depth, index_search, ParallelMode},
     bounds::Bound,
     canonize::CanonizeMode,
     enumerate::EnumerateMode,
@@ -77,10 +73,8 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     // Load the .mol file as a molecule::Molecule.
-    let molfile = fs::read_to_string(&cli.molpath)
-        .context("Cannot read input file.")?;
-    let mol = parse_molfile_str(&molfile)
-        .context("Cannot parse molfile.")?;
+    let molfile = fs::read_to_string(&cli.molpath).context("Cannot read input file.")?;
+    let mol = parse_molfile_str(&molfile).context("Cannot parse molfile.")?;
     if mol.is_malformed() {
         bail!("Bad input! Molecule has self-loops or multi-edges.")
     }
@@ -100,18 +94,15 @@ fn main() -> Result<()> {
     // Handle bounding strategy CLI arguments.
     let boundlist: &[Bound] = match cli.boundsgroup {
         // By default, use a combination of the integer and vector bounds.
-        None => &[
-            Bound::Int,
-            Bound::VecSimple,
-            Bound::VecSmallFrags,
-        ],
+        None => &[Bound::Int, Bound::VecSimple, Bound::VecSmallFrags],
         // If --no-bounds is set, do not use any bounds.
         Some(BoundsGroup {
             no_bounds: true, ..
         }) => &[],
         // Otherwise, use the bounds that were specified.
         Some(BoundsGroup {
-            no_bounds: false, bounds,
+            no_bounds: false,
+            bounds,
         }) => &bounds.clone(),
     };
 
@@ -123,7 +114,8 @@ fn main() -> Result<()> {
         cli.parallel,
         cli.kernel,
         boundlist,
-        cli.memoize);
+        cli.memoize,
+    );
 
     // Print final output, depending on --verbose.
     if cli.verbose {
