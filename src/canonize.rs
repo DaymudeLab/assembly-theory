@@ -48,7 +48,7 @@ impl MolAtomNode {
     }
 }
 
-pub fn canonize(molecule: &Molecule, subgraph: &BitSet) -> String {
+pub fn canonize(molecule: &Molecule, subgraph: &BitSet) -> Option<Vec<u8>> {
     let mgraph = molecule.graph();
     let mut mol_graph = CGraph::new_undirected();
     let mut vtx_map = vec![NodeIndex::default(); mgraph.node_count()];
@@ -228,7 +228,7 @@ pub fn canonize(molecule: &Molecule, subgraph: &BitSet) -> String {
             max_string = canon_string
         }
     }
-    max_string
+    Some(max_string.as_bytes().to_vec())
 }
 
 fn canonize_signature(
@@ -600,12 +600,11 @@ mod tests {
         let canonical_repr = canonize(
             &molecule,
             &BitSet::from_iter(molecule.graph().edge_indices().map(|e| e.index())),
-        );
-
-        println!("{}", canonical_repr);
+        )
+        .unwrap();
 
         assert_eq!(
-            canonical_repr,
+            String::from_utf8(canonical_repr).unwrap(),
             "[C]([2]([C]([1]([C]([2]([C,1])))))[1]([C]([2]([C]([1]([C,1]))))))"
         )
     }
@@ -618,11 +617,10 @@ mod tests {
         let canonical_repr = canonize(
             &molecule,
             &BitSet::from_iter(molecule.graph().edge_indices().map(|e| e.index())),
-        );
+        )
+        .unwrap();
 
-        println!("{}", canonical_repr);
-
-        assert_eq!(canonical_repr, "[C]([2]([C]([1]([C]([2]([C]([1]([C]([2]([C]([1]([C]([2]([C,1])))))[1]([C,8]([2]([C]([1]([C,1])))))))))[1]([C,17]([2]([C]([1]([C,8])))))))))[1]([C]([2]([C]([1]([C,17]))))))")
+        assert_eq!(String::from_utf8(canonical_repr).unwrap(), "[C]([2]([C]([1]([C]([2]([C]([1]([C]([2]([C]([1]([C]([2]([C,1])))))[1]([C,8]([2]([C]([1]([C,1])))))))))[1]([C,17]([2]([C]([1]([C,8])))))))))[1]([C]([2]([C]([1]([C,17]))))))")
     }
 
     // Dummy Molecule for testing

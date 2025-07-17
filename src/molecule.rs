@@ -459,7 +459,7 @@ impl Molecule {
     pub fn matches(&self) -> impl Iterator<Item = (BitSet, BitSet)> {
         let mut isomorphic_map = HashMap::<String, Vec<BitSet>>::new();
         for subgraph in self.enumerate_noninduced_subgraphs() {
-            let repr = canonize(&self, &subgraph);
+            let repr = String::from_utf8(canonize(&self, &subgraph).unwrap()).unwrap();
 
             isomorphic_map
                 .entry(repr)
