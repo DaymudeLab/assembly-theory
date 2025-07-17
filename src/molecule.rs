@@ -1,8 +1,9 @@
-//! Graph-theoretic description of a molecule.
+//! Graph-theoretic representation of a molecule.
 //!
-//! This module provides functions for fragmenting and joining partial molecules. It is not
-//! possible to manually construct a molecule. You can only construct a molecule by parsing a
-//! `.mol` file
+//! Load molecules from `.mol` files, fragment and join partial molecules, and
+//! perform various graph-theoretic tasks on molecules (e.g., enumerate all
+//! subgraphs, test for isomorphisms, etc.).
+
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     fmt::Display,
@@ -13,7 +14,6 @@ use bit_set::BitSet;
 use clap::ValueEnum;
 use graph_canon::CanonLabeling;
 use petgraph::{
-    algo::{is_isomorphic, is_isomorphic_subgraph},
     dot::Dot,
     graph::{EdgeIndex, Graph, NodeIndex},
     Undirected,
@@ -55,6 +55,11 @@ pub enum CanonizeMode {
     TreeFaulon,
 }
 
+/// Thrown by [`Element::from_str`] if the string does not represent a valid
+/// chemical element.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct ParseElementError;
+
 macro_rules! periodic_table {
     ( $(($element:ident, $name:literal),)* ) => {
         #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -82,10 +87,6 @@ macro_rules! periodic_table {
         }
     };
 }
-
-/// Thrown by [`Element::from_str`] if the string does not represent a chemical element.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct ParseElementError;
 
 periodic_table!(
     (Hydrogen, "H"),
@@ -208,7 +209,7 @@ periodic_table!(
     (Oganesson, "Og"),
 );
 
-/// Atoms are the vertices of a [`Molecule`] graph.
+/// The nodes of a [`Molecule`] graph.
 ///
 /// Atoms contain an element and have a (currently unused) `capacity` field.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -217,11 +218,24 @@ pub struct Atom {
     capacity: u32,
 }
 
-/// Bonds are the edges of a [`Molecule`] graph.
+impl Atom {
+    /// Construct an [`Atom`] of type `element` with capacity `capacity`.
+    pub fn new(element: Element, capacity: u32) -> Self {
+        Self { element, capacity }
+    }
+
+    /// Return this [`Atom`]'s element.
+    pub fn element(&self) -> Element {
+        self.element
+    }
+}
+
+/// The edges of a [`Molecule`] graph.
 ///
-/// The `.mol` file spec describes seven types of bonds, but assembly theory literature
-/// only considers single, double, and triple bonds. Notably, aromatic rings are represented
-/// by alternating single and double bonds, instead of the aromatic bond type.
+/// The `.mol` file spec describes seven types of bonds, but the assembly
+/// theory literature only considers single, double, and triple bonds. Notably,
+/// aromatic rings are represented by alternating single and double bonds
+/// instead of the aromatic bond type.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Bond {
     Single,
@@ -235,7 +249,7 @@ enum AtomOrBond {
     Bond(Bond),
 }
 
-/// Thrown when `from::<usize>()` does not recieve a 1, 2, or 3.
+/// Thrown by [`Bond::try_from`] when given anything other than a 1, 2, or 3.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct ParseBondError;
 
@@ -251,30 +265,58 @@ impl TryFrom<usize> for Bond {
     }
 }
 
-/// A molecule is a simple, loopless graph where nodes are elements and edges are bonds.
+/// A simple, loopless graph with [`Element`]s as nodes and [`Bond`]s as edges.
 ///
-/// Assembly theory literature ignores hydrogen atoms by default. Molecules can hydrogen atoms
-/// inserted into them, but by default are constructed without hydrogen atoms or bonds to hydrogen
-/// atoms.
+/// Assembly theory literature ignores hydrogen atoms by default. Molecules can
+/// have hydrogen atoms inserted into them, but by default are constructed
+/// without hydrogen atoms or bonds to hydrogen atoms.
 #[derive(Debug, Clone)]
 pub struct Molecule {
     graph: MGraph,
 }
 
-impl Atom {
-    /// Constructor function for an atom
-    pub fn new(element: Element, capacity: u32) -> Self {
-        Self { element, capacity }
-    }
-
-    /// Returns the element of a particular atom
-    pub fn element(&self) -> Element {
-        self.element
-    }
-}
-
 impl Molecule {
-    /// Join self with other on `on`
+    // Constructors and representation manipulations.
+
+    /// Construct a [`Molecule`] from an existing `MGraph`.
+    pub(crate) fn from_graph(g: MGraph) -> Self {
+        Self { graph: g }
+    }
+
+    /// Return a representation of this molecule as an `MGraph`.
+    pub(crate) fn graph(&self) -> &MGraph {
+        &self.graph
+    }
+
+    /// Return a pretty-printable representation of this molecule.
+    pub fn info(&self) -> String {
+        let dot = Dot::new(&self.graph);
+        format!("{dot:?}")
+    }
+
+    // Graph-theoretic property checkers.
+
+    /// Return `true` iff this molecule contains self-loops or multiple edges
+    /// between any pair of nodes.
+    pub fn is_malformed(&self) -> bool {
+        let mut uniq = HashSet::new();
+        !self.graph.edge_indices().all(|ix| {
+            uniq.insert(ix)
+                && self
+                    .graph
+                    .edge_endpoints(ix)
+                    .is_some_and(|(src, dst)| src != dst)
+        })
+    }
+    
+    /// Return `true` iff this molecule comprises only one bond (of any type).
+    pub fn is_basic_unit(&self) -> bool {
+        self.graph.edge_count() == 1 && self.graph.node_count() == 2
+    }
+    
+    // Functions for joining and fragmenting (enumerating subgraphs) molecules.
+
+    /// Join this molecule with `other` on edge `on`.
     pub fn join(
         &self,
         other: &Molecule,
@@ -310,35 +352,20 @@ impl Molecule {
         Some(output_graph)
     }
 
-    /// Return `true` if self is isomorphic to other
-    pub fn is_isomorphic_to(&self, other: &Molecule) -> bool {
-        is_isomorphic(&self.graph, &other.graph)
-    }
-
-    /// Return `true` if self is a subgraph of other
-    pub fn is_subgraph_of(&self, other: &Molecule) -> bool {
-        is_isomorphic_subgraph(&self.graph, &other.graph)
-    }
-
-    /// Return set of all subgraphs of self as an iterable data structure
-    pub fn enumerate_induced_subgraphs(&self) -> impl Iterator<Item = NodeSet> {
+    /// Return an iterator over all connected, non-induced subgraphs of this
+    /// molecule.
+    fn enumerate_noninduced_subgraphs(&self) -> impl Iterator<Item = BitSet> {
         let mut solutions = HashSet::new();
-        let remainder = BTreeSet::from_iter(self.graph.node_indices());
-        self.generate_connected_induced_subgraphs(
-            remainder,
-            BTreeSet::new(),
-            BTreeSet::new(),
-            &mut solutions,
+        let remainder = BitSet::from_iter(self
+            .graph
+            .edge_indices()
+            .map(|ix| ix.index())
         );
-        solutions.into_iter().filter(|s| !s.is_empty())
-    }
-
-    pub fn enumerate_noninduced_subgraphs(&self) -> impl Iterator<Item = BitSet> {
-        let mut solutions = HashSet::new();
-        let remainder = BitSet::from_iter(self.graph.edge_indices().map(|ix| ix.index()));
         let subset = BitSet::new();
         let neighbors = BitSet::new();
-        self.generate_connected_noninduced_subgraphs(remainder, subset, neighbors, &mut solutions);
+        self.generate_connected_noninduced_subgraphs(
+            remainder, subset, neighbors, &mut solutions
+        );
         solutions.into_iter()
     }
 
@@ -372,18 +399,24 @@ impl Molecule {
                 .expect("malformed input");
 
             if subset.len() < self.graph.edge_count() / 2 + 1 {
-                neighbors.extend(
-                    self.graph
-                        .neighbors(src)
-                        .filter_map(|n| self.graph.find_edge(src, n).map(|ix| ix.index())),
+                neighbors.extend(self
+                    .graph
+                    .neighbors(src)
+                    .filter_map(|n| self
+                        .graph
+                        .find_edge(src, n)
+                        .map(|ix| ix.index())
+                    ),
                 );
-
-                neighbors.extend(
-                    self.graph
-                        .neighbors(dst)
-                        .filter_map(|n| self.graph.find_edge(dst, n).map(|ix| ix.index())),
+                neighbors.extend(self
+                    .graph
+                    .neighbors(dst)
+                    .filter_map(|n| self
+                        .graph
+                        .find_edge(dst, n)
+                        .map(|ix| ix.index())
+                    ),
                 );
-
                 self.generate_connected_noninduced_subgraphs(
                     remainder, subset, neighbors, solutions,
                 );
@@ -393,78 +426,9 @@ impl Molecule {
         }
     }
 
-    /// Return `true` if self is not formed in a valid way
-    ///
-    /// In particular, a molecule is considered to be malformed if it contains
-    /// multiple edges between the same source and destinations, or if there
-    /// are edges from a source to itself
-    // Check if a molecule has self-loops or doubled edges
-    pub fn is_malformed(&self) -> bool {
-        let mut uniq = HashSet::new();
-        !self.graph.edge_indices().all(|ix| {
-            uniq.insert(ix)
-                && self
-                    .graph
-                    .edge_endpoints(ix)
-                    .is_some_and(|(src, dst)| src != dst)
-        })
-    }
-
-    // From
-    // https://stackoverflow.com/a/15722579
-    // https://stackoverflow.com/a/15658245
-    fn generate_connected_induced_subgraphs(
-        &self,
-        mut remainder: NodeSet,
-        mut subset: NodeSet,
-        mut neighbors: NodeSet,
-        solutions: &mut HashSet<NodeSet>,
-    ) {
-        let candidates = if subset.is_empty() {
-            remainder.clone()
-        } else {
-            remainder.intersection(&neighbors).cloned().collect()
-        };
-
-        if let Some(v) = candidates.first() {
-            remainder.remove(v);
-
-            self.generate_connected_induced_subgraphs(
-                remainder.clone(),
-                subset.clone(),
-                neighbors.clone(),
-                solutions,
-            );
-
-            subset.insert(*v);
-            neighbors.extend(self.graph.neighbors(*v));
-            self.generate_connected_induced_subgraphs(remainder, subset, neighbors, solutions);
-        } else if subset.len() > 2 {
-            solutions.insert(subset);
-        }
-    }
-
-    #[allow(dead_code)]
-    fn print_edgelist(&self, list: &[EdgeIndex], name: &str) {
-        println!(
-            "{name}: {:?}",
-            list.iter()
-                .map(|e| (
-                    e.index(),
-                    self.graph
-                        .edge_endpoints(*e)
-                        .map(|(i, j)| (
-                            i.index(),
-                            self.graph.node_weight(i).unwrap().element(),
-                            j.index(),
-                            self.graph.node_weight(j).unwrap().element(),
-                        ))
-                        .unwrap()
-                ))
-                .collect::<Vec<_>>()
-        );
-    }
-
+    // Functions for canonizing molecule graphs.
+    
+    /// Convert the specified `subgraph` to the format expected by Nauty.
     fn subgraph_to_cgraph(&self, subgraph: &BitSet) -> CGraph {
         let mut h = CGraph::with_capacity(subgraph.len(), 2 * subgraph.len());
         let mut vtx_map = HashMap::<NodeIndex, NodeIndex>::new();
@@ -490,10 +454,13 @@ impl Molecule {
         h
     }
 
-    /// Return an iterator of bitsets from self containing all duplicate and
-    /// non-overlapping pairs of isomorphic subgraphs
+    // Functions related to top-down search for assembly index calculation.
+
+    /// Return an iterator over all pairs of non-overlapping, isomorphic
+    /// subgraphs in this molecule. 
     pub fn matches(&self) -> impl Iterator<Item = (BitSet, BitSet)> {
-        let mut isomorphic_map = HashMap::<CanonLabeling<AtomOrBond>, Vec<BitSet>>::new();
+        let mut isomorphic_map =
+            HashMap::<CanonLabeling<AtomOrBond>, Vec<BitSet>>::new();
         for subgraph in self.enumerate_noninduced_subgraphs() {
             let cgraph = self.subgraph_to_cgraph(&subgraph);
             let repr = CanonLabeling::new(&cgraph);
@@ -516,9 +483,12 @@ impl Molecule {
         matches.into_iter()
     }
 
-    /// Returns all ways to partition self as an iterable data structure of
-    /// molecule pairs
-    pub fn partitions(&self) -> Option<impl Iterator<Item = (Molecule, Molecule)> + '_> {
+    // Functions related to computing assembly depth.
+
+    /// Return an iterator over all ways of partitioning this molecule into two
+    /// submolecules.
+    pub fn partitions(&self) ->
+        Option<impl Iterator<Item = (Molecule, Molecule)> + '_> {
         let mut solutions = HashSet::new();
         let remaining_edges = self.graph.edge_indices().collect();
         self.backtrack(
@@ -566,25 +536,28 @@ impl Molecule {
             && is_subset_connected(&self.graph, left)
             && is_subset_connected(&self.graph, right)
     }
+    
+    // Debug functions.
 
-    /// Constructor for Molecule using an MGraph
-    pub(crate) fn from_graph(g: MGraph) -> Self {
-        Self { graph: g }
-    }
-
-    pub fn is_basic_unit(&self) -> bool {
-        self.graph.edge_count() == 1 && self.graph.node_count() == 2
-    }
-
-    /// Return the graph of self as an MGraph
-    pub(crate) fn graph(&self) -> &MGraph {
-        &self.graph
-    }
-
-    /// Pretty-printable string representation of self
-    pub fn info(&self) -> String {
-        let dot = Dot::new(&self.graph);
-        format!("{dot:?}")
+    #[allow(dead_code)]
+    fn print_edgelist(&self, list: &[EdgeIndex], name: &str) {
+        println!(
+            "{name}: {:?}",
+            list.iter()
+                .map(|e| (
+                    e.index(),
+                    self.graph
+                        .edge_endpoints(*e)
+                        .map(|(i, j)| (
+                            i.index(),
+                            self.graph.node_weight(i).unwrap().element(),
+                            j.index(),
+                            self.graph.node_weight(j).unwrap().element(),
+                        ))
+                        .unwrap()
+                ))
+                .collect::<Vec<_>>()
+        );
     }
 }
 
