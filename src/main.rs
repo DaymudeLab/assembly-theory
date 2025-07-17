@@ -1,16 +1,18 @@
 use std::{fs, path::PathBuf};
 
 use anyhow::{bail, Context, Result};
-use assembly_theory::assembly::{
-    ParallelMode,
-    KernelMode,
-    assembly_depth,
-    index_search,
-    serial_index_search,
+use assembly_theory::{
+    assembly::{
+        ParallelMode,
+        KernelMode,
+        assembly_depth,
+        index_search,
+    },
+    bounds::Bound,
+    canonize::CanonizeMode,
+    enumerate::EnumerateMode,
+    loader::parse_molfile_str,
 };
-use assembly_theory::bounds::Bound;
-use assembly_theory::loader::parse_molfile_str;
-use assembly_theory::molecule::{EnumerateMode, CanonizeMode};
 use clap::{Args, Parser};
 
 #[derive(Parser, Debug)]
@@ -95,48 +97,6 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    // TODO: Do something about EnumerateModes.
-    match cli.enumerate {
-        EnumerateMode::Bfs => {
-            println!("WARNING: Ignoring EnumerateMode::Bfs; not implemented yet");
-        }
-        EnumerateMode::BfsPrune => {
-            println!("WARNING: Ignoring EnumerateMode::BfsPrune; not implemented yet");
-        }
-        EnumerateMode::GrowErode => {
-            println!("Using recursive grow-erode for subgraph enumeration");
-        }
-        EnumerateMode::GrowErodeIterative => {
-            println!("WARNING: Ignoring EnumerateMode::GrowErodeIterative; not implemented yet");
-        }
-    }
-
-    // TODO: Do something about CanonizeModes.
-    match cli.canonize {
-        CanonizeMode::Nauty => {
-            println!("Using nauty for graph canonization");
-        }
-        CanonizeMode::Faulon => {
-            println!("WARNING: Ignoring CanonizeMode::Faulon; not implemented yet");
-        }
-        CanonizeMode::TreeNauty => {
-            println!("WARNING: Ignoring CanonizeMode::TreeNauty; not implemented yet");
-        }
-        CanonizeMode::TreeFaulon => {
-            println!("WARNING: Ignoring CanonizeMode::TreeFaulon; not implemented yet");
-        }
-    }
-
-    // TODO: Do something about ParallelModes.
-    let parallel = match cli.parallel {
-        ParallelMode::None => false,
-        ParallelMode::DepthOne => {
-            println!("WARNING: Ignoring ParallelMode::DepthOne; not implemented yet");
-            false
-        },
-        ParallelMode::Always => true,
-    };
-
     // Handle bounding strategy CLI arguments.
     let boundlist: &[Bound] = match cli.boundsgroup {
         // By default, use a combination of the integer and vector bounds.
@@ -156,12 +116,8 @@ fn main() -> Result<()> {
     };
 
     // Call index calculation with all the various options.
-    // TODO: Rework with the full list of options.
-    let (index, dup_pairs, search_size) = if parallel {
-        index_search(&mol, boundlist)
-    } else {
-        serial_index_search(&mol, boundlist)
-    };
+    let (index, dup_pairs, search_size) =
+        index_search(&mol, cli.enumerate, cli.canonize, cli.parallel, boundlist);
 
     // Print final output, depending on --verbose.
     if cli.verbose {

@@ -1,19 +1,28 @@
 //! Test assembly-theory correctness against all reference datasets.
 
+use std::{
+    collections::HashMap,
+    ffi::OsStr,
+    fs,
+    path::Path
+};
+
 use csv::Reader;
-use std::{collections::HashMap, ffi::OsStr, fs, path::Path};
 
 use assembly_theory::{
-    assembly::{index_search, serial_index_search},
+    assembly::{index_search, ParallelMode},
     bounds::Bound,
-    loader,
+    canonize::CanonizeMode,
+    enumerate::EnumerateMode,
+    loader::parse_molfile_str,
 };
 
 fn load_ma_index(dataset: &str) -> HashMap<String, u32> {
     // Set up CSV reader for data/<dataset>/ma-index.csv.
     let ma_index_path = Path::new("data").join(dataset).join("ma-index.csv");
     let mut reader =
-        Reader::from_path(ma_index_path).expect(&format!("{dataset}/ma-index.csv does not exist."));
+        Reader::from_path(ma_index_path)
+            .expect(&format!("{dataset}/ma-index.csv does not exist."));
 
     // Load assembly index records.
     let mut ma_index: HashMap<String, u32> = HashMap::new();
@@ -54,17 +63,19 @@ fn test_reference_dataset(dataset: &str, bounds: &[Bound], serial: bool) {
         }
 
         // Load the .mol file as an assembly_theory::molecule::Molecule.
-        let mol = loader::parse_molfile_str(
-            &fs::read_to_string(name.clone()).expect(&format!("Could not read file {name:?}")),
-        )
-        .expect(&format!("Failed to parse {name:?}"));
+        let mol = parse_molfile_str(
+            &fs::read_to_string(name.clone())
+                .expect(&format!("Could not read file {name:?}")),
+        ).expect(&format!("Failed to parse {name:?}"));
 
         // Calculate the molecule's assembly index.
-        let (index, _, _) = if serial {
-            serial_index_search(&mol, bounds)
-        } else {
-            index_search(&mol, bounds)
-        };
+        let pmode = if serial {ParallelMode::None} else {ParallelMode::Always};
+        let (index, _, _) = index_search(
+            &mol,
+            EnumerateMode::GrowErode,
+            CanonizeMode::Nauty,
+            pmode,
+            bounds);
 
         // Compare calculated assembly index to ground truth.
         let molname = name.file_name().unwrap().to_str().unwrap().to_string();

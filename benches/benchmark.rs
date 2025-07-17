@@ -1,13 +1,13 @@
+use std::{ffi::OsStr, fs, iter::zip, path::Path};
+
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use std::ffi::OsStr;
-use std::fs;
-use std::iter::zip;
-use std::path::Path;
 
 use assembly_theory::{
-    assembly::index_search,
+    assembly::{index_search, ParallelMode},
     bounds::Bound,
-    loader,
+    canonize::CanonizeMode,
+    enumerate::EnumerateMode,
+    loader::parse_molfile_str,
     molecule::Molecule,
 };
 
@@ -36,23 +36,30 @@ pub fn reference_datasets(c: &mut Criterion) {
                 continue;
             }
             mol_list.push(
-                loader::parse_molfile_str(
+                parse_molfile_str(
                     &fs::read_to_string(name.clone())
                         .expect(&format!("Could not read file {name:?}")),
-                )
-                .expect(&format!("Failed to parse {name:?}")),
+                ).expect(&format!("Failed to parse {name:?}")),
             );
         }
 
         // For each of the bounds options, run the benchmark over all molecules
         // in this dataset.
         for (bound, bound_str) in zip(&bounds, &bound_strs) {
-            group.bench_with_input(BenchmarkId::new(*dataset, &bound_str), bound, |b, bound| {
-                b.iter(|| {
-                    for mol in &mol_list {
-                        index_search(&mol, &bound);
-                    }
-                });
+            group.bench_with_input(
+                BenchmarkId::new(*dataset, &bound_str),
+                bound,
+                |b, bound| {
+                    b.iter(|| {
+                        for mol in &mol_list {
+                            index_search(
+                                &mol,
+                                EnumerateMode::GrowErode,
+                                CanonizeMode::Nauty,
+                                ParallelMode::Always,
+                                &bound);
+                        }
+                    });
             });
         }
     }

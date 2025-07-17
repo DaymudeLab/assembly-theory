@@ -1,3 +1,5 @@
+//! TODO
+
 use bit_set::BitSet;
 use clap::ValueEnum;
 
@@ -30,6 +32,36 @@ pub enum Bound {
 struct EdgeType {
     bond: Bond,
     ends: (Element, Element),
+}
+
+/// TODO 
+pub fn bound_exceeded(
+    mol: &Molecule,
+    fragments: &[BitSet],
+    ix: usize,
+    largest_remove: usize,
+    best: usize,
+    bounds: &[Bound],
+) -> bool {
+    for bound_type in bounds {
+        let exceeds = match bound_type {
+            Bound::Log =>
+                ix - log_bound(fragments) >= best,
+            Bound::Int =>
+                ix - int_bound(fragments, largest_remove) >= best,
+            Bound::VecSimple =>
+                ix - vec_simple_bound(fragments, largest_remove, mol) >= best,
+            Bound::VecSmallFrags =>
+                ix - vec_small_frags_bound(fragments, largest_remove, mol) >= best,
+            _ => {
+                panic!("One of the chosen bounds is not implemented yet!")
+            }
+        };
+        if exceeds {
+            return true;
+        }
+    }
+    false
 }
 
 /// TODO

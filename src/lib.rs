@@ -43,6 +43,12 @@ pub mod assembly;
 // Bounding strategies for the search phase.
 pub mod bounds;
 
+// Algorithms for enumerating connected subgraphs of a molecular graph.
+pub mod enumerate;
+
+// Molecule graph canonization algorithms.
+pub mod canonize;
+
 // Utility functions
 mod utils;
 
