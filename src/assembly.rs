@@ -50,8 +50,6 @@ pub enum ParallelMode {
     Always,
 }
 
-static PARALLEL_MATCH_SIZE_THRESHOLD: usize = 100;
-
 /// Computes assembly depth; see
 /// [Pagel et al. (2024)](https://arxiv.org/abs/2409.05993).
 pub fn assembly_depth(mol: &Molecule) -> u32 {
@@ -202,6 +200,158 @@ fn recurse_index_search_serial(
     best_child_index
 }
 
+#[allow(clippy::too_many_arguments)]
+fn recurse_index_search_depthone(
+    mol: &Molecule,
+    matches: &[(BitSet, BitSet)],
+    fragments: &[BitSet],
+    ix: usize,  
+    bounds: &[Bound],
+    states_searched: &mut usize,
+) -> usize {
+    let best = Arc::new(AtomicUsize::new(mol.graph().edge_count() - 1));
+    let searched = Arc::new(AtomicUsize::new(0));
+
+    // Search for duplicatable fragment
+    matches.par_iter().enumerate().for_each(|(i, (h1, h2))| { 
+        let mut fractures = fragments.to_owned();
+        let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
+        let f2 = fragments.iter().enumerate().find(|(_, c)| h2.is_subset(c));
+
+        let largest_remove = h1.len();
+
+        let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) else {
+            return;
+        };
+
+        // All of these clones are on bitsets and cheap enough
+        if i1 == i2 {
+            let mut union = h1.clone();
+            union.union_with(h2);
+            let mut difference = f1.clone();
+            difference.difference_with(&union);
+            let c = connected_components_under_edges(mol.graph(), &difference);
+            fractures.extend(c);
+            fractures.swap_remove(i1);
+        } else {
+            let mut f1r = f1.clone();
+            f1r.difference_with(h1);
+            let mut f2r = f2.clone();
+            f2r.difference_with(h2);
+
+            let c1 = connected_components_under_edges(mol.graph(), &f1r);
+            let c2 = connected_components_under_edges(mol.graph(), &f2r);
+
+            fractures.extend(c1);
+            fractures.extend(c2);
+
+            fractures.swap_remove(i1.max(i2));
+            fractures.swap_remove(i1.min(i2));
+        }
+
+        fractures.retain(|i| i.len() > 1);
+        fractures.push(h1.clone());
+
+        let mut searched_local = 0;
+        let output = recurse_index_search_depthone_helper(
+            mol,
+            &matches[i + 1..],
+            &fractures,
+            ix - h1.len() + 1,
+            largest_remove,
+            best.clone(),
+            bounds,
+            &mut searched_local,
+        );
+        best.fetch_min(output, Relaxed);
+        searched.fetch_add(searched_local, Relaxed);
+    });
+
+    *states_searched = searched.load(Relaxed);
+    best.load(Relaxed) 
+}
+
+#[allow(clippy::too_many_arguments)]
+fn recurse_index_search_depthone_helper(
+    mol: &Molecule,
+    matches: &[(BitSet, BitSet)],
+    fragments: &[BitSet],
+    ix: usize,  
+    largest_remove: usize,
+    best: Arc<AtomicUsize>,
+    bounds: &[Bound],
+    states_searched: &mut usize,
+) -> usize {
+    let mut cx = ix;
+    *states_searched += 1;
+
+    if bound_exceeded(
+        mol,
+        fragments,
+        ix,
+        best.load(Relaxed),
+        largest_remove,
+        bounds,
+    ) {
+        return ix;
+    }
+
+    // Search for duplicatable fragment
+    for (i, (h1, h2)) in matches.iter().enumerate() { 
+        let mut fractures = fragments.to_owned();
+        let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
+        let f2 = fragments.iter().enumerate().find(|(_, c)| h2.is_subset(c));
+
+        let largest_remove = h1.len();
+
+        let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) else {
+            continue;
+        };
+
+        // All of these clones are on bitsets and cheap enough
+        if i1 == i2 {
+            let mut union = h1.clone();
+            union.union_with(h2);
+            let mut difference = f1.clone();
+            difference.difference_with(&union);
+            let c = connected_components_under_edges(mol.graph(), &difference);
+            fractures.extend(c);
+            fractures.swap_remove(i1);
+        } else {
+            let mut f1r = f1.clone();
+            f1r.difference_with(h1);
+            let mut f2r = f2.clone();
+            f2r.difference_with(h2);
+
+            let c1 = connected_components_under_edges(mol.graph(), &f1r);
+            let c2 = connected_components_under_edges(mol.graph(), &f2r);
+
+            fractures.extend(c1);
+            fractures.extend(c2);
+
+            fractures.swap_remove(i1.max(i2));
+            fractures.swap_remove(i1.min(i2));
+        }
+
+        fractures.retain(|i| i.len() > 1);
+        fractures.push(h1.clone());
+
+        cx = cx.min(recurse_index_search_depthone_helper(
+            mol,
+            &matches[i + 1..],
+            &fractures,
+            ix - h1.len() + 1,
+            largest_remove,
+            best.clone(),
+            bounds,
+            states_searched,
+        ));
+        best.fetch_min(cx, Relaxed);
+    };
+
+    cx
+}
+
 /// Recursive helper for the parallel version of index_search.
 ///
 /// Inputs:
@@ -350,7 +500,7 @@ fn recurse_index_search_parallel(
 ///     &anthracene,
 ///     EnumerateMode::GrowErode,
 ///     CanonizeMode::Nauty,
-///     ParallelMode::Always,
+///     ParallelMode::DepthOne,
 ///     KernelMode::None,
 ///     &[Bound::Log, Bound::Int],
 ///     false);
@@ -370,9 +520,6 @@ pub fn index_search(
     memoize: bool,
 ) -> (u32, u32, usize) {
     // Catch not-yet-implemented modes.
-    if parallel_mode == ParallelMode::DepthOne {
-        panic!("The chosen --parallel mode is not implemented yet!")
-    }
     if kernel_mode != KernelMode::None {
         panic!("The chosen --kernel mode is not implemented yet!")
     }
@@ -394,33 +541,48 @@ pub fn index_search(
     // number of non-overlapping, isomorphic subgraph pairs is large enough;
     // otherwise, run serially.
     let (index, states_searched) =
-        if matches.len() > PARALLEL_MATCH_SIZE_THRESHOLD && parallel_mode == ParallelMode::Always {
-            let states_searched = Arc::new(AtomicUsize::from(0));
-            let index = recurse_index_search_parallel(
-                mol,
-                &matches,
-                &[init],
-                edge_count - 1,
-                (edge_count - 1).into(),
-                edge_count,
-                bounds,
-                states_searched.clone(),
-            );
-            let states_searched = states_searched.load(Relaxed);
-            (index as u32, states_searched)
-        } else {
-            let mut states_searched = 0;
-            let index = recurse_index_search_serial(
-                mol,
-                &matches,
-                &[init],
-                edge_count - 1,
-                edge_count - 1,
-                edge_count,
-                bounds,
-                &mut states_searched,
-            );
-            (index as u32, states_searched)
+        match parallel_mode {
+            ParallelMode::None => { 
+                let mut states_searched = 0;
+                let index = recurse_index_search_serial(
+                    mol,
+                    &matches,
+                    &[init],
+                    edge_count - 1,
+                    edge_count - 1,
+                    edge_count,
+                    bounds,
+                    &mut states_searched,
+                );
+                (index as u32, states_searched)
+            },
+            ParallelMode::DepthOne => {
+                let mut states_searched = 0;
+                let index = recurse_index_search_depthone(
+                    mol, 
+                    &matches, 
+                    &[init], 
+                    edge_count - 1, 
+                    bounds, 
+                    &mut states_searched
+                );
+                (index as u32, states_searched)
+            },
+            ParallelMode::Always => {
+                let states_searched = Arc::new(AtomicUsize::from(0));
+                let index = recurse_index_search_parallel(
+                    mol,
+                    &matches,
+                    &[init],
+                    edge_count - 1,
+                    (edge_count - 1).into(),
+                    edge_count,
+                    bounds,
+                    states_searched.clone(),
+                );
+                let states_searched = states_searched.load(Relaxed);
+                (index as u32, states_searched)
+            },
         };
 
     (index, matches.len() as u32, states_searched)
@@ -450,7 +612,7 @@ pub fn index(mol: &Molecule) -> u32 {
         mol,
         EnumerateMode::GrowErode,
         CanonizeMode::Nauty,
-        ParallelMode::Always,
+        ParallelMode::DepthOne,
         KernelMode::None,
         &[Bound::Int, Bound::VecSimple, Bound::VecSmallFrags],
         false,
