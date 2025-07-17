@@ -55,6 +55,9 @@ pub mod kernels;
 // Utility functions
 mod utils;
 
+// Canonization functions
+pub mod canonize;
+
 // Python library
 #[cfg(feature = "python")]
 pub mod python;
