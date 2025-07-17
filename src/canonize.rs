@@ -82,7 +82,7 @@ fn subgraph_to_cgraph(mol: &Molecule, subgraph: &BitSet) -> CGraph {
 // First checks if the subgraph forms a tree (given the assumption that subgraph is always connected)
 // returns None if not a tree
 // Otherwise returns canon string for the (labeled) tree
-pub fn canonize_subtree(molecule: &Molecule, subgraph: &BitSet) -> Option<String> {
+pub fn canonize_subtree(molecule: &Molecule, subgraph: &BitSet) -> Option<Vec<u8>> {
     let mgraph = molecule.graph();
     let mut vtx_set = BitSet::with_capacity(mgraph.node_count());
     let mut subgraph_adj = vec![BitSet::with_capacity(mgraph.node_count()); mgraph.node_count()];
@@ -169,12 +169,12 @@ pub fn canonize_subtree(molecule: &Molecule, subgraph: &BitSet) -> Option<String
             let vtx_2 = vtx_set.iter().next().unwrap();
             let vtx_2_str = &vtx_label[vtx_2];
             if vtx_1_str.cmp(vtx_2_str) == Ordering::Less {
-                Some(format!("({vtx_1_str},{vtx_2_str})"))
+                Some(format!("({vtx_1_str},{vtx_2_str})").as_bytes().to_vec())
             } else {
-                Some(format!("({vtx_2_str},{vtx_1_str})"))
+                Some(format!("({vtx_2_str},{vtx_1_str})").as_bytes().to_vec())
             }
         } else {
-            Some(vtx_1_str.to_string())
+            Some(vtx_1_str.as_bytes().to_vec())
         }
     } else {
         None
@@ -248,7 +248,7 @@ mod tests {
         subgraph.remove(molecule.graph().edge_indices().next().unwrap().index());
         let canonical_repr = canonize_subtree(&molecule, &subgraph).unwrap();
 
-        assert_eq!(canonical_repr, "((C,(C,(C))),(C,(C,(C))))")
+        assert_eq!(String::from_utf8(canonical_repr).unwrap(), "((C,(C,(C))),(C,(C,(C))))")
     }
 
     #[test]
@@ -263,7 +263,7 @@ mod tests {
         let canonical_repr = canonize_subtree(&molecule, &subgraph).unwrap();
 
         assert_eq!(
-            canonical_repr,
+            String::from_utf8(canonical_repr).unwrap(),
             "((C,(C,(C),(C,(C,(C,(C)))))),(C,(C,(C),(C,(C,(C,(C)))))))"
         )
     }
@@ -278,7 +278,7 @@ mod tests {
         let canonical_repr = canonize_subtree(&molecule, &subgraph).unwrap();
 
         assert_eq!(
-            canonical_repr,
+            String::from_utf8(canonical_repr).unwrap(),
             "(C,(C,(C,(C,(C,(O),(O))))),(C,(C,(O,(C,(C),(O))))))"
         )
     }
