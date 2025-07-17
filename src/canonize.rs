@@ -145,16 +145,19 @@ pub fn canonize_subtree(molecule: &Molecule, subgraph: &BitSet) -> Option<String
 
             // merge leaf strings in parent's primary string
             parents.iter().for_each(|parent| {
-                vtx_strs[parent][1..].sort();
-                let parent_str = vtx_strs[parent].join(",");
-                vtx_label[parent] = format!(
-                    "({},{})",
-                    mgraph
-                        .node_weight(NodeIndex::new(parent))
-                        .unwrap()
-                        .element(),
-                    parent_str
-                );
+                // only do this once the parent has seen all its children and becomes a leaf in next iteration
+                if subgraph_adj[parent].len() <= 1 {
+                    vtx_strs[parent].sort();
+                    let parent_str = vtx_strs[parent].join(",");
+                    vtx_label[parent] = format!(
+                        "({},{})",
+                        mgraph
+                            .node_weight(NodeIndex::new(parent))
+                            .unwrap()
+                            .element(),
+                        parent_str
+                    );
+                }
             });
         }
 
@@ -166,9 +169,9 @@ pub fn canonize_subtree(molecule: &Molecule, subgraph: &BitSet) -> Option<String
             let vtx_2 = vtx_set.iter().next().unwrap();
             let vtx_2_str = &vtx_label[vtx_2];
             if vtx_1_str.cmp(vtx_2_str) == Ordering::Less {
-                Some(format!("({},{})", vtx_1_str, vtx_2_str))
+                Some(format!("({vtx_1_str},{vtx_2_str})"))
             } else {
-                Some(format!("({},{})", vtx_2_str, vtx_1_str))
+                Some(format!("({vtx_2_str},{vtx_1_str})"))
             }
         } else {
             Some(vtx_1_str.to_string())
