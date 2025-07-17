@@ -282,7 +282,7 @@ mod tests {
 
         assert_eq!(
             canonical_repr,
-            "(C,(C,(C,(O,(C,(C),(O))))),(C,(C,(C,(C,(O),(O))))))"
+            "(C,(C,(C,(C,(C,(O),(O))))),(C,(C,(O,(C,(C),(O))))))"
         )
     }
 }
