@@ -10,7 +10,6 @@ use std::{
 };
 
 use bit_set::BitSet;
-use graph_canon::CanonLabeling;
 use petgraph::{
     algo::{is_isomorphic, is_isomorphic_subgraph},
     dot::Dot,
@@ -18,11 +17,11 @@ use petgraph::{
     Undirected,
 };
 
-use crate::utils::{edge_induced_subgraph, is_subset_connected};
+use crate::{canonize::canonize, utils::{edge_induced_subgraph, is_subset_connected}};
 
 pub(crate) type Index = u32;
 pub(crate) type MGraph = Graph<Atom, Bond, Undirected, Index>;
-type CGraph = Graph<AtomOrBond, (), Undirected, Index>;
+pub(crate) type CGraph = Graph<AtomOrBond, (), Undirected, Index>;
 type EdgeSet = BTreeSet<EdgeIndex<Index>>;
 type NodeSet = BTreeSet<NodeIndex<Index>>;
 
@@ -200,10 +199,29 @@ pub enum Bond {
     Triple,
 }
 
+impl Display for Bond {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            Bond::Single => write!(f, "1"),
+            Bond::Double => write!(f, "2"),
+            Bond::Triple => write!(f, "3"),
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum AtomOrBond {
+pub enum AtomOrBond {
     Atom(Atom),
     Bond(Bond),
+}
+
+impl Display for AtomOrBond {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            AtomOrBond::Atom(atom) => write!(f, "{}", atom.element()),
+            AtomOrBond::Bond(bond) => write!(f, "{bond}"),
+        }
+    }
 }
 
 /// Thrown when `from::<usize>()` does not recieve a 1, 2, or 3.
@@ -436,38 +454,12 @@ impl Molecule {
         );
     }
 
-    fn subgraph_to_cgraph(&self, subgraph: &BitSet) -> CGraph {
-        let mut h = CGraph::with_capacity(subgraph.len(), 2 * subgraph.len());
-        let mut vtx_map = HashMap::<NodeIndex, NodeIndex>::new();
-        for e in subgraph {
-            let eix = EdgeIndex::new(e);
-            let (src, dst) = self.graph.edge_endpoints(eix).unwrap();
-            let src_w = self.graph.node_weight(src).unwrap();
-            let dst_w = self.graph.node_weight(dst).unwrap();
-            let e_w = self.graph.edge_weight(eix).unwrap();
-
-            let h_enode = h.add_node(AtomOrBond::Bond(*e_w));
-
-            let h_src = vtx_map
-                .entry(src)
-                .or_insert(h.add_node(AtomOrBond::Atom(*src_w)));
-            h.add_edge(*h_src, h_enode, ());
-
-            let h_dst = vtx_map
-                .entry(dst)
-                .or_insert(h.add_node(AtomOrBond::Atom(*dst_w)));
-            h.add_edge(*h_dst, h_enode, ());
-        }
-        h
-    }
-
     /// Return an iterator of bitsets from self containing all duplicate and
     /// non-overlapping pairs of isomorphic subgraphs
     pub fn matches(&self) -> impl Iterator<Item = (BitSet, BitSet)> {
-        let mut isomorphic_map = HashMap::<CanonLabeling<AtomOrBond>, Vec<BitSet>>::new();
+        let mut isomorphic_map = HashMap::<String, Vec<BitSet>>::new();
         for subgraph in self.enumerate_noninduced_subgraphs() {
-            let cgraph = self.subgraph_to_cgraph(&subgraph);
-            let repr = CanonLabeling::new(&cgraph);
+            let repr = String::from_utf8(canonize(&self, &subgraph).unwrap()).unwrap();
 
             isomorphic_map
                 .entry(repr)
@@ -574,28 +566,6 @@ mod tests {
     fn element_from_string() {
         assert!(str::parse("H") == Ok(Element::Hydrogen));
         assert!(str::parse::<Element>("Foo").is_err());
-    }
-
-    #[test]
-    fn noncanonical() {
-        let mut p3_010 = Graph::<u8, (), Undirected>::new_undirected();
-        let n0 = p3_010.add_node(0);
-        let n1 = p3_010.add_node(1);
-        let n2 = p3_010.add_node(0);
-        p3_010.add_edge(n0, n1, ());
-        p3_010.add_edge(n1, n2, ());
-
-        let mut p3_001 = Graph::<u8, (), Undirected>::new_undirected();
-        let n0 = p3_001.add_node(0);
-        let n1 = p3_001.add_node(0);
-        let n2 = p3_001.add_node(1);
-        p3_001.add_edge(n0, n1, ());
-        p3_001.add_edge(n1, n2, ());
-
-        let repr_a = CanonLabeling::new(&p3_010);
-        let repr_b = CanonLabeling::new(&p3_001);
-
-        assert_ne!(repr_a, repr_b);
     }
 
     #[test]
