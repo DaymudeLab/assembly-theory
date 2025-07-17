@@ -39,8 +39,8 @@ pub fn bound_exceeded(
     mol: &Molecule,
     fragments: &[BitSet],
     ix: usize,
-    largest_remove: usize,
     best: usize,
+    largest_remove: usize,
     bounds: &[Bound],
 ) -> bool {
     for bound_type in bounds {

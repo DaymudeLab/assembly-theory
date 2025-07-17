@@ -315,7 +315,7 @@ pub fn _index_search(
 ///   - `"index"`: The molecule's assembly index.
 ///   - `"num_matches"`: The molecule's number of non-overlapping isomorphic
 ///   subgraph pairs.
-///   - `"search_size"`: The number of states in the search space.
+///   - `"states_searched"`: The number of assembly states searchede.
 ///
 /// TODO: Add Python example.
 #[pyfunction]
@@ -376,7 +376,7 @@ pub fn _index_search_verbose(
     let boundlist = make_boundlist(&pybounds);
 
     // Compute assembly index.
-    let (index, num_matches, search_size) = index_search(
+    let (index, num_matches, states_searched) = index_search(
         &mol,
         enumerate_mode,
         canonize_mode,
@@ -389,7 +389,7 @@ pub fn _index_search_verbose(
     let mut data = HashMap::new();
     data.insert("index".to_string(), index as usize);
     data.insert("num_matches".to_string(), num_matches as usize);
-    data.insert("search_size".to_string(), search_size);
+    data.insert("states_searched".to_string(), states_searched);
 
     Ok(data)
 }
