@@ -124,7 +124,7 @@ fn matches(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn recurse_index_search(
+fn recurse_index_search_serial(
     mol: &Molecule,
     matches: &[(BitSet, BitSet)],
     fragments: &[BitSet],
@@ -183,7 +183,7 @@ fn recurse_index_search(
         fractures.retain(|i| i.len() > 1);
         fractures.push(h1.clone());
 
-        cx = cx.min(recurse_index_search(
+        cx = cx.min(recurse_index_search_serial(
             mol,
             &matches[i + 1..],
             &fractures,
@@ -200,7 +200,7 @@ fn recurse_index_search(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn parallel_recurse_index_search(
+fn recurse_index_search_parallel(
     mol: &Molecule,
     matches: &[(BitSet, BitSet)],
     fragments: &[BitSet],
@@ -260,7 +260,7 @@ fn parallel_recurse_index_search(
         fractures.retain(|i| i.len() > 1);
         fractures.push(h1.clone());
 
-        let output = parallel_recurse_index_search(
+        let output = recurse_index_search_parallel(
             mol,
             &matches[i + 1..],
             &fractures,
@@ -278,11 +278,11 @@ fn parallel_recurse_index_search(
     cx.load(Relaxed)
 }
 
-/// Computes a molecule's assembly index and related information using the
-/// specified strategy.
+/// Computes a molecule's assembly index and related information using a top-
+/// down recursive search, parameterized by the specified options.
 ///
 /// See [`EnumerateMode`], [`CanonizeMode`], [`ParallelMode`], and [`Bound`]
-/// for details on how to customize the assembly index calculation strategy.
+/// for details on how to customize the top-down algorithm.
 ///
 /// Notably, bounds are applied in the order they appear in the `bounds` slice.
 /// It is generally better to provide bounds that are quick to compute first.
@@ -360,7 +360,7 @@ pub fn index_search(
         if matches.len() > PARALLEL_MATCH_SIZE_THRESHOLD &&
             parallel_mode == ParallelMode::Always {
         let search_size = Arc::new(AtomicUsize::from(0));
-        let index = parallel_recurse_index_search(
+        let index = recurse_index_search_parallel(
             mol,
             &matches,
             &[init],
@@ -374,7 +374,7 @@ pub fn index_search(
         (index as u32, search_size)
     } else {
         let mut search_size = 0;
-        let index = recurse_index_search(
+        let index = recurse_index_search_serial(
             mol,
             &matches,
             &[init],

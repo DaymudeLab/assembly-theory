@@ -4,7 +4,7 @@ use pyo3::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
-use crate::assembly::{index_search, ParallelMode};
+use crate::assembly::{index, index_search, ParallelMode};
 use crate::bounds::Bound as OurBound;
 use crate::canonize::CanonizeMode;
 use crate::enumerate::EnumerateMode;
@@ -149,7 +149,7 @@ fn make_boundlist(pybounds: &[PyBound]) -> Vec<OurBound> {
 /// # Returns
 /// - A `String` containing molecular information.
 #[pyfunction]
-pub fn _molecule_info(mol_block: String) -> PyResult<String> {
+pub fn _mol_info(mol_block: String) -> PyResult<String> {
     // Parse the .mol file contents as a molecule::Molecule.
     let mol_result = parse_molfile_str(&mol_block);
     let mol = match mol_result {
@@ -161,7 +161,28 @@ pub fn _molecule_info(mol_block: String) -> PyResult<String> {
     Ok(mol.info())
 }
 
-/// Computes the molecular assembly index using the specified strategy.
+/// Computes a molecule's assembly index using an efficient default strategy.
+///
+/// # Parameters
+/// - `mol_block`: The contents of a .mol file as a string.
+///
+/// # Returns
+/// - The molecule's assembly index as a `u32`.
+#[pyfunction]
+pub fn _index(mol_block: String) -> PyResult<u32> {
+    // Parse the .mol file contents as a molecule::Molecule.
+    let mol_result = parse_molfile_str(&mol_block);
+    let mol = match mol_result {
+        Ok(mol) => mol,
+        Err(e) => return Err(e.into()), // Convert the error to PyErr
+    };
+
+    // Calculate the assembly index.
+    Ok(index(&mol))
+}
+
+/// Computes the molecular assembly index using a top-down recursive algorithm
+/// that is parameterized by the specified options.
 ///
 /// # Parameters
 /// - `mol_block`: The contents of a .mol file as a string.
@@ -173,7 +194,7 @@ pub fn _molecule_info(mol_block: String) -> PyResult<String> {
 /// # Returns
 /// - The molecule's assembly index as a `u32`.
 #[pyfunction]
-pub fn _assembly_index(
+pub fn _index_search(
     mol_block: String,
     enumerate_str: String,
     canonize_str: String,
@@ -229,8 +250,8 @@ pub fn _assembly_index(
     Ok(index)
 }
 
-/// Computes the molecular assembly index and related information using the
-/// specified strategy.
+/// Computes the molecular assembly index and related information using a top-
+/// down recursive algorithm that is parameterized by the specified options.
 ///
 /// # Parameters
 /// - `mol_block`: The contents of a .mol file as a string.
@@ -246,7 +267,7 @@ pub fn _assembly_index(
 ///   subgraph pairs.
 ///   - `"search_size"`: The number of states in the search space.
 #[pyfunction]
-pub fn _assembly_index_verbose(
+pub fn _index_search_verbose(
     mol_block: String,
     enumerate_str: String,
     canonize_str: String,
@@ -314,8 +335,9 @@ pub fn _assembly_index_verbose(
 // otherwise, Python will not be able to import the module.
 #[pymodule]
 fn _pyat(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(_molecule_info, m)?)?;
-    m.add_function(wrap_pyfunction!(_assembly_index, m)?)?;
-    m.add_function(wrap_pyfunction!(_assembly_index_verbose, m)?)?;
+    m.add_function(wrap_pyfunction!(_mol_info, m)?)?;
+    m.add_function(wrap_pyfunction!(_index, m)?)?;
+    m.add_function(wrap_pyfunction!(_index_search, m)?)?;
+    m.add_function(wrap_pyfunction!(_index_search_verbose, m)?)?;
     Ok(())
 }
