@@ -237,23 +237,21 @@ fn parallel_recurse_index_search(
     fragments: &[BitSet],
     ix: usize,
     largest_remove: usize,
-    best: AtomicUsize,
+    best: Arc<AtomicUsize>,
     bounds: &[Bound],
     states_searched: Arc<AtomicUsize>,
 ) -> usize {
     let cx = AtomicUsize::from(ix);
 
-    states_searched.fetch_add(1, Relaxed);
-
     // Branch and Bound
+    let local_best = best.load(Relaxed);
     for bound_type in bounds {
-        let best = best.load(Relaxed);
         let exceeds = match bound_type {
-            Bound::Log => ix - log_bound(fragments) >= best,
-            Bound::IntChain => ix - addition_bound(fragments, largest_remove) >= best,
-            Bound::VecChainSimple => ix - vec_bound_simple(fragments, largest_remove, mol) >= best,
+            Bound::Log => ix - log_bound(fragments) >= local_best,
+            Bound::IntChain => ix - addition_bound(fragments, largest_remove) >= local_best,
+            Bound::VecChainSimple => ix - vec_bound_simple(fragments, largest_remove, mol) >= local_best,
             Bound::VecChainSmallFrags => {
-                ix - vec_bound_small_frags(fragments, largest_remove, mol) >= best
+                ix - vec_bound_small_frags(fragments, largest_remove, mol) >= local_best
             }
         };
         if exceeds {
@@ -307,7 +305,7 @@ fn parallel_recurse_index_search(
             &fractures,
             ix - h1.len() + 1,
             largest_remove,
-            best.load(Relaxed).into(),
+            best.clone(),
             bounds,
             states_searched.clone(),
         );
@@ -367,13 +365,14 @@ pub fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize) {
 
     let (index, total_search) = if matches.len() > PARALLEL_MATCH_SIZE_THRESHOLD {
         let total_search = Arc::new(AtomicUsize::from(0));
+        let best = Arc::new(AtomicUsize::from(edge_count - 1));
         let index = parallel_recurse_index_search(
             mol,
             &matches,
             &[init],
             edge_count - 1,
             edge_count,
-            (edge_count - 1).into(),
+            best,
             bounds,
             total_search.clone(),
         );
