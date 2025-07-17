@@ -1,6 +1,6 @@
 //! Create canonical labelings for molecular graphs.
 
-use std::{collections::HashMap, hash::Hash};
+use std::{collections::HashMap, cmp::Ordering, hash::Hash};
 
 use bit_set::BitSet;
 use clap::ValueEnum;
@@ -82,12 +82,116 @@ fn subgraph_to_cgraph(mol: &Molecule, subgraph: &BitSet) -> CGraph {
     h
 }
 
+// First checks if the subgraph forms a tree (given the assumption that subgraph is always connected)
+// returns None if not a tree
+// Otherwise returns canon string for the (labeled) tree
+pub fn canonize_subtree(molecule: &Molecule, subgraph: &BitSet) -> Option<String> {
+    let mgraph = molecule.graph();
+    let mut vtx_set = BitSet::with_capacity(mgraph.node_count());
+    let mut subgraph_adj = vec![BitSet::with_capacity(mgraph.node_count()); mgraph.node_count()];
+    let mut vtx_strs: Vec<Vec<String>> = vec![vec![]; mgraph.node_count()];
+    let mut vtx_label: Vec<String> = vec!["".to_string(); mgraph.node_count()];
+
+    // count nodes in the subgraph tree
+    for subgraph_bond_idx in subgraph {
+        let bond_idx = EdgeIndex::new(subgraph_bond_idx);
+        let (start_atom_idx, end_atom_idx) = mgraph.edge_endpoints(bond_idx).unwrap();
+
+        let inserted_start = vtx_set.insert(start_atom_idx.index());
+        let inserted_end = vtx_set.insert(end_atom_idx.index());
+
+        // update adj matrix for subgraph
+        subgraph_adj[start_atom_idx.index()].insert(end_atom_idx.index());
+        subgraph_adj[end_atom_idx.index()].insert(start_atom_idx.index());
+
+        // add empty strings for all the nodes
+        if inserted_start {
+            vtx_label[start_atom_idx.index()] = format!(
+                "({})",
+                mgraph.node_weight(start_atom_idx).unwrap().element()
+            );
+        }
+        if inserted_end {
+            vtx_label[end_atom_idx.index()] =
+                format!("({})", mgraph.node_weight(end_atom_idx).unwrap().element());
+        }
+    }
+
+    // check if the subgraph is a tree or not (given the assumption that subgraph is connected graph)
+    // e = n - 1
+
+    if subgraph.len() == (vtx_set.len() - 1) {
+        // keep merging the labels until 1/2 vertices remain
+        while vtx_set.len() > 2 {
+            // locate all the leaves
+            let leaves: Vec<usize> = subgraph_adj
+                .iter()
+                .enumerate()
+                .filter_map(|(i, adj_list)| if adj_list.len() == 1 { Some(i) } else { None })
+                .collect();
+            let mut parents = BitSet::with_capacity(mgraph.node_count());
+            // add strings of the leaves to the parent's string array
+            leaves.iter().for_each(|leaf_id| {
+                let parent = subgraph_adj[*leaf_id].iter().next().unwrap();
+                let leaf_str = &vtx_label[*leaf_id];
+                vtx_strs[parent].push(leaf_str.to_string());
+
+                // add parent to parents list
+                parents.insert(parent);
+
+                // remove leaf node from adj matrix
+                subgraph_adj[*leaf_id].clear();
+                subgraph_adj[parent].remove(*leaf_id);
+                // remove leaf node from bit-set
+                vtx_set.remove(*leaf_id);
+            });
+
+            // merge leaf strings in parent's primary string
+            parents.iter().for_each(|parent| {
+                vtx_strs[parent][1..].sort();
+                let parent_str = vtx_strs[parent].join(",");
+                vtx_label[parent] = format!(
+                    "({},{})",
+                    mgraph
+                        .node_weight(NodeIndex::new(parent))
+                        .unwrap()
+                        .element(),
+                    parent_str
+                );
+            });
+        }
+
+        let vtx_1 = vtx_set.iter().next().unwrap();
+        let vtx_1_str = &vtx_label[vtx_1];
+
+        // when 2 vertices are left, merge their labels
+        if vtx_set.len() == 2 {
+            let vtx_2 = vtx_set.iter().next().unwrap();
+            let vtx_2_str = &vtx_label[vtx_2];
+            if vtx_1_str.cmp(vtx_2_str) == Ordering::Less {
+                Some(format!("({},{})", vtx_1_str, vtx_2_str))
+            } else {
+                Some(format!("({},{})", vtx_2_str, vtx_1_str))
+            }
+        } else {
+            Some(vtx_1_str.to_string())
+        }
+    } else {
+        None
+    }
+}
+
 mod tests {
     #[allow(unused_imports)]
     use super::*;
 
+    use std::fs;
+    use std::path::PathBuf;
+
     #[allow(unused_imports)]
     use petgraph::algo::is_isomorphic_matching;
+
+    use crate::loader;
 
     #[test]
     fn noncanonical() {
@@ -133,5 +237,49 @@ mod tests {
             |e0, e1| e0 == e1,
             |n0, n1| n0 == n1
         ))
+    }
+
+    #[test]
+    fn canonize_benzene() {
+        let path = PathBuf::from(format!("./data/checks/benzene.mol"));
+        let molfile = fs::read_to_string(path).expect("Cannot read the data file");
+        let molecule = loader::parse_molfile_str(&molfile).expect("Cannot parse molfile.");
+        let mut subgraph = BitSet::from_iter(molecule.graph().edge_indices().map(|e| e.index()));
+        subgraph.remove(molecule.graph().edge_indices().next().unwrap().index());
+        let canonical_repr = canonize_subtree(&molecule, &subgraph).unwrap();
+
+        assert_eq!(canonical_repr, "((C,(C,(C))),(C,(C,(C))))")
+    }
+
+    #[test]
+    fn canonize_anthracene() {
+        let path = PathBuf::from(format!("./data/checks/anthracene.mol"));
+        let molfile = fs::read_to_string(path).expect("Cannot read the data file");
+        let molecule = loader::parse_molfile_str(&molfile).expect("Cannot parse molfile.");
+        let mut subgraph = BitSet::from_iter(molecule.graph().edge_indices().map(|e| e.index()));
+        subgraph.remove(0);
+        subgraph.remove(6);
+        subgraph.remove(9);
+        let canonical_repr = canonize_subtree(&molecule, &subgraph).unwrap();
+
+        assert_eq!(
+            canonical_repr,
+            "((C,(C,(C),(C,(C,(C,(C)))))),(C,(C,(C),(C,(C,(C,(C)))))))"
+        )
+    }
+
+    #[test]
+    fn canonize_aspirin() {
+        let path = PathBuf::from(format!("./data/checks/aspirin.mol"));
+        let molfile = fs::read_to_string(path).expect("Cannot read the data file");
+        let molecule = loader::parse_molfile_str(&molfile).expect("Cannot parse molfile.");
+        let mut subgraph = BitSet::from_iter(molecule.graph().edge_indices().map(|e| e.index()));
+        subgraph.remove(molecule.graph().edge_indices().next().unwrap().index());
+        let canonical_repr = canonize_subtree(&molecule, &subgraph).unwrap();
+
+        assert_eq!(
+            canonical_repr,
+            "(C,(C,(C,(O,(C,(C),(O))))),(C,(C,(C,(C,(O),(O))))))"
+        )
     }
 }
