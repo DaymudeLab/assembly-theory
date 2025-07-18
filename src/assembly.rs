@@ -389,7 +389,7 @@ fn recurse_index_search_parallel(
     matches: &[(BitSet, BitSet)],
     fragments: &[BitSet],
     state_index: usize,
-    best_index: AtomicUsize,
+    best_index: Arc<AtomicUsize>,
     largest_remove: usize,
     bounds: &[Bound],
     states_searched: Arc<AtomicUsize>,
@@ -458,7 +458,7 @@ fn recurse_index_search_parallel(
             &matches[i + 1..],
             &fractures,
             state_index - h1.len() + 1,
-            best_index.load(Relaxed).into(),
+            best_index.clone(),
             largest_remove,
             bounds,
             states_searched.clone(),
@@ -589,12 +589,13 @@ pub fn index_search(
         }
         ParallelMode::Always => {
             let states_searched = Arc::new(AtomicUsize::from(0));
+            let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
             let index = recurse_index_search_parallel(
                 mol,
                 &matches,
                 &[init],
                 edge_count - 1,
-                (edge_count - 1).into(),
+                best_index,
                 edge_count,
                 bounds,
                 states_searched.clone(),
