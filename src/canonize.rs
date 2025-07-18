@@ -89,8 +89,8 @@ pub fn canonize_subtree(molecule: &Molecule, subgraph: &BitSet) -> Option<Vec<u8
     let mgraph = molecule.graph();
     let mut vtx_set = BitSet::with_capacity(mgraph.node_count());
     let mut subgraph_adj = vec![BitSet::with_capacity(mgraph.node_count()); mgraph.node_count()];
-    let mut vtx_strs: Vec<Vec<String>> = vec![vec![]; mgraph.node_count()];
-    let mut vtx_label: Vec<String> = vec!["".to_string(); mgraph.node_count()];
+    let mut vtx_strs: Vec<Vec<Vec<u8>>> = vec![vec![]; mgraph.node_count()];
+    let mut vtx_label: Vec<Vec<u8>> = vec![vec![]; mgraph.node_count()];
 
     // count nodes in the subgraph tree
     for subgraph_bond_idx in subgraph {
@@ -106,14 +106,28 @@ pub fn canonize_subtree(molecule: &Molecule, subgraph: &BitSet) -> Option<Vec<u8
 
         // add empty strings for all the nodes
         if inserted_start {
-            vtx_label[start_atom_idx.index()] = format!(
-                "({})",
-                mgraph.node_weight(start_atom_idx).unwrap().element()
+            vtx_label[start_atom_idx.index()].push(b'(');
+            vtx_label[start_atom_idx.index()].push(
+                mgraph
+                    .node_weight(start_atom_idx)
+                    .unwrap()
+                    .element()
+                    .to_string()
+                    .as_bytes()[0],
             );
+            vtx_label[start_atom_idx.index()].push(b')');
         }
         if inserted_end {
-            vtx_label[end_atom_idx.index()] =
-                format!("({})", mgraph.node_weight(end_atom_idx).unwrap().element());
+            vtx_label[end_atom_idx.index()].push(b'(');
+            vtx_label[end_atom_idx.index()].push(
+                mgraph
+                    .node_weight(end_atom_idx)
+                    .unwrap()
+                    .element()
+                    .to_string()
+                    .as_bytes()[0],
+            );
+            vtx_label[end_atom_idx.index()].push(b')');
         }
     }
 
@@ -134,7 +148,7 @@ pub fn canonize_subtree(molecule: &Molecule, subgraph: &BitSet) -> Option<Vec<u8
             leaves.iter().for_each(|leaf_id| {
                 let parent = subgraph_adj[*leaf_id].iter().next().unwrap();
                 let leaf_str = &vtx_label[*leaf_id];
-                vtx_strs[parent].push(leaf_str.to_string());
+                vtx_strs[parent].push(leaf_str.clone());
 
                 // add parent to parents list
                 parents.insert(parent);
@@ -151,15 +165,12 @@ pub fn canonize_subtree(molecule: &Molecule, subgraph: &BitSet) -> Option<Vec<u8
                 // only do this once the parent has seen all its children and becomes a leaf in next iteration
                 if subgraph_adj[parent].len() <= 1 {
                     vtx_strs[parent].sort();
-                    let parent_str = vtx_strs[parent].join(",");
-                    vtx_label[parent] = format!(
-                        "({},{})",
-                        mgraph
-                            .node_weight(NodeIndex::new(parent))
-                            .unwrap()
-                            .element(),
-                        parent_str
-                    );
+                    let parent_str = vtx_strs[parent].join(&b',');
+
+                    vtx_label[parent].pop(); // remove the closing bracket in starting parent label: "(X)"
+                    vtx_label[parent].push(b',');
+                    vtx_label[parent].extend_from_slice(&parent_str);
+                    vtx_label[parent].push(b')');
                 }
             });
         }
@@ -171,13 +182,25 @@ pub fn canonize_subtree(molecule: &Molecule, subgraph: &BitSet) -> Option<Vec<u8
         if vtx_set.len() == 2 {
             let vtx_2 = vtx_set.iter().next().unwrap();
             let vtx_2_str = &vtx_label[vtx_2];
+            let mut return_str_vec: Vec<u8> = vec![];
             if vtx_1_str.cmp(vtx_2_str) == Ordering::Less {
-                Some(format!("({vtx_1_str},{vtx_2_str})").as_bytes().to_vec())
+                return_str_vec.push(b'(');
+                return_str_vec.extend(vtx_1_str);
+                return_str_vec.push(b',');
+                return_str_vec.extend(vtx_2_str);
+                return_str_vec.push(b')');
+                Some(return_str_vec)
             } else {
-                Some(format!("({vtx_2_str},{vtx_1_str})").as_bytes().to_vec())
+                return_str_vec.push(b'(');
+                return_str_vec.extend(vtx_2_str);
+                return_str_vec.push(b',');
+                return_str_vec.extend(vtx_1_str);
+                return_str_vec.push(b')');
+                Some(return_str_vec)
             }
         } else {
-            Some(vtx_1_str.as_bytes().to_vec())
+            // Some(vtx_1_str.as_bytes().to_vec())
+            Some(vtx_1_str.clone())
         }
     } else {
         None
@@ -251,7 +274,10 @@ mod tests {
         subgraph.remove(molecule.graph().edge_indices().next().unwrap().index());
         let canonical_repr = canonize_subtree(&molecule, &subgraph).unwrap();
 
-        assert_eq!(String::from_utf8(canonical_repr).unwrap(), "((C,(C,(C))),(C,(C,(C))))")
+        assert_eq!(
+            String::from_utf8(canonical_repr).unwrap(),
+            "((C,(C,(C))),(C,(C,(C))))"
+        )
     }
 
     #[test]
