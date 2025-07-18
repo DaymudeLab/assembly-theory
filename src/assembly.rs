@@ -131,9 +131,6 @@ fn fractures(
 ) -> Option<Vec<BitSet>> {
     // Attempt to find fragments f1 and f2 containing h1 and h2, respectively;
     // if either do not exist, exit without further fragmentation.
-    // TODO: Are repeated .find() calls across recursion wasteful? Does this
-    // repeat checks of the same matches being subsets of the same fragments?
-    // TODO: Is this partially what Garrett's CompatGraph solves?
     let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
     let f2 = fragments.iter().enumerate().find(|(_, c)| h2.is_subset(c));
     let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) else {
@@ -183,7 +180,8 @@ fn fractures(
 /// - `fragments`: TODO
 /// - `state_index`: The assembly index of this assembly state.
 /// - `best_index`: The smallest assembly index for all assembly states so far.
-/// - `largest_remove`: The size of the largest match removed so far.
+/// - `largest_remove`: An upper bound on the size of fragments that can be
+///   removed from this or any descendant state.
 /// - `bounds`: The list of bounding strategies to apply.
 ///
 /// Returns, from this assembly state and any of its descendents:
@@ -263,8 +261,10 @@ fn recurse_index_search_depthone(
     state_index: usize,
     best_index: Arc<AtomicUsize>,
     bounds: &[Bound],
-    states_searched: Arc<AtomicUsize>,
 ) -> (usize, usize) {
+    // Keep track of the number of states searched, including this one.
+    let states_searched = Arc::new(AtomicUsize::from(1));
+
     // For every pair of duplicatable subgraphs compatible with the current set
     // of fragments, recurse using the fragments obtained by removing this pair
     // and adding one subgraph back.
@@ -299,7 +299,8 @@ fn recurse_index_search_depthone(
 /// - `fragments`: TODO
 /// - `state_index`: The assembly index of this assembly state.
 /// - `best_index`: The smallest assembly index for all assembly states so far.
-/// - `largest_remove`: The size of the largest match removed so far.
+/// - `largest_remove`: An upper bound on the size of fragments that can be
+///   removed from this or any descendant state.
 /// - `bounds`: The list of bounding strategies to apply.
 ///
 /// Returns, from this assembly state and any of its descendents:
@@ -367,7 +368,8 @@ fn recurse_index_search_depthone_helper(
 /// - `fragments`: TODO
 /// - `state_index`: The assembly index of this assembly state.
 /// - `best_index`: The smallest assembly index for all assembly states so far.
-/// - `largest_remove`: The size of the largest match removed so far.
+/// - `largest_remove`: An upper bound on the size of fragments that can be
+///   removed from this or any descendant state.
 /// - `bounds`: The list of bounding strategies to apply.
 ///
 /// Returns, from this assembly state and any of its descendents:
@@ -381,11 +383,7 @@ fn recurse_index_search_parallel(
     best_index: Arc<AtomicUsize>,
     largest_remove: usize,
     bounds: &[Bound],
-    states_searched: Arc<AtomicUsize>,
-) -> usize {
-    // Count this assembly state as searched.
-    states_searched.fetch_add(1, Relaxed);
-
+) -> (usize, usize) {
     // If any bounds are exceeded, halt this search branch.
     if bound_exceeded(
         mol,
@@ -395,12 +393,13 @@ fn recurse_index_search_parallel(
         largest_remove,
         bounds,
     ) {
-        return state_index;
+        return (state_index, 1);
     }
 
     // Keep track of the best assembly index found in any of this assembly
-    // state's children.
+    // state's children and the number of states searched, including this one.
     let best_child_index = AtomicUsize::from(state_index);
+    let states_searched = AtomicUsize::from(1);
 
     // For every pair of duplicatable subgraphs compatible with the current set
     // of fragments, recurse using the fragments obtained by removing this pair
@@ -408,7 +407,7 @@ fn recurse_index_search_parallel(
     matches.par_iter().enumerate().for_each(|(i, (h1, h2))| {
         if let Some(fractures) = fractures(mol, fragments, h1, h2) {
             // Recurse using the remaining matches and updated fragments.
-            let child_index = recurse_index_search_parallel(
+            let (child_index, child_states_searched) = recurse_index_search_parallel(
                 mol,
                 &matches[i + 1..],
                 &fractures,
@@ -416,17 +415,20 @@ fn recurse_index_search_parallel(
                 best_index.clone(),
                 h1.len(),
                 bounds,
-                states_searched.clone(),
             );
 
             // Update the best assembly indices (across children states and
             // the entire search).
             best_child_index.fetch_min(child_index, Relaxed);
             best_index.fetch_min(best_child_index.load(Relaxed), Relaxed);
+            states_searched.fetch_add(child_states_searched, Relaxed);
         }
     });
 
-    best_child_index.load(Relaxed)
+    (
+        best_child_index.load(Relaxed),
+        states_searched.load(Relaxed),
+    )
 }
 
 /// Computes a molecule's assembly index and related information using a top-
@@ -516,38 +518,29 @@ pub fn index_search(
 
     // Search for the shortest assembly pathway recursively.
     let (index, states_searched) = match parallel_mode {
-        ParallelMode::None => {
-            let (index, states_searched) = recurse_index_search_serial(
-                mol,
-                &matches,
-                &[init],
-                edge_count - 1,
-                edge_count - 1,
-                edge_count,
-                bounds,
-            );
-            (index as u32, states_searched)
-        }
+        ParallelMode::None => recurse_index_search_serial(
+            mol,
+            &matches,
+            &[init],
+            edge_count - 1,
+            edge_count - 1,
+            edge_count,
+            bounds,
+        ),
         ParallelMode::DepthOne => {
-            // TODO: Should states searched start at 0 or 1?
             let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
-            let states_searched = Arc::new(AtomicUsize::from(0));
-            let (index, states_searched) = recurse_index_search_depthone(
+            recurse_index_search_depthone(
                 mol,
                 &matches,
                 &[init],
                 edge_count - 1,
                 best_index,
                 bounds,
-                states_searched,
-            );
-            (index as u32, states_searched)
+            )
         }
         ParallelMode::Always => {
-            // TODO: Should states searched start at 0 or 1?
             let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
-            let states_searched = Arc::new(AtomicUsize::from(0));
-            let index = recurse_index_search_parallel(
+            recurse_index_search_parallel(
                 mol,
                 &matches,
                 &[init],
@@ -555,13 +548,11 @@ pub fn index_search(
                 best_index,
                 edge_count,
                 bounds,
-                states_searched.clone(),
-            );
-            (index as u32, states_searched.load(Relaxed))
+            )
         }
     };
 
-    (index, matches.len() as u32, states_searched)
+    (index as u32, matches.len() as u32, states_searched)
 }
 
 /// Computes a molecule's assembly index using an efficient default strategy.
