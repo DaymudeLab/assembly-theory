@@ -57,11 +57,8 @@ pub fn bound_exceeded(
                 ix - vec_small_frags_bound(fragments, largest_remove, mol) >= best
             }
             Bound::CliqueBudget => ix - clique_budget_bound(matches_graph, subgraph, fragments) >= best,
-            Bound::CoverNoSort => ix - cover_bound(matches_graph, subgraph, false),
-            Bound::CoverSort => ix - cover_bound(matches_graph, subgraph, true),
-            _ => {
-                panic!("One of the chosen bounds is not implemented yet!")
-            }
+            Bound::CoverNoSort => ix - cover_bound(matches_graph, subgraph, false) >= best,
+            Bound::CoverSort => ix - cover_bound(matches_graph, subgraph, true) >= best,
         };
         if exceeds {
             return true;
@@ -263,7 +260,7 @@ pub fn color_bound(graph: &CompatGraph, subgraph: &BitSet) -> usize{
             largest.push(0);
         }
         if graph.weight(v) > largest[max_idx] {
-            largest[max_idx] = graph.weights(v)
+            largest[max_idx] = graph.weight(v);
         }
 
         colors[v] = max_idx as i32;

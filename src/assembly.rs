@@ -28,7 +28,7 @@ use std::{
 
 use bit_set::BitSet;
 use clap::ValueEnum;
-use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
     bounds::{bound_exceeded, Bound},
@@ -270,7 +270,6 @@ fn recurse_index_search_serial(
 #[allow(clippy::too_many_arguments)]
 fn recurse_index_search_depthone(
     mol: &Molecule,
-    matches: &[(BitSet, BitSet)],
     fragments: &[BitSet],
     state_index: usize,
     best_index: Arc<AtomicUsize>,
@@ -284,15 +283,14 @@ fn recurse_index_search_depthone(
     // For every pair of duplicatable subgraphs compatible with the current set
     // of fragments, recurse using the fragments obtained by removing this pair
     // and adding one subgraph back.
-    subgraph.par_iter().for_each(|v| {
-        let (h1, h2) = matches_graph.matches(v);
+    subgraph.iter().collect::<Vec<usize>>().par_iter().for_each(|v| {
+        let (h1, h2) = matches_graph.matches(*v);
         if let Some(fractures) = fractures(mol, fragments, h1, h2) {
-            let subgraph_clone = matches_graph.forward_neighbors(v, &subgraph);
+            let subgraph_clone = matches_graph.forward_neighbors(*v, &subgraph);
 
             // Recurse using the remaining matches and updated fragments.
             let (child_index, child_states_searched) = recurse_index_search_depthone_helper(
                 mol,
-                &matches[i + 1..],
                 &fractures,
                 state_index - h1.len() + 1,
                 best_index.clone(),
@@ -329,7 +327,6 @@ fn recurse_index_search_depthone(
 #[allow(clippy::too_many_arguments)]
 fn recurse_index_search_depthone_helper(
     mol: &Molecule,
-    matches: &[(BitSet, BitSet)],
     fragments: &[BitSet],
     state_index: usize,
     best_index: Arc<AtomicUsize>,
@@ -369,11 +366,13 @@ fn recurse_index_search_depthone_helper(
     // of fragments, recurse using the fragments obtained by removing this pair
     // and adding one subgraph back.
     for v in subgraph.iter() {
+        let (h1, h2) = matches_graph.matches(v);
         if let Some(fractures) = fractures(mol, fragments, h1, h2) {
+            let subgraph_clone = matches_graph.forward_neighbors(v, &subgraph);
+
             // Recurse using the remaining matches and updated fragments.
             let (child_index, child_states_searched) = recurse_index_search_depthone_helper(
                 mol,
-                &matches[i + 1..],
                 &fractures,
                 state_index - h1.len() + 1,
                 best_index.clone(),
@@ -410,12 +409,13 @@ fn recurse_index_search_depthone_helper(
 #[allow(clippy::too_many_arguments)]
 fn recurse_index_search_parallel(
     mol: &Molecule,
-    matches: &[(BitSet, BitSet)],
     fragments: &[BitSet],
     state_index: usize,
     best_index: Arc<AtomicUsize>,
     largest_remove: usize,
     bounds: &[Bound],
+    matches_graph: &CompatGraph,
+    subgraph: BitSet,
 ) -> (usize, usize) {
     // If any bounds are exceeded, halt this search branch.
     if bound_exceeded(
@@ -425,6 +425,8 @@ fn recurse_index_search_parallel(
         best_index.load(Relaxed),
         largest_remove,
         bounds,
+        matches_graph,
+        &subgraph,
     ) {
         return (state_index, 1);
     }
@@ -437,17 +439,21 @@ fn recurse_index_search_parallel(
     // For every pair of duplicatable subgraphs compatible with the current set
     // of fragments, recurse using the fragments obtained by removing this pair
     // and adding one subgraph back.
-    matches.par_iter().enumerate().for_each(|(i, (h1, h2))| {
+    subgraph.iter().collect::<Vec<usize>>().par_iter().for_each(|v| {
+        let (h1, h2) = matches_graph.matches(*v);
         if let Some(fractures) = fractures(mol, fragments, h1, h2) {
+            let subgraph_clone = matches_graph.forward_neighbors(*v, &subgraph);
+
             // Recurse using the remaining matches and updated fragments.
             let (child_index, child_states_searched) = recurse_index_search_parallel(
                 mol,
-                &matches[i + 1..],
                 &fractures,
                 state_index - h1.len() + 1,
                 best_index.clone(),
                 h1.len(),
                 bounds,
+                matches_graph,
+                subgraph_clone,
             );
 
             // Update the best assembly indices (across children states and
@@ -573,7 +579,6 @@ pub fn index_search(
             let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
             recurse_index_search_depthone(
                 mol,
-                &matches,
                 &[init],
                 edge_count - 1,
                 best_index,
@@ -586,12 +591,13 @@ pub fn index_search(
             let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
             recurse_index_search_parallel(
                 mol,
-                &matches,
                 &[init],
                 edge_count - 1,
                 best_index,
                 edge_count,
                 bounds,
+                &matches_graph,
+                subgraph,
             )
         }
     };
