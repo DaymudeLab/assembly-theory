@@ -18,9 +18,9 @@ use crate::{
 pub enum EnumerateMode {
     /// Grow connected subgraphs from each edge using iterative extension.
     Extend,
-    /// Like Extend, but at each level, prune any subgraphs that do not have
-    /// isomorphic components since these will not be useful later.
-    ExtendPrune,
+    /// Like Extend, but only extends subgraphs that are isomoprhic to at least
+    /// one other subgraph.
+    ExtendIsomorphic,
     /// From a subgraph, choose an edge from its boundary and recursively grow
     /// it by adding this edge or erode its remainder by discarding the edge.
     GrowErode,
@@ -32,7 +32,7 @@ pub enum EnumerateMode {
 /// molecular graph `mol` using the algorithm specified by `mode`.
 pub fn enumerate_subgraphs(mol: &Molecule, mode: EnumerateMode) -> impl Iterator<Item = BitSet> {
     match mode {
-        EnumerateMode::Extend => extend_iterative(mol).into_iter(),
+        EnumerateMode::Extend => extend(mol).into_iter(),
         EnumerateMode::GrowErode => grow_erode(mol).into_iter(),
         _ => {
             panic!("The chosen --enumerate mode is not implemented yet!");
@@ -42,7 +42,7 @@ pub fn enumerate_subgraphs(mol: &Molecule, mode: EnumerateMode) -> impl Iterator
 
 /// Enumerate connected, non-induced subgraphs with at most |E|/2 edges using
 /// a process of iterative extension starting from each individual edge.
-fn extend_iterative(mol: &Molecule) -> HashSet<BitSet> {
+fn extend(mol: &Molecule) -> HashSet<BitSet> {
     // Maintain a vector of sets of subgraphs at each level of the process,
     // starting with all edges individually at the first level.
     let mut subgraphs: Vec<HashSet<BitSet>> =
@@ -57,8 +57,8 @@ fn extend_iterative(mol: &Molecule) -> HashSet<BitSet> {
     for level in 0..(mol.graph().edge_count() / 2) {
         let mut extended_subgraphs = HashSet::new();
         for subgraph in &subgraphs[level] {
-            // Find all "frontier" edges incident to this subgraph (this
-            // contains both this subgraph's edges and its edge boundary).
+            // Find all "frontier" edges incident to this subgraph (contains
+            // both this subgraph's edges and its edge boundary).
             let frontier = BitSet::from_iter(subgraph
                 .iter()
                 .map(|i| edge_neighbors(&mol.graph(), EdgeIndex::new(i)).map(|ix| ix.index()))
@@ -79,6 +79,79 @@ fn extend_iterative(mol: &Molecule) -> HashSet<BitSet> {
 
     // Return an iterator over subgraphs, skipping singleton edges.
     subgraphs.into_iter().skip(1).flatten().collect::<HashSet<_>>()
+}
+
+/// Enumerate connected, non-induced subgraphs with at most |E|/2 edges which
+/// are isomorphic to at least one other subgraph (i.e., the subgraphs that
+/// have a chance of being in a non-overlapping, isomorphic subgraph pair later
+/// on). Uses a similar iterative extension process to extend_iterative, but at
+/// each level, removes any subgraphs in singleton isomorphism classes. 
+fn extend_isomorphic(mol: &Molecule) -> impl Iterator<Item = (BitSet, BitSet)> {
+    let mut solutions: HashMap<BitSet, BitSet> =
+        HashMap::from_iter(mol.graph().edge_indices().map(|ix| {
+            let mut set = BitSet::new();
+            set.insert(ix.index());
+            let neighborhood =
+                BitSet::from_iter(edge_neighbors(&mol.graph(), ix).map(|e| e.index()));
+            (set, neighborhood)
+        }));
+
+    let mut matches = Vec::new();
+
+    for _ in 0..(mol.graph().edge_count() / 2) {
+        let mut next_set = HashMap::new();
+        for (subgraph, neighborhood) in solutions {
+            for neighbor in neighborhood.difference(&subgraph) {
+                if subgraph.contains(neighbor) {
+                    continue;
+                }
+
+                let mut next = subgraph.clone();
+                next.insert(neighbor);
+
+                if next_set.contains_key(&next) {
+                    continue;
+                }
+
+                let mut next_neighborhood = neighborhood.clone();
+                next_neighborhood.extend(
+                    edge_neighbors(&mol.graph(), EdgeIndex::new(neighbor)).map(|e| e.index()),
+                );
+
+                next_set.insert(next, next_neighborhood);
+            }
+        }
+
+        let mut local_isomorphic_map = HashMap::<CanonLabeling<AtomOrBond>, Vec<BitSet>>::new();
+        for (subgraph, _) in &next_set {
+            let cgraph = subgraph_to_cgraph(mol, &subgraph);
+            let repr = CanonLabeling::new(&cgraph);
+
+            local_isomorphic_map
+                .entry(repr)
+                .and_modify(|bucket| bucket.push(subgraph.clone()))
+                .or_insert(vec![subgraph.clone()]);
+        }
+
+        for (_, sets) in &local_isomorphic_map {
+            if sets.len() == 1 {
+                next_set.remove(&sets[0]);
+            }
+        }
+
+        solutions = next_set;
+        for bucket in local_isomorphic_map.values().filter(|v| v.len() > 1) {
+            for (i, first) in bucket.iter().enumerate() {
+                for second in &bucket[i..] {
+                    if first.is_disjoint(second) {
+                        matches.push((first.clone(), second.clone()));
+                    }
+                }
+            }
+        }
+    }
+
+    matches.into_iter()
 }
 
 /// Enumerate connected, non-induced subgraphs with at most |E|/2 edges; at
@@ -185,74 +258,3 @@ fn grow_erode_iterative(mol: &Molecule) -> impl Iterator<Item = BitSet> {
     }
     solutions.into_iter()
 }
-
-// TODO: matches_by_iterative_expansion and naive_matches_by_iterative_expansion are big, ugly
-// functions that need to be split up and cleaned.
-pub fn matches_by_iterative_expansion(mol: &Molecule) -> impl Iterator<Item = (BitSet, BitSet)> {
-    let mut solutions: HashMap<BitSet, BitSet> =
-        HashMap::from_iter(mol.graph().edge_indices().map(|ix| {
-            let mut set = BitSet::new();
-            set.insert(ix.index());
-            let neighborhood =
-                BitSet::from_iter(edge_neighbors(&mol.graph(), ix).map(|e| e.index()));
-            (set, neighborhood)
-        }));
-
-    let mut matches = Vec::new();
-
-    for _ in 0..(mol.graph().edge_count() / 2) {
-        let mut next_set = HashMap::new();
-        for (subgraph, neighborhood) in solutions {
-            for neighbor in neighborhood.difference(&subgraph) {
-                if subgraph.contains(neighbor) {
-                    continue;
-                }
-
-                let mut next = subgraph.clone();
-                next.insert(neighbor);
-
-                if next_set.contains_key(&next) {
-                    continue;
-                }
-
-                let mut next_neighborhood = neighborhood.clone();
-                next_neighborhood.extend(
-                    edge_neighbors(&mol.graph(), EdgeIndex::new(neighbor)).map(|e| e.index()),
-                );
-
-                next_set.insert(next, next_neighborhood);
-            }
-        }
-
-        let mut local_isomorphic_map = HashMap::<CanonLabeling<AtomOrBond>, Vec<BitSet>>::new();
-        for (subgraph, _) in &next_set {
-            let cgraph = subgraph_to_cgraph(mol, &subgraph);
-            let repr = CanonLabeling::new(&cgraph);
-
-            local_isomorphic_map
-                .entry(repr)
-                .and_modify(|bucket| bucket.push(subgraph.clone()))
-                .or_insert(vec![subgraph.clone()]);
-        }
-
-        for (_, sets) in &local_isomorphic_map {
-            if sets.len() == 1 {
-                next_set.remove(&sets[0]);
-            }
-        }
-
-        solutions = next_set;
-        for bucket in local_isomorphic_map.values().filter(|v| v.len() > 1) {
-            for (i, first) in bucket.iter().enumerate() {
-                for second in &bucket[i..] {
-                    if first.is_disjoint(second) {
-                        matches.push((first.clone(), second.clone()));
-                    }
-                }
-            }
-        }
-    }
-
-    matches.into_iter()
-}
-
