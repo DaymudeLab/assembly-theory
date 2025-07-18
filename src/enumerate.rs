@@ -1,4 +1,9 @@
 //! Enumerate connected, non-induced subgraphs of a molecular graph.
+//!
+//! Specifically, for a molecule with |E| edges, enumerate all connected,
+//! non-induced subgraphs with at most |E|/2 edges. Any larger subgraphs
+//! cannot be "duplicatable" (i.e., in a pair of non-overlapping, isomorphic
+//! subgraphs), so we don't need them.
 
 use std::collections::{HashMap, HashSet};
 
@@ -34,6 +39,7 @@ pub fn enumerate_subgraphs(mol: &Molecule, mode: EnumerateMode) -> impl Iterator
     match mode {
         EnumerateMode::Extend => extend(mol).into_iter(),
         EnumerateMode::GrowErode => grow_erode(mol).into_iter(),
+        EnumerateMode::GrowErodeIterative => grow_erode_iterative(mol).into_iter(),
         _ => {
             panic!("The chosen --enumerate mode is not implemented yet!");
         }
@@ -160,36 +166,35 @@ fn extend_isomorphic(mol: &Molecule) -> impl Iterator<Item = (BitSet, BitSet)> {
 /// - https://stackoverflow.com/a/15722579
 /// - https://stackoverflow.com/a/15658245
 fn grow_erode(mol: &Molecule) -> HashSet<BitSet> {
-    // Initialize the current subset of edges and its union with its edge
-    // boundary (in this algorithm, "subsetplus") as empty.
-    let subset = BitSet::new();
-    let subsetplus = BitSet::new();
-
-    // The remainder is all edges not in the current subset; initially, this is
-    // everything.
+    // Initialize the current subgraph and its "frontier" (i.e., the union of
+    // its edges and its edge boundary) as well as the "remainder", which is
+    // all edges not in the current subgraph.
+    let subgraph = BitSet::new();
+    let frontier = BitSet::new();
     let remainder = BitSet::from_iter(mol.graph().edge_indices().map(|ix| ix.index()));
 
     // Set up a set of subgraphs enumerated so far.
     let mut subgraphs = HashSet::new();
 
     // Recurse, and ultimately return the final set of enumerated subgraphs.
-    recurse_grow_erode(mol, subset, subsetplus, remainder, &mut subgraphs);
+    recurse_grow_erode(mol, subgraph, frontier, remainder, &mut subgraphs);
     subgraphs
 }
 
+/// Recursive helper for grow_erode.
 fn recurse_grow_erode(
     mol: &Molecule,
-    mut subset: BitSet,
-    mut subsetplus: BitSet,
+    mut subgraph: BitSet,
+    mut frontier: BitSet,
     mut remainder: BitSet,
     subgraphs: &mut HashSet<BitSet>,
 ) {
-    // Get the next edge from the current subset's boundary or, if the subset
+    // Get the next edge from the subgraph's edge boundary or, if the subgraph
     // is empty, from the remainder.
-    let candidate = if subset.is_empty() {
+    let candidate = if subgraph.is_empty() {
         remainder.iter().next()
     } else {
-        remainder.intersection(&subsetplus).next()
+        remainder.intersection(&frontier).next()
     };
 
     if let Some(e) = candidate {
@@ -197,64 +202,76 @@ fn recurse_grow_erode(
         remainder.remove(e);
         recurse_grow_erode(
             mol,
-            subset.clone(),
-            subsetplus.clone(),
+            subgraph.clone(),
+            frontier.clone(),
             remainder.clone(),
             subgraphs,
         );
 
-        // The other recursive branch will add the candidate edge to the
-        // current subset and update the boundary accordingly. However, since
-        // we ultimately only care about connected, non-induced subgraphs that
-        // may be part of a non-overlapping isomorphic pair, we need not
-        // recurse if adding the edge exceeds |E|/2 edges.
-        if subset.len() < mol.graph().edge_count() / 2 {
-            // Add the candidate edge to the current subset.
-            subset.insert(e);
+        // The other recursive branch adds the candidate edge to the subgraph
+        // and updates the boundary accordingly unless doing so would make the
+        // subgraph too large to be part of a non-overlapping isomorphic pair.
+        if subgraph.len() < mol.graph().edge_count() / 2 {
+            // Add the candidate edge to the subgraph.
+            subgraph.insert(e);
 
-            // Grow the boundary to include edges incident to the candidate.
-            subsetplus.extend(edge_neighbors(&mol.graph(), EdgeIndex::new(e)).map(|ix| ix.index()));
+            // Grow the frontier to include edges incident to the candidate.
+            frontier.extend(edge_neighbors(&mol.graph(), EdgeIndex::new(e)).map(|ix| ix.index()));
 
             // Recurse.
-            recurse_grow_erode(mol, subset, subsetplus, remainder, subgraphs);
+            recurse_grow_erode(mol, subgraph, frontier, remainder, subgraphs);
         }
-    } else if subset.len() > 1 {
-        // When all candidate edges have been exhausted, add this subset as a
-        // new subgraph if it is more than just a singleton edge (basic unit).
-        subgraphs.insert(subset);
+    } else if subgraph.len() > 1 {
+        // When all candidate edges are exhausted, collect this subgraph unless
+        // it is just a singleton edge (basic unit).
+        subgraphs.insert(subgraph);
     }
 }
 
-// Iterative version of grow_erode_recurse
-fn grow_erode_iterative(mol: &Molecule) -> impl Iterator<Item = BitSet> {
+/// Like grow_erode, but runs iteratively instead of recursively.
+fn grow_erode_iterative(mol: &Molecule) -> HashSet<BitSet> {
+    // Initialize the current subgraph and its "frontier" (i.e., the union of
+    // its edges and its edge boundary) as well as the "remainder", which is
+    // all edges not in the current subgraph.
+    let subgraph = BitSet::new();
+    let frontier = BitSet::new();
     let remainder = BitSet::from_iter(mol.graph().edge_indices().map(|ix| ix.index()));
-    let subset = BitSet::new();
-    let neighbors = BitSet::new();
-    let mut stack = vec![(subset, neighbors, remainder)];
 
-    let mut solutions = HashSet::new();
+    // Set up a set of subgraphs enumerated so far.
+    let mut subgraphs = HashSet::new();
 
-    while let Some((mut subset, mut neighbors, mut remainder)) = stack.pop() {
-        let candidate = if subset.is_empty() {
+    // Do the usual trick of transforming recursive algorithms into iterative
+    // ones by maintaining a stack of instances.
+    let mut stack = vec![(subgraph, frontier, remainder)];
+    while let Some((mut subgraph, mut frontier, mut remainder)) = stack.pop() {
+        // Get the next edge from the subgraph's edge boundary or, if the
+        // subgraph is empty, from the remainder.
+        let candidate = if subgraph.is_empty() {
             remainder.iter().next()
         } else {
-            remainder.intersection(&neighbors).next()
+            remainder.intersection(&frontier).next()
         };
 
         if let Some(e) = candidate {
+            // Make a new instance by discarding the candidate edge entirely.
             remainder.remove(e);
-            stack.push((subset.clone(), neighbors.clone(), remainder.clone()));
+            stack.push((subgraph.clone(), frontier.clone(), remainder.clone()));
 
-            subset.insert(e);
-            if solutions.contains(&subset) || subset.len() > mol.graph().edge_count() / 2 {
-                continue;
+            // Otherwise, add the candidate edge to the subgraph. If this
+            // subgraph hasn't been enumerated yet and is not too large to be
+            // part of a non-overlapping isomorphic pair, grow the frontier to
+            // include edges incident to the candidate and make a new instance.
+            subgraph.insert(e);
+            if !subgraphs.contains(&subgraph) && subgraph.len() <= mol.graph().edge_count() / 2 {
+                frontier.extend(edge_neighbors(mol.graph(), EdgeIndex::new(e)).map(|ix| ix.index()));
+                stack.push((subgraph, frontier, remainder));
             }
-
-            neighbors.extend(edge_neighbors(mol.graph(), EdgeIndex::new(e)).map(|ix| ix.index()));
-            stack.push((subset, neighbors, remainder));
-        } else if subset.len() > 1 {
-            solutions.insert(subset);
+        } else if subgraph.len() > 1 {
+            // When all candidate edges are exhausted, collect this subgraph
+            // unless it is just a singleton edge (basic unit).
+            subgraphs.insert(subgraph);
         }
     }
-    solutions.into_iter()
+
+    subgraphs
 }
