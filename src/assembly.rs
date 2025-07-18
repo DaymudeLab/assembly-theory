@@ -50,8 +50,6 @@ pub enum ParallelMode {
     Always,
 }
 
-static PARALLEL_MATCH_SIZE_THRESHOLD: usize = 100;
-
 /// Computes assembly depth; see
 /// [Pagel et al. (2024)](https://arxiv.org/abs/2409.05993).
 pub fn assembly_depth(mol: &Molecule) -> u32 {
@@ -75,7 +73,7 @@ pub fn assembly_depth(mol: &Molecule) -> u32 {
 }
 
 /// Return an iterator over all pairs of non-overlapping, isomorphic subgraphs
-/// in the given molecule.
+/// in the given molecule, sorted to guarantee deterministic iteration.
 fn matches(
     mol: &Molecule,
     enumerate_mode: EnumerateMode,
@@ -91,18 +89,87 @@ fn matches(
             .or_insert(vec![subgraph.clone()]);
     }
 
-    // In each isomorphism class, enumerate non-overlapping pairs of subgraphs.
+    // In each isomorphism class, collect non-overlapping pairs of subgraphs.
     let mut matches = Vec::new();
     for bucket in isomorphic_map.values() {
         for (i, first) in bucket.iter().enumerate() {
             for second in &bucket[i..] {
                 if first.is_disjoint(second) {
-                    matches.push((first.clone(), second.clone()));
+                    if first > second {
+                        matches.push((first.clone(), second.clone()));
+                    } else {
+                        matches.push((second.clone(), first.clone()));
+                    }
                 }
             }
         }
     }
+
+    // Sort pairs in a deterministic order and return.
+    matches.sort_by(|e1, e2| {
+        let ord = [
+            e2.0.len().cmp(&e1.0.len()), // Decreasing subgraph size.
+            e1.0.cmp(&e2.0),             // First subgraph lexicographical.
+            e1.1.cmp(&e2.1),             // Second subgraph lexicographical.
+        ];
+        let mut i = 0;
+        while ord[i] == std::cmp::Ordering::Equal {
+            i += 1;
+        }
+        ord[i]
+    });
     matches.into_iter()
+}
+
+/// Determine the fragments produced by removing the given pair of duplicatable
+/// subgraphs and then adding one back; return None if not possible.
+fn fractures(
+    mol: &Molecule,
+    fragments: &[BitSet],
+    h1: &BitSet,
+    h2: &BitSet,
+) -> Option<Vec<BitSet>> {
+    // Attempt to find fragments f1 and f2 containing h1 and h2, respectively;
+    // if either do not exist, exit without further fragmentation.
+    let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
+    let f2 = fragments.iter().enumerate().find(|(_, c)| h2.is_subset(c));
+    let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) else {
+        return None;
+    };
+
+    let mut fractures = fragments.to_owned();
+
+    // If the same fragment f1 (== f2) contains both h1 and h2, replace this
+    // one fragment f1 with all connected components comprising f1 - (h1 U h2).
+    // Otherwise, replace fragments f1 and f2 with all connected components
+    // comprising f1 - h1 and f2 - h2, respectively.
+    if i1 == i2 {
+        let mut union = h1.clone();
+        union.union_with(h2);
+        let mut difference = f1.clone();
+        difference.difference_with(&union);
+        let c = connected_components_under_edges(mol.graph(), &difference);
+        fractures.extend(c);
+        fractures.swap_remove(i1);
+    } else {
+        let mut diff1 = f1.clone();
+        diff1.difference_with(h1);
+        let c1 = connected_components_under_edges(mol.graph(), &diff1);
+        fractures.extend(c1);
+
+        let mut diff2 = f2.clone();
+        diff2.difference_with(h2);
+        let c2 = connected_components_under_edges(mol.graph(), &diff2);
+        fractures.extend(c2);
+
+        fractures.swap_remove(i1.max(i2));
+        fractures.swap_remove(i1.min(i2));
+    }
+
+    // Drop any singleton fragments, add h1 as a fragment, and return.
+    fractures.retain(|i| i.len() > 1);
+    fractures.push(h1.clone());
+    Some(fractures)
 }
 
 /// Recursive helper for the serial version of index_search.
@@ -113,9 +180,13 @@ fn matches(
 /// - `fragments`: TODO
 /// - `state_index`: The assembly index of this assembly state.
 /// - `best_index`: The smallest assembly index for all assembly states so far.
-/// - `largest_remove`: The size of the largest match removed so far.
+/// - `largest_remove`: An upper bound on the size of fragments that can be
+///   removed from this or any descendant state.
 /// - `bounds`: The list of bounding strategies to apply.
-/// - `states_searched`: The number of assembly states searched so far.
+///
+/// Returns, from this assembly state and any of its descendents:
+/// - `usize`: The best assembly index found.
+/// - `usize`: The number of assembly states searched.
 #[allow(clippy::too_many_arguments)]
 fn recurse_index_search_serial(
     mol: &Molecule,
@@ -125,16 +196,8 @@ fn recurse_index_search_serial(
     mut best_index: usize,
     largest_remove: usize,
     bounds: &[Bound],
-    states_searched: &mut usize,
-) -> usize {
-    // Keep track of the best assembly index found in any of this assembly
-    // state's children.
-    let mut best_child_index = state_index;
-
-    // Count this assembly state as searched.
-    *states_searched += 1;
-
-    // Check if any bounds apply; if so, halt this search branch.
+) -> (usize, usize) {
+    // If any bounds are exceeded, halt this search branch.
     if bound_exceeded(
         mol,
         fragments,
@@ -143,63 +206,158 @@ fn recurse_index_search_serial(
         largest_remove,
         bounds,
     ) {
-        return state_index;
+        return (state_index, 1);
     }
 
-    // Search for duplicatable fragment
+    // Keep track of the best assembly index found in any of this assembly
+    // state's children and the number of states searched, including this one.
+    let mut best_child_index = state_index;
+    let mut states_searched = 1;
+
+    // For every pair of duplicatable subgraphs compatible with the current set
+    // of fragments, recurse using the fragments obtained by removing this pair
+    // and adding one subgraph back.
     for (i, (h1, h2)) in matches.iter().enumerate() {
-        let mut fractures = fragments.to_owned();
-        let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
-        let f2 = fragments.iter().enumerate().find(|(_, c)| h2.is_subset(c));
+        if let Some(fractures) = fractures(mol, fragments, h1, h2) {
+            // Recurse using the remaining matches and updated fragments.
+            let (child_index, child_states_searched) = recurse_index_search_serial(
+                mol,
+                &matches[i + 1..],
+                &fractures,
+                state_index - h1.len() + 1,
+                best_index,
+                h1.len(),
+                bounds,
+            );
 
-        let largest_remove = h1.len();
-
-        let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) else {
-            continue;
-        };
-
-        // All of these clones are on bitsets and cheap enough
-        if i1 == i2 {
-            let mut union = h1.clone();
-            union.union_with(h2);
-            let mut difference = f1.clone();
-            difference.difference_with(&union);
-            let c = connected_components_under_edges(mol.graph(), &difference);
-            fractures.extend(c);
-            fractures.swap_remove(i1);
-        } else {
-            let mut f1r = f1.clone();
-            f1r.difference_with(h1);
-            let mut f2r = f2.clone();
-            f2r.difference_with(h2);
-
-            let c1 = connected_components_under_edges(mol.graph(), &f1r);
-            let c2 = connected_components_under_edges(mol.graph(), &f2r);
-
-            fractures.extend(c1);
-            fractures.extend(c2);
-
-            fractures.swap_remove(i1.max(i2));
-            fractures.swap_remove(i1.min(i2));
+            // Update the best assembly indices (across children states and
+            // the entire search) and the number of descendant states searched.
+            best_child_index = best_child_index.min(child_index);
+            best_index = best_index.min(best_child_index);
+            states_searched += child_states_searched;
         }
-
-        fractures.retain(|i| i.len() > 1);
-        fractures.push(h1.clone());
-
-        best_child_index = best_child_index.min(recurse_index_search_serial(
-            mol,
-            &matches[i + 1..],
-            &fractures,
-            state_index - h1.len() + 1,
-            best_index,
-            largest_remove,
-            bounds,
-            states_searched,
-        ));
-        best_index = best_index.min(best_child_index);
     }
 
-    best_child_index
+    (best_child_index, states_searched)
+}
+
+/// Recursive helper for the depth-one parallel version of index_search.
+///
+/// Inputs:
+/// - `mol`: The molecule whose assembly index is being calculated.
+/// - `matches`: The remaining non-overlapping isomorphic subgraph pairs.
+/// - `fragments`: TODO
+/// - `state_index`: The assembly index of this assembly state.
+/// - `bounds`: The list of bounding strategies to apply.
+///
+/// Returns, from this assembly state and any of its descendents:
+/// - `usize`: The best assembly index found.
+/// - `usize`: The number of assembly states searched.
+#[allow(clippy::too_many_arguments)]
+fn recurse_index_search_depthone(
+    mol: &Molecule,
+    matches: &[(BitSet, BitSet)],
+    fragments: &[BitSet],
+    state_index: usize,
+    best_index: Arc<AtomicUsize>,
+    bounds: &[Bound],
+) -> (usize, usize) {
+    // Keep track of the number of states searched, including this one.
+    let states_searched = Arc::new(AtomicUsize::from(1));
+
+    // For every pair of duplicatable subgraphs compatible with the current set
+    // of fragments, recurse using the fragments obtained by removing this pair
+    // and adding one subgraph back.
+    matches.par_iter().enumerate().for_each(|(i, (h1, h2))| {
+        if let Some(fractures) = fractures(mol, fragments, h1, h2) {
+            // Recurse using the remaining matches and updated fragments.
+            let (child_index, child_states_searched) = recurse_index_search_depthone_helper(
+                mol,
+                &matches[i + 1..],
+                &fractures,
+                state_index - h1.len() + 1,
+                best_index.clone(),
+                h1.len(),
+                bounds,
+            );
+
+            // Update the best assembly indices (across children states and
+            // the entire search) and the number of descendant states searched.
+            best_index.fetch_min(child_index, Relaxed);
+            states_searched.fetch_add(child_states_searched, Relaxed);
+        }
+    });
+
+    (best_index.load(Relaxed), states_searched.load(Relaxed))
+}
+
+/// Recursive helper for the depth-one parallel version of index_search.
+///
+/// Inputs:
+/// - `mol`: The molecule whose assembly index is being calculated.
+/// - `matches`: The remaining non-overlapping isomorphic subgraph pairs.
+/// - `fragments`: TODO
+/// - `state_index`: The assembly index of this assembly state.
+/// - `best_index`: The smallest assembly index for all assembly states so far.
+/// - `largest_remove`: An upper bound on the size of fragments that can be
+///   removed from this or any descendant state.
+/// - `bounds`: The list of bounding strategies to apply.
+///
+/// Returns, from this assembly state and any of its descendents:
+/// - `usize`: The best assembly index found.
+/// - `usize`: The number of assembly states searched.
+#[allow(clippy::too_many_arguments)]
+fn recurse_index_search_depthone_helper(
+    mol: &Molecule,
+    matches: &[(BitSet, BitSet)],
+    fragments: &[BitSet],
+    state_index: usize,
+    best_index: Arc<AtomicUsize>,
+    largest_remove: usize,
+    bounds: &[Bound],
+) -> (usize, usize) {
+    // If any bounds are exceeded, halt this search branch.
+    if bound_exceeded(
+        mol,
+        fragments,
+        state_index,
+        best_index.load(Relaxed),
+        largest_remove,
+        bounds,
+    ) {
+        return (state_index, 1);
+    }
+
+    // Keep track of the best assembly index found in any of this assembly
+    // state's children and the number of states searched, including this one.
+    let mut best_child_index = state_index;
+    let mut states_searched = 1;
+
+    // For every pair of duplicatable subgraphs compatible with the current set
+    // of fragments, recurse using the fragments obtained by removing this pair
+    // and adding one subgraph back.
+    for (i, (h1, h2)) in matches.iter().enumerate() {
+        if let Some(fractures) = fractures(mol, fragments, h1, h2) {
+            // Recurse using the remaining matches and updated fragments.
+            let (child_index, child_states_searched) = recurse_index_search_depthone_helper(
+                mol,
+                &matches[i + 1..],
+                &fractures,
+                state_index - h1.len() + 1,
+                best_index.clone(),
+                h1.len(),
+                bounds,
+            );
+
+            // Update the best assembly indices (across children states and
+            // the entire search) and the number of descendant states searched.
+            best_child_index = best_child_index.min(child_index);
+            best_index.fetch_min(best_child_index, Relaxed);
+            states_searched += child_states_searched;
+        }
+    }
+
+    (best_child_index, states_searched)
 }
 
 /// Recursive helper for the parallel version of index_search.
@@ -210,28 +368,23 @@ fn recurse_index_search_serial(
 /// - `fragments`: TODO
 /// - `state_index`: The assembly index of this assembly state.
 /// - `best_index`: The smallest assembly index for all assembly states so far.
-/// - `largest_remove`: The size of the largest match removed so far.
+/// - `largest_remove`: An upper bound on the size of fragments that can be
+///   removed from this or any descendant state.
 /// - `bounds`: The list of bounding strategies to apply.
-/// - `states_searched`: The number of assembly states searched so far.
+///
+/// Returns, from this assembly state and any of its descendents:
+/// - `usize`: The best assembly index found.
 #[allow(clippy::too_many_arguments)]
 fn recurse_index_search_parallel(
     mol: &Molecule,
     matches: &[(BitSet, BitSet)],
     fragments: &[BitSet],
     state_index: usize,
-    best_index: AtomicUsize,
+    best_index: Arc<AtomicUsize>,
     largest_remove: usize,
     bounds: &[Bound],
-    states_searched: Arc<AtomicUsize>,
-) -> usize {
-    // Keep track of the best assembly index found in any of this assembly
-    // state's children.
-    let best_child_index = AtomicUsize::from(state_index);
-
-    // Count this assembly state as searched.
-    states_searched.fetch_add(1, Relaxed);
-
-    // Check if any bounds apply; if so, halt this search branch.
+) -> (usize, usize) {
+    // If any bounds are exceeded, halt this search branch.
     if bound_exceeded(
         mol,
         fragments,
@@ -240,65 +393,42 @@ fn recurse_index_search_parallel(
         largest_remove,
         bounds,
     ) {
-        return state_index;
+        return (state_index, 1);
     }
 
-    // Search for duplicatable fragment
+    // Keep track of the best assembly index found in any of this assembly
+    // state's children and the number of states searched, including this one.
+    let best_child_index = AtomicUsize::from(state_index);
+    let states_searched = AtomicUsize::from(1);
+
+    // For every pair of duplicatable subgraphs compatible with the current set
+    // of fragments, recurse using the fragments obtained by removing this pair
+    // and adding one subgraph back.
     matches.par_iter().enumerate().for_each(|(i, (h1, h2))| {
-        let mut fractures = fragments.to_owned();
-        let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
-        let f2 = fragments.iter().enumerate().find(|(_, c)| h2.is_subset(c));
+        if let Some(fractures) = fractures(mol, fragments, h1, h2) {
+            // Recurse using the remaining matches and updated fragments.
+            let (child_index, child_states_searched) = recurse_index_search_parallel(
+                mol,
+                &matches[i + 1..],
+                &fractures,
+                state_index - h1.len() + 1,
+                best_index.clone(),
+                h1.len(),
+                bounds,
+            );
 
-        let largest_remove = h1.len();
-
-        let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) else {
-            return;
-        };
-
-        // All of these clones are on bitsets and cheap enough
-        if i1 == i2 {
-            let mut union = h1.clone();
-            union.union_with(h2);
-            let mut difference = f1.clone();
-            difference.difference_with(&union);
-            let c = connected_components_under_edges(mol.graph(), &difference);
-            fractures.extend(c);
-            fractures.swap_remove(i1);
-        } else {
-            let mut f1r = f1.clone();
-            f1r.difference_with(h1);
-            let mut f2r = f2.clone();
-            f2r.difference_with(h2);
-
-            let c1 = connected_components_under_edges(mol.graph(), &f1r);
-            let c2 = connected_components_under_edges(mol.graph(), &f2r);
-
-            fractures.extend(c1);
-            fractures.extend(c2);
-
-            fractures.swap_remove(i1.max(i2));
-            fractures.swap_remove(i1.min(i2));
+            // Update the best assembly indices (across children states and
+            // the entire search).
+            best_child_index.fetch_min(child_index, Relaxed);
+            best_index.fetch_min(best_child_index.load(Relaxed), Relaxed);
+            states_searched.fetch_add(child_states_searched, Relaxed);
         }
-
-        fractures.retain(|i| i.len() > 1);
-        fractures.push(h1.clone());
-
-        let output = recurse_index_search_parallel(
-            mol,
-            &matches[i + 1..],
-            &fractures,
-            state_index - h1.len() + 1,
-            best_index.load(Relaxed).into(),
-            largest_remove,
-            bounds,
-            states_searched.clone(),
-        );
-        best_child_index.fetch_min(output, Relaxed);
-
-        best_index.fetch_min(best_child_index.load(Relaxed), Relaxed);
     });
 
-    best_child_index.load(Relaxed)
+    (
+        best_child_index.load(Relaxed),
+        states_searched.load(Relaxed),
+    )
 }
 
 /// Computes a molecule's assembly index and related information using a top-
@@ -350,7 +480,7 @@ fn recurse_index_search_parallel(
 ///     &anthracene,
 ///     EnumerateMode::GrowErode,
 ///     CanonizeMode::Nauty,
-///     ParallelMode::Always,
+///     ParallelMode::DepthOne,
 ///     KernelMode::None,
 ///     &[Bound::Log, Bound::Int],
 ///     false);
@@ -370,9 +500,6 @@ pub fn index_search(
     memoize: bool,
 ) -> (u32, u32, usize) {
     // Catch not-yet-implemented modes.
-    if parallel_mode == ParallelMode::DepthOne {
-        panic!("The chosen --parallel mode is not implemented yet!")
-    }
     if kernel_mode != KernelMode::None {
         panic!("The chosen --kernel mode is not implemented yet!")
     }
@@ -380,50 +507,52 @@ pub fn index_search(
         panic!("--memoize is not implemented yet!")
     }
 
-    // Enumerate and sort array of non-overlapping, isomorphic subgraph pairs.
-    let mut matches = matches(mol, enumerate_mode, canonize_mode).collect::<Vec<_>>();
-    matches.sort_by(|e1, e2| e2.0.len().cmp(&e1.0.len()));
+    // Enumerate non-overlapping isomorphic subgraph pairs.
+    let matches = matches(mol, enumerate_mode, canonize_mode).collect::<Vec<_>>();
 
-    // Initialize fragments as all individual edges.
+    // Initialize the first fragment as the entire graph.
     let mut init = BitSet::new();
     init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
 
     let edge_count = mol.graph().edge_count();
 
-    // Use parallelism if specified by the parallel_mode and if the molecule's
-    // number of non-overlapping, isomorphic subgraph pairs is large enough;
-    // otherwise, run serially.
-    let (index, states_searched) =
-        if matches.len() > PARALLEL_MATCH_SIZE_THRESHOLD && parallel_mode == ParallelMode::Always {
-            let states_searched = Arc::new(AtomicUsize::from(0));
-            let index = recurse_index_search_parallel(
+    // Search for the shortest assembly pathway recursively.
+    let (index, states_searched) = match parallel_mode {
+        ParallelMode::None => recurse_index_search_serial(
+            mol,
+            &matches,
+            &[init],
+            edge_count - 1,
+            edge_count - 1,
+            edge_count,
+            bounds,
+        ),
+        ParallelMode::DepthOne => {
+            let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
+            recurse_index_search_depthone(
                 mol,
                 &matches,
                 &[init],
                 edge_count - 1,
-                (edge_count - 1).into(),
-                edge_count,
+                best_index,
                 bounds,
-                states_searched.clone(),
-            );
-            let states_searched = states_searched.load(Relaxed);
-            (index as u32, states_searched)
-        } else {
-            let mut states_searched = 0;
-            let index = recurse_index_search_serial(
+            )
+        }
+        ParallelMode::Always => {
+            let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
+            recurse_index_search_parallel(
                 mol,
                 &matches,
                 &[init],
                 edge_count - 1,
-                edge_count - 1,
+                best_index,
                 edge_count,
                 bounds,
-                &mut states_searched,
-            );
-            (index as u32, states_searched)
-        };
+            )
+        }
+    };
 
-    (index, matches.len() as u32, states_searched)
+    (index as u32, matches.len() as u32, states_searched)
 }
 
 /// Computes a molecule's assembly index using an efficient default strategy.
@@ -450,7 +579,7 @@ pub fn index(mol: &Molecule) -> u32 {
         mol,
         EnumerateMode::GrowErode,
         CanonizeMode::Nauty,
-        ParallelMode::Always,
+        ParallelMode::DepthOne,
         KernelMode::None,
         &[Bound::Int, Bound::VecSimple, Bound::VecSmallFrags],
         false,

@@ -40,7 +40,7 @@ struct Cli {
     canonize: CanonizeMode,
 
     /// Parallelization strategy for the search phase.
-    #[arg(long, value_enum, default_value_t = ParallelMode::Always)]
+    #[arg(long, value_enum, default_value_t = ParallelMode::DepthOne)]
     parallel: ParallelMode,
 
     /// Use dynamic programming memoization in the search phase.
