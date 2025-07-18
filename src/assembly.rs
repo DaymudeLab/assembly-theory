@@ -37,6 +37,7 @@ use crate::{
     kernels::KernelMode,
     molecule::Molecule,
     utils::connected_components_under_edges,
+    reductions::CompatGraph,
 };
 
 /// Parallelization strategy for the search phase.
@@ -191,11 +192,14 @@ fn fractures(
 fn recurse_index_search_serial(
     mol: &Molecule,
     matches: &[(BitSet, BitSet)],
+    matches_index: usize,
     fragments: &[BitSet],
     state_index: usize,
     mut best_index: usize,
     largest_remove: usize,
     bounds: &[Bound],
+    matches_graph: Option<&CompatGraph>,
+    subgraph: Option<BitSet>,
 ) -> (usize, usize) {
     // If any bounds are exceeded, halt this search branch.
     if bound_exceeded(
@@ -209,6 +213,15 @@ fn recurse_index_search_serial(
         return (state_index, 1);
     }
 
+    let nodes = {
+        if let Some(s) = &subgraph {
+            s.iter().collect::<Vec<usize>>()
+        }
+        else {
+            (matches_index..matches.len()).collect::<Vec<usize>>()
+        }
+    };
+
     // Keep track of the best assembly index found in any of this assembly
     // state's children and the number of states searched, including this one.
     let mut best_child_index = state_index;
@@ -217,17 +230,30 @@ fn recurse_index_search_serial(
     // For every pair of duplicatable subgraphs compatible with the current set
     // of fragments, recurse using the fragments obtained by removing this pair
     // and adding one subgraph back.
-    for (i, (h1, h2)) in matches.iter().enumerate() {
+    for v in nodes {
+        let (h1, h2) = &matches[v];
         if let Some(fractures) = fractures(mol, fragments, h1, h2) {
+            let subgraph_clone = {
+                if let (Some(g), Some(s)) = (matches_graph, &subgraph) {
+                    Some(g.forward_neighbors(v, &s))
+                }
+                else {
+                    None
+                }
+            };
+            
             // Recurse using the remaining matches and updated fragments.
             let (child_index, child_states_searched) = recurse_index_search_serial(
                 mol,
-                &matches[i + 1..],
+                &matches,
+                v + 1,
                 &fractures,
                 state_index - h1.len() + 1,
                 best_index,
                 h1.len(),
                 bounds,
+                matches_graph,
+                subgraph_clone,
             );
 
             // Update the best assembly indices (across children states and
@@ -518,15 +544,47 @@ pub fn index_search(
 
     // Search for the shortest assembly pathway recursively.
     let (index, states_searched) = match parallel_mode {
-        ParallelMode::None => recurse_index_search_serial(
-            mol,
-            &matches,
-            &[init],
-            edge_count - 1,
-            edge_count - 1,
-            edge_count,
-            bounds,
-        ),
+        ParallelMode::None => {
+            let clique_bounds = vec![Bound::CoverNoSort, Bound::CoverSort, Bound::CliqueBudget];
+            let use_clique = kernel_mode != KernelMode::None || bounds.iter().any(|b| clique_bounds.contains(b));
+            let graph;
+
+            let matches_graph = {
+                if use_clique {
+                    graph = CompatGraph::new(&matches);
+                    Some(&graph)
+                }
+                else {
+                    None
+                }
+            };
+
+            let subgraph = {
+                if use_clique {
+                    let mut temp = BitSet::with_capacity(matches.len());
+                    for i in 0..matches.len() {
+                        temp.insert(i);
+                    }
+                    Some(temp)
+                }
+                else {
+                    None
+                }
+            };
+
+            recurse_index_search_serial(
+                mol,
+                &matches,
+                0,
+                &[init],
+                edge_count - 1,
+                edge_count - 1,
+                edge_count,
+                bounds,
+                matches_graph,
+                subgraph,
+            )
+        }
         ParallelMode::DepthOne => {
             let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
             recurse_index_search_depthone(
