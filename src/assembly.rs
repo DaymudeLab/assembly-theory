@@ -200,12 +200,21 @@ fn recurse_index_search_serial(
     best_child_index
 }
 
+/// Recursive helper for the depth-one parallel version of index_search.
+///
+/// Inputs:
+/// - `mol`: The molecule whose assembly index is being calculated.
+/// - `matches`: The remaining non-overlapping isomorphic subgraph pairs.
+/// - `fragments`: TODO
+/// - `state_index`: The assembly index of this assembly state.
+/// - `bounds`: The list of bounding strategies to apply.
+/// - `states_searched`: The number of assembly states searched so far.
 #[allow(clippy::too_many_arguments)]
 fn recurse_index_search_depthone(
     mol: &Molecule,
     matches: &[(BitSet, BitSet)],
     fragments: &[BitSet],
-    ix: usize,  
+    state_index: usize,
     bounds: &[Bound],
     states_searched: &mut usize,
 ) -> usize {
@@ -213,7 +222,7 @@ fn recurse_index_search_depthone(
     let searched = Arc::new(AtomicUsize::new(0));
 
     // Search for duplicatable fragment
-    matches.par_iter().enumerate().for_each(|(i, (h1, h2))| { 
+    matches.par_iter().enumerate().for_each(|(i, (h1, h2))| {
         let mut fractures = fragments.to_owned();
         let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
         let f2 = fragments.iter().enumerate().find(|(_, c)| h2.is_subset(c));
@@ -257,9 +266,9 @@ fn recurse_index_search_depthone(
             mol,
             &matches[i + 1..],
             &fractures,
-            ix - h1.len() + 1,
-            largest_remove,
+            state_index - h1.len() + 1,
             best.clone(),
+            largest_remove,
             bounds,
             &mut searched_local,
         );
@@ -268,36 +277,47 @@ fn recurse_index_search_depthone(
     });
 
     *states_searched = searched.load(Relaxed);
-    best.load(Relaxed) 
+    best.load(Relaxed)
 }
 
+/// Recursive helper for the depth-one parallel version of index_search.
+///
+/// Inputs:
+/// - `mol`: The molecule whose assembly index is being calculated.
+/// - `matches`: The remaining non-overlapping isomorphic subgraph pairs.
+/// - `fragments`: TODO
+/// - `state_index`: The assembly index of this assembly state.
+/// - `best_index`: The smallest assembly index for all assembly states so far.
+/// - `largest_remove`: The size of the largest match removed so far.
+/// - `bounds`: The list of bounding strategies to apply.
+/// - `states_searched`: The number of assembly states searched so far.
 #[allow(clippy::too_many_arguments)]
 fn recurse_index_search_depthone_helper(
     mol: &Molecule,
     matches: &[(BitSet, BitSet)],
     fragments: &[BitSet],
-    ix: usize,  
+    state_index: usize,
+    best_index: Arc<AtomicUsize>,
     largest_remove: usize,
-    best: Arc<AtomicUsize>,
     bounds: &[Bound],
     states_searched: &mut usize,
 ) -> usize {
-    let mut cx = ix;
+    let mut best_child_index = state_index;
     *states_searched += 1;
 
     if bound_exceeded(
         mol,
         fragments,
-        ix,
-        best.load(Relaxed),
+        state_index,
+        best_index.load(Relaxed),
         largest_remove,
         bounds,
     ) {
-        return ix;
+        return state_index;
     }
 
     // Search for duplicatable fragment
-    for (i, (h1, h2)) in matches.iter().enumerate() { 
+    for (i, (h1, h2)) in matches.iter().enumerate() {
         let mut fractures = fragments.to_owned();
         let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
         let f2 = fragments.iter().enumerate().find(|(_, c)| h2.is_subset(c));
@@ -336,20 +356,20 @@ fn recurse_index_search_depthone_helper(
         fractures.retain(|i| i.len() > 1);
         fractures.push(h1.clone());
 
-        cx = cx.min(recurse_index_search_depthone_helper(
+        best_child_index = best_child_index.min(recurse_index_search_depthone_helper(
             mol,
             &matches[i + 1..],
             &fractures,
-            ix - h1.len() + 1,
+            state_index - h1.len() + 1,
+            best_index.clone(),
             largest_remove,
-            best.clone(),
             bounds,
             states_searched,
         ));
-        best.fetch_min(cx, Relaxed);
-    };
+        best_index.fetch_min(best_child_index, Relaxed);
+    }
 
-    cx
+    best_child_index
 }
 
 /// Recursive helper for the parallel version of index_search.
@@ -540,50 +560,49 @@ pub fn index_search(
     // Use parallelism if specified by the parallel_mode and if the molecule's
     // number of non-overlapping, isomorphic subgraph pairs is large enough;
     // otherwise, run serially.
-    let (index, states_searched) =
-        match parallel_mode {
-            ParallelMode::None => { 
-                let mut states_searched = 0;
-                let index = recurse_index_search_serial(
-                    mol,
-                    &matches,
-                    &[init],
-                    edge_count - 1,
-                    edge_count - 1,
-                    edge_count,
-                    bounds,
-                    &mut states_searched,
-                );
-                (index as u32, states_searched)
-            },
-            ParallelMode::DepthOne => {
-                let mut states_searched = 0;
-                let index = recurse_index_search_depthone(
-                    mol, 
-                    &matches, 
-                    &[init], 
-                    edge_count - 1, 
-                    bounds, 
-                    &mut states_searched
-                );
-                (index as u32, states_searched)
-            },
-            ParallelMode::Always => {
-                let states_searched = Arc::new(AtomicUsize::from(0));
-                let index = recurse_index_search_parallel(
-                    mol,
-                    &matches,
-                    &[init],
-                    edge_count - 1,
-                    (edge_count - 1).into(),
-                    edge_count,
-                    bounds,
-                    states_searched.clone(),
-                );
-                let states_searched = states_searched.load(Relaxed);
-                (index as u32, states_searched)
-            },
-        };
+    let (index, states_searched) = match parallel_mode {
+        ParallelMode::None => {
+            let mut states_searched = 0;
+            let index = recurse_index_search_serial(
+                mol,
+                &matches,
+                &[init],
+                edge_count - 1,
+                edge_count - 1,
+                edge_count,
+                bounds,
+                &mut states_searched,
+            );
+            (index as u32, states_searched)
+        }
+        ParallelMode::DepthOne => {
+            let mut states_searched = 0;
+            let index = recurse_index_search_depthone(
+                mol,
+                &matches,
+                &[init],
+                edge_count - 1,
+                bounds,
+                &mut states_searched,
+            );
+            (index as u32, states_searched)
+        }
+        ParallelMode::Always => {
+            let states_searched = Arc::new(AtomicUsize::from(0));
+            let index = recurse_index_search_parallel(
+                mol,
+                &matches,
+                &[init],
+                edge_count - 1,
+                (edge_count - 1).into(),
+                edge_count,
+                bounds,
+                states_searched.clone(),
+            );
+            let states_searched = states_searched.load(Relaxed);
+            (index as u32, states_searched)
+        }
+    };
 
     (index, matches.len() as u32, states_searched)
 }
