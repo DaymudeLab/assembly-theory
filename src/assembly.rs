@@ -73,7 +73,7 @@ pub fn assembly_depth(mol: &Molecule) -> u32 {
 }
 
 /// Return an iterator over all pairs of non-overlapping, isomorphic subgraphs
-/// in the given molecule.
+/// in the given molecule, sorted to guarantee deterministic iteration.
 fn matches(
     mol: &Molecule,
     enumerate_mode: EnumerateMode,
@@ -89,17 +89,35 @@ fn matches(
             .or_insert(vec![subgraph.clone()]);
     }
 
-    // In each isomorphism class, enumerate non-overlapping pairs of subgraphs.
+    // In each isomorphism class, collect non-overlapping pairs of subgraphs.
     let mut matches = Vec::new();
     for bucket in isomorphic_map.values() {
         for (i, first) in bucket.iter().enumerate() {
             for second in &bucket[i..] {
                 if first.is_disjoint(second) {
-                    matches.push((first.clone(), second.clone()));
+                    if first > second {
+                        matches.push((first.clone(), second.clone()));
+                    } else {
+                        matches.push((second.clone(), first.clone()));
+                    }
                 }
             }
         }
     }
+
+    // Sort pairs in a deterministic order and return.
+    matches.sort_by(|e1, e2| {
+        let ord = vec![
+            e2.0.len().cmp(&e1.0.len()),  // Decreasing subgraph size.
+            e1.0.cmp(&e2.0),              // First subgraph lexicographical.
+            e1.1.cmp(&e2.1)               // Second subgraph lexicographical.
+        ];
+        let mut i = 0;
+        while ord[i] == std::cmp::Ordering::Equal {
+            i += 1;
+        }
+        ord[i]
+    });
     matches.into_iter()
 }
 
@@ -547,11 +565,10 @@ pub fn index_search(
         panic!("--memoize is not implemented yet!")
     }
 
-    // Enumerate and sort array of non-overlapping, isomorphic subgraph pairs.
-    let mut matches = matches(mol, enumerate_mode, canonize_mode).collect::<Vec<_>>();
-    matches.sort_by(|e1, e2| e2.0.len().cmp(&e1.0.len()));
+    // Enumerate non-overlapping isomorphic subgraph pairs.
+    let matches = matches(mol, enumerate_mode, canonize_mode).collect::<Vec<_>>();
 
-    // Initialize fragments as all individual edges.
+    // Initialize the first fragment as the entire graph.
     let mut init = BitSet::new();
     init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
 
