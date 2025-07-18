@@ -261,14 +261,10 @@ fn recurse_index_search_depthone(
     matches: &[(BitSet, BitSet)],
     fragments: &[BitSet],
     state_index: usize,
+    best_index: Arc<AtomicUsize>,
     bounds: &[Bound],
+    states_searched: Arc<AtomicUsize>,
 ) -> (usize, usize) {
-    // Keep track of the best assembly index found in any assembly state and
-    // the total number of states searched.
-    // TODO: Should states searched start at 0 or 1?
-    let best_index = Arc::new(AtomicUsize::new(mol.graph().edge_count() - 1));
-    let states_searched = Arc::new(AtomicUsize::new(0));
-
     // For every pair of duplicatable subgraphs compatible with the current set
     // of fragments, recurse using the fragments obtained by removing this pair
     // and adding one subgraph back.
@@ -533,11 +529,22 @@ pub fn index_search(
             (index as u32, states_searched)
         }
         ParallelMode::DepthOne => {
-            let (index, states_searched) =
-                recurse_index_search_depthone(mol, &matches, &[init], edge_count - 1, bounds);
+            // TODO: Should states searched start at 0 or 1?
+            let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
+            let states_searched = Arc::new(AtomicUsize::from(0));
+            let (index, states_searched) = recurse_index_search_depthone(
+                mol,
+                &matches,
+                &[init],
+                edge_count - 1,
+                best_index,
+                bounds,
+                states_searched,
+            );
             (index as u32, states_searched)
         }
         ParallelMode::Always => {
+            // TODO: Should states searched start at 0 or 1?
             let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
             let states_searched = Arc::new(AtomicUsize::from(0));
             let index = recurse_index_search_parallel(
