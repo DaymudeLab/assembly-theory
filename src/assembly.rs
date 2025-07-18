@@ -195,11 +195,18 @@ fn recurse_index_search_serial(
     fragments: &[BitSet],
     state_index: usize,
     mut best_index: usize,
-    largest_remove: usize,
     bounds: &[Bound],
     matches_graph: &CompatGraph,
     subgraph: BitSet,
 ) -> (usize, usize) {
+    let largest_remove = {
+        if let Some(v) = subgraph.iter().next() {
+            matches_graph.weight(v) + 1
+        }
+        else {
+            return state_index;
+        }
+    };
     // If any bounds are exceeded, halt this search branch.
     if bound_exceeded(
         mol,
@@ -232,7 +239,6 @@ fn recurse_index_search_serial(
                 &fractures,
                 state_index - h1.len() + 1,
                 best_index,
-                h1.len(),
                 bounds,
                 matches_graph,
                 subgraph_clone,
@@ -539,7 +545,6 @@ pub fn index_search(
                 &[init],
                 edge_count - 1,
                 edge_count - 1,
-                edge_count,
                 bounds,
                 &matches_graph,
                 subgraph,

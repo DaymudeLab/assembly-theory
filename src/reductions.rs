@@ -44,6 +44,10 @@ impl CompatGraph {
         }
     }
 
+    pub fn weight(&self, v: usize) -> usize {
+        self.weights[v]
+    }
+
     /*pub fn savings_ground_truth(&self, subgraph: &BitSet) -> usize {
         self.savings_ground_truth_recurse(0, 0, subgraph)
     }
