@@ -4,128 +4,167 @@ use pyo3::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
-use crate::assembly::Bound as AssemblyBound;
-use crate::assembly::{index_search, serial_index_search};
-use crate::loader::parse_molfile_str;
+use crate::{
+    assembly::{index, index_search, ParallelMode},
+    bounds::Bound as OurBound,
+    canonize::CanonizeMode,
+    enumerate::EnumerateMode,
+    kernels::KernelMode,
+    loader::parse_molfile_str,
+};
 
-// TODO This needs to be combined with the Bounds Enum in main but I'm not sure the
-// best way to do that. Could move it to utils
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum PyBounds {
-    Log,
-    IntChain,
-    VecChain,
+// TODO: Is there a clean way of avoiding the duplication of all our various
+// algorithm variant enums?
+
+/// Mirrors the `enumerate::EnumerateMode` enum.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+enum PyEnumerateMode {
+    Bfs,
+    BfsPrune,
+    GrowErode,
+    GrowErodeIterative,
 }
 
-/// Implements conversion from `&str` to `PyBounds`
-impl FromStr for PyBounds {
+/// Mirrors the `canonize::CanonizeMode` enum.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+enum PyCanonizeMode {
+    Nauty,
+    Faulon,
+    TreeNauty,
+    TreeFaulon,
+}
+
+/// Mirrors the `assembly::ParallelMode` enum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum PyParallelMode {
+    None,
+    DepthOne,
+    Always,
+}
+
+/// Mirrors the `kernels::KernelMode` enum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum PyKernelMode {
+    None,
+    Once,
+    DepthOne,
+    Always,
+}
+
+/// Mirrors the `bounds::Bound` enum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum PyBound {
+    Log,
+    Int,
+    VecSimple,
+    VecSmallFrags,
+    CoverSort,
+    CoverNoSort,
+    CliqueBudget,
+}
+
+/// Converts bound options in `&str` format to `PyEnumerateMode`.
+impl FromStr for PyEnumerateMode {
     type Err = PyErr;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "log" => Ok(PyBounds::Log),
-            "intchain" => Ok(PyBounds::IntChain),
-            "vecchain" => Ok(PyBounds::VecChain),
+            "bfs" => Ok(PyEnumerateMode::Bfs),
+            "bfsprune" => Ok(PyEnumerateMode::BfsPrune),
+            "growerode" => Ok(PyEnumerateMode::GrowErode),
+            "growerodeiterative" => Ok(PyEnumerateMode::GrowErodeIterative),
+            _ => Err(PyValueError::new_err(format!("Invalid enumerate: {s}"))),
+        }
+    }
+}
+
+/// Converts bound options in `&str` format to `PyCanonizeMode`.
+impl FromStr for PyCanonizeMode {
+    type Err = PyErr;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "nauty" => Ok(PyCanonizeMode::Nauty),
+            "faulon" => Ok(PyCanonizeMode::Faulon),
+            "treenauty" => Ok(PyCanonizeMode::TreeNauty),
+            "treefaulon" => Ok(PyCanonizeMode::TreeFaulon),
+            _ => Err(PyValueError::new_err(format!("Invalid canonize: {s}"))),
+        }
+    }
+}
+
+/// Converts bound options in `&str` format to `PyParallelMode`.
+impl FromStr for PyParallelMode {
+    type Err = PyErr;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "none" => Ok(PyParallelMode::None),
+            "depthone" => Ok(PyParallelMode::DepthOne),
+            "always" => Ok(PyParallelMode::Always),
+            _ => Err(PyValueError::new_err(format!("Invalid parallel: {s}"))),
+        }
+    }
+}
+
+/// Converts bound options in `&str` format to `PyKernelMode`.
+impl FromStr for PyKernelMode {
+    type Err = PyErr;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "none" => Ok(PyKernelMode::None),
+            "once" => Ok(PyKernelMode::Once),
+            "depthone" => Ok(PyKernelMode::DepthOne),
+            "always" => Ok(PyKernelMode::Always),
+            _ => Err(PyValueError::new_err(format!("Invalid kernel: {s}"))),
+        }
+    }
+}
+
+/// Converts bound options in `&str` format to `PyBound`.
+impl FromStr for PyBound {
+    type Err = PyErr;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "log" => Ok(PyBound::Log),
+            "int" => Ok(PyBound::Int),
+            "vecsimple" => Ok(PyBound::VecSimple),
+            "vecsmallfrags" => Ok(PyBound::VecSmallFrags),
+            "coversort" => Ok(PyBound::CoverSort),
+            "covernosort" => Ok(PyBound::CoverNoSort),
+            "cliquebudget" => Ok(PyBound::CliqueBudget),
             _ => Err(PyValueError::new_err(format!("Invalid bound: {s}"))),
         }
     }
 }
 
-/// Converts a slice of `PyBounds` to a vector of `AssemblyBound`
-fn make_boundlist(u: &[PyBounds]) -> Vec<AssemblyBound> {
-    let mut boundlist = u
-        .iter()
-        .flat_map(|b| match b {
-            PyBounds::Log => vec![AssemblyBound::Log],
-            PyBounds::IntChain => vec![AssemblyBound::IntChain],
-            PyBounds::VecChain => vec![
-                AssemblyBound::VecChainSimple,
-                AssemblyBound::VecChainSmallFrags,
-            ],
-        })
-        .collect::<Vec<_>>();
-
-    boundlist.dedup(); // Ensure no duplicate bounds
-    boundlist
-}
-
-/// Processes a `HashSet<String>` from Python and converts it into a `Vec<PyBounds>`
-/// Raises an error if any string is invalid.
-fn process_bound_set(bound_set: HashSet<String>) -> PyResult<Vec<PyBounds>> {
-    bound_set
+/// Converts a `HashSet<String>` of bound strings from Python into a
+/// `Vec<PyBound>`, raising an error if any bound string is invalid.
+fn process_bound_strs(bound_strs: HashSet<String>) -> PyResult<Vec<PyBound>> {
+    bound_strs
         .iter()
         .map(|s| s.parse())
-        .collect::<Result<_, _>>() // Try parsing each string
+        .collect::<Result<_, _>>()
 }
 
-/// Computes the molecular assembly index using specified bounds.
-///
-/// # Parameters
-/// - `mol_block`: The contents of a .mol file as a string.
-/// - `bound_set`: A set of bounds as strings (from Python).
-///
-/// # Returns
-/// - The computed molecular index as a `u32`.
-#[pyfunction]
-pub fn _molecular_assembly(
-    mol_block: String,
-    bound_set: HashSet<String>,
-    serial: bool,
-) -> PyResult<u32> {
-    let mol_result = parse_molfile_str(&mol_block);
-    let py_bounds = process_bound_set(bound_set)?;
-
-    let mol = match mol_result {
-        Ok(mol) => mol,
-        Err(e) => return Err(e.into()), // Convert the error to PyErr
-    };
-
-    let (index, _, _) = if serial {
-        serial_index_search(&mol, &make_boundlist(&py_bounds))
-    } else {
-        index_search(&mol, &make_boundlist(&py_bounds))
-    };
-
-    Ok(index)
-}
-
-/// Computes the molecular assembly index with additional details.
-///
-/// # Parameters
-/// - `mol_block`: The contents of a .mol file as a string.
-/// - `bound_set`: A set of bounds as strings (from Python).
-///
-/// # Returns
-/// - A `HashMap<String, u32>` containing:
-///   - `"index"`: The computed molecular index.
-///   - `"duplicates"`: Duplicate count.
-///   - `"space"`: Space calculation.
-#[pyfunction]
-pub fn _molecular_assembly_verbose(
-    mol_block: String,
-    bound_set: HashSet<String>,
-    serial: bool,
-) -> PyResult<HashMap<String, usize>> {
-    let mol_result = parse_molfile_str(&mol_block);
-    let py_bounds = process_bound_set(bound_set)?;
-
-    let mol = match mol_result {
-        Ok(mol) => mol,
-        Err(e) => return Err(e.into()), // Convert error to PyErr
-    };
-
-    let (ix, duplicates, space) = if serial {
-        serial_index_search(&mol, &make_boundlist(&py_bounds))
-    } else {
-        index_search(&mol, &make_boundlist(&py_bounds))
-    };
-
-    let mut data = HashMap::new();
-    data.insert("index".to_string(), ix as usize);
-    data.insert("duplicates".to_string(), duplicates as usize);
-    data.insert("space".to_string(), space);
-
-    Ok(data)
+/// Converts a slice of `PyBound`s into a vector of `bounds::Bound`s.
+fn make_boundlist(pybounds: &[PyBound]) -> Vec<OurBound> {
+    let mut boundlist = pybounds
+        .iter()
+        .flat_map(|b| match b {
+            PyBound::Log => vec![OurBound::Log],
+            PyBound::Int => vec![OurBound::Int],
+            PyBound::VecSimple => vec![OurBound::VecSimple],
+            PyBound::VecSmallFrags => vec![OurBound::VecSmallFrags],
+            PyBound::CoverSort => vec![OurBound::CoverSort],
+            PyBound::CoverNoSort => vec![OurBound::CoverNoSort],
+            PyBound::CliqueBudget => vec![OurBound::CliqueBudget],
+        })
+        .collect::<Vec<_>>();
+    boundlist.dedup();
+    boundlist
 }
 
 /// Retrieves molecular information from a given mol block.
@@ -135,16 +174,223 @@ pub fn _molecular_assembly_verbose(
 ///
 /// # Returns
 /// - A `String` containing molecular information.
+///
+/// TODO: Add Python example.
 #[pyfunction]
-pub fn _molecule_info(mol_block: String) -> PyResult<String> {
+pub fn _mol_info(mol_block: String) -> PyResult<String> {
+    // Parse the .mol file contents as a molecule::Molecule.
     let mol_result = parse_molfile_str(&mol_block);
-
     let mol = match mol_result {
         Ok(mol) => mol,
-        Err(e) => return Err(e.into()), // Convert error to PyErr
+        Err(e) => return Err(e.into()), // Convert the error to PyErr
     };
 
-    Ok(mol.info()) // Retrieve molecular info
+    // Return molecule info.
+    Ok(mol.info())
+}
+
+/// Computes a molecule's assembly index using an efficient default strategy.
+///
+/// # Parameters
+/// - `mol_block`: The contents of a .mol file as a string.
+///
+/// # Returns
+/// - The molecule's assembly index as a `u32`.
+///
+/// TODO: Add Python example.
+#[pyfunction]
+pub fn _index(mol_block: String) -> PyResult<u32> {
+    // Parse the .mol file contents as a molecule::Molecule.
+    let mol_result = parse_molfile_str(&mol_block);
+    let mol = match mol_result {
+        Ok(mol) => mol,
+        Err(e) => return Err(e.into()), // Convert the error to PyErr
+    };
+
+    // Calculate the assembly index.
+    Ok(index(&mol))
+}
+
+/// Computes the molecular assembly index using a top-down recursive algorithm
+/// that is parameterized by the specified options.
+///
+/// # Parameters
+/// - `mol_block`: The contents of a .mol file as a string.
+/// - `enumerate_str`: The enumeration mode as a string.
+/// - `canonize_str`: The canonization mode as a string.
+/// - `parallel_str`: The parallelization mode as a string.
+/// - `kernel_str`: The kernelization mode as a string.
+/// - `bound_strs`: A set of bounds as strings (from Python).
+/// - `memoize`: True iff memoization should be used in search.
+///
+/// # Returns
+/// - The molecule's assembly index as a `u32`.
+///
+/// TODO: Add Python example.
+#[pyfunction]
+pub fn _index_search(
+    mol_block: String,
+    enumerate_str: String,
+    canonize_str: String,
+    parallel_str: String,
+    kernel_str: String,
+    bound_strs: HashSet<String>,
+    memoize: bool,
+) -> PyResult<u32> {
+    // Parse the .mol file contents as a molecule::Molecule.
+    let mol_result = parse_molfile_str(&mol_block);
+    let mol = match mol_result {
+        Ok(mol) => mol,
+        Err(e) => return Err(e.into()), // Convert the error to PyErr
+    };
+
+    // Parse the various modes and bound options.
+    let enumerate_mode = match PyEnumerateMode::from_str(&enumerate_str) {
+        Ok(PyEnumerateMode::Bfs) => EnumerateMode::Bfs,
+        Ok(PyEnumerateMode::BfsPrune) => EnumerateMode::BfsPrune,
+        Ok(PyEnumerateMode::GrowErode) => EnumerateMode::GrowErode,
+        Ok(PyEnumerateMode::GrowErodeIterative) => EnumerateMode::GrowErodeIterative,
+        _ => {
+            panic!("Unrecognized enumerate mode {enumerate_str}.")
+        }
+    };
+    let canonize_mode = match PyCanonizeMode::from_str(&canonize_str) {
+        Ok(PyCanonizeMode::Nauty) => CanonizeMode::Nauty,
+        Ok(PyCanonizeMode::Faulon) => CanonizeMode::Faulon,
+        Ok(PyCanonizeMode::TreeNauty) => CanonizeMode::TreeNauty,
+        Ok(PyCanonizeMode::TreeFaulon) => CanonizeMode::TreeFaulon,
+        _ => {
+            panic!("Unrecognized canonize mode {canonize_str}.")
+        }
+    };
+    let parallel_mode = match PyParallelMode::from_str(&parallel_str) {
+        Ok(PyParallelMode::None) => ParallelMode::None,
+        Ok(PyParallelMode::DepthOne) => ParallelMode::DepthOne,
+        Ok(PyParallelMode::Always) => ParallelMode::Always,
+        _ => {
+            panic!("Unrecognized parallel mode {parallel_str}.")
+        }
+    };
+    let kernel_mode = match PyKernelMode::from_str(&kernel_str) {
+        Ok(PyKernelMode::None) => KernelMode::None,
+        Ok(PyKernelMode::Once) => KernelMode::Once,
+        Ok(PyKernelMode::DepthOne) => KernelMode::DepthOne,
+        Ok(PyKernelMode::Always) => KernelMode::Always,
+        _ => {
+            panic!("Unrecognized parallel mode {parallel_str}.")
+        }
+    };
+    let pybounds = process_bound_strs(bound_strs)?;
+    let boundlist = make_boundlist(&pybounds);
+
+    // Compute assembly index.
+    let (index, _, _) = index_search(
+        &mol,
+        enumerate_mode,
+        canonize_mode,
+        parallel_mode,
+        kernel_mode,
+        &boundlist,
+        memoize,
+    );
+
+    Ok(index)
+}
+
+/// Computes the molecular assembly index and related information using a top-
+/// down recursive algorithm that is parameterized by the specified options.
+///
+/// # Parameters
+/// - `mol_block`: The contents of a .mol file as a string.
+/// - `enumerate_str`: The enumeration mode as a string.
+/// - `canonize_str`: The canonization mode as a string.
+/// - `parallel_str`: The parallelization mode as a string.
+/// - `kernel_str`: The kernelization mode as a string.
+/// - `bound_strs`: A set of bounds as strings (from Python).
+/// - `memoize`: True iff memoization should be used in search.
+///
+/// # Returns
+/// - A `HashMap<String, usize>` containing:
+///   - `"index"`: The molecule's assembly index.
+///   - `"num_matches"`: The molecule's number of non-overlapping isomorphic
+///   subgraph pairs.
+///   - `"states_searched"`: The number of assembly states searchede.
+///
+/// TODO: Add Python example.
+#[pyfunction]
+pub fn _index_search_verbose(
+    mol_block: String,
+    enumerate_str: String,
+    canonize_str: String,
+    parallel_str: String,
+    kernel_str: String,
+    bound_strs: HashSet<String>,
+    memoize: bool,
+) -> PyResult<HashMap<String, usize>> {
+    // Parse the .mol file contents as a molecule::Molecule.
+    let mol_result = parse_molfile_str(&mol_block);
+    let mol = match mol_result {
+        Ok(mol) => mol,
+        Err(e) => return Err(e.into()), // Convert the error to PyErr
+    };
+
+    // Parse the various modes and bound options.
+    let enumerate_mode = match PyEnumerateMode::from_str(&enumerate_str) {
+        Ok(PyEnumerateMode::Bfs) => EnumerateMode::Bfs,
+        Ok(PyEnumerateMode::BfsPrune) => EnumerateMode::BfsPrune,
+        Ok(PyEnumerateMode::GrowErode) => EnumerateMode::GrowErode,
+        Ok(PyEnumerateMode::GrowErodeIterative) => EnumerateMode::GrowErodeIterative,
+        _ => {
+            panic!("Unrecognized enumerate mode {enumerate_str}.")
+        }
+    };
+    let canonize_mode = match PyCanonizeMode::from_str(&canonize_str) {
+        Ok(PyCanonizeMode::Nauty) => CanonizeMode::Nauty,
+        Ok(PyCanonizeMode::Faulon) => CanonizeMode::Faulon,
+        Ok(PyCanonizeMode::TreeNauty) => CanonizeMode::TreeNauty,
+        Ok(PyCanonizeMode::TreeFaulon) => CanonizeMode::TreeFaulon,
+        _ => {
+            panic!("Unrecognized canonize mode {canonize_str}.")
+        }
+    };
+    let parallel_mode = match PyParallelMode::from_str(&parallel_str) {
+        Ok(PyParallelMode::None) => ParallelMode::None,
+        Ok(PyParallelMode::DepthOne) => ParallelMode::DepthOne,
+        Ok(PyParallelMode::Always) => ParallelMode::Always,
+        _ => {
+            panic!("Unrecognized parallel mode {parallel_str}.")
+        }
+    };
+    let kernel_mode = match PyKernelMode::from_str(&kernel_str) {
+        Ok(PyKernelMode::None) => KernelMode::None,
+        Ok(PyKernelMode::Once) => KernelMode::Once,
+        Ok(PyKernelMode::DepthOne) => KernelMode::DepthOne,
+        Ok(PyKernelMode::Always) => KernelMode::Always,
+        _ => {
+            panic!("Unrecognized parallel mode {parallel_str}.")
+        }
+    };
+    let pybounds = process_bound_strs(bound_strs)?;
+    let boundlist = make_boundlist(&pybounds);
+
+    // Compute assembly index.
+    let (index, num_matches, states_searched) = index_search(
+        &mol,
+        enumerate_mode,
+        canonize_mode,
+        parallel_mode,
+        kernel_mode,
+        &boundlist,
+        memoize,
+    );
+
+    // Package results and return.
+    let mut data = HashMap::new();
+    data.insert("index".to_string(), index as usize);
+    data.insert("num_matches".to_string(), num_matches as usize);
+    data.insert("states_searched".to_string(), states_searched);
+
+    Ok(data)
 }
 
 // Registers the Rust functions as a Python module.
@@ -153,8 +399,9 @@ pub fn _molecule_info(mol_block: String) -> PyResult<String> {
 // otherwise, Python will not be able to import the module.
 #[pymodule]
 fn _pyat(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(_molecular_assembly, m)?)?;
-    m.add_function(wrap_pyfunction!(_molecular_assembly_verbose, m)?)?;
-    m.add_function(wrap_pyfunction!(_molecule_info, m)?)?;
+    m.add_function(wrap_pyfunction!(_mol_info, m)?)?;
+    m.add_function(wrap_pyfunction!(_index, m)?)?;
+    m.add_function(wrap_pyfunction!(_index_search, m)?)?;
+    m.add_function(wrap_pyfunction!(_index_search_verbose, m)?)?;
     Ok(())
 }

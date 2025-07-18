@@ -1,115 +1,130 @@
-use std::fs;
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 
 use anyhow::{bail, Context, Result};
-use assembly_theory::assembly::{index_search, serial_index_search, Bound};
-use assembly_theory::{loader, molecule::Molecule};
-use clap::{Args, Parser, ValueEnum};
-
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
-enum Bounds {
-    Log,
-    IntChain,
-    VecChain,
-}
+use assembly_theory::{
+    assembly::{assembly_depth, index_search, ParallelMode},
+    bounds::Bound,
+    canonize::CanonizeMode,
+    enumerate::EnumerateMode,
+    kernels::KernelMode,
+    loader::parse_molfile_str,
+};
+use clap::{Args, Parser};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Cli {
-    path: PathBuf,
+    /// Path to .mol file to compute the assembly index for.
+    molpath: PathBuf,
 
-    #[arg(short, long)]
-    /// Print out search space, duplicate subgraphs, and assembly index
+    /// Print molecule graph information, skipping assembly index calculation.
+    #[arg(long)]
+    molinfo: bool,
+
+    /// Calculate and print the molecule's assembly depth.
+    #[arg(long)]
+    depth: bool,
+
+    /// Print the assembly index, assembly depth, number of non-overlapping
+    /// isomorphic subgraph pairs, and size of the search space. Note that the
+    /// search space size is nondeterministic owing to some `HashMap` details.
+    #[arg(long)]
     verbose: bool,
 
+    /// Strategy for enumerating connected, non-induced subgraphs.
+    #[arg(long, value_enum, default_value_t = EnumerateMode::GrowErode)]
+    enumerate: EnumerateMode,
+
+    /// Algorithm for graph canonization.
+    #[arg(long, value_enum, default_value_t = CanonizeMode::Nauty)]
+    canonize: CanonizeMode,
+
+    /// Parallelization strategy for the search phase.
+    #[arg(long, value_enum, default_value_t = ParallelMode::Always)]
+    parallel: ParallelMode,
+
+    /// Use dynamic programming memoization in the search phase.
+    #[arg(long)]
+    memoize: bool,
+
+    /// Bounding strategies to apply in the search phase.
     #[command(flatten)]
-    boundgroup: Option<BoundGroup>,
+    boundsgroup: Option<BoundsGroup>,
 
-    #[arg(long)]
-    /// Dump out molecule graph
-    molecule_info: bool,
-
-    #[arg(long)]
-    /// Disable all parallelism
-    serial: bool,
+    /// Strategy for performing graph kernelization during the search phase.
+    #[arg(long, value_enum, default_value_t = KernelMode::None)]
+    kernel: KernelMode,
 }
 
 #[derive(Args, Debug)]
 #[group(required = false, multiple = false)]
-struct BoundGroup {
+struct BoundsGroup {
+    /// Do not use any bounding strategy during the search phase.
     #[arg(long)]
-    /// Run branch-and-bound index search with no bounds
     no_bounds: bool,
 
+    /// Apply the specified bounding strategies during the search phase.
     #[arg(long, num_args = 1..)]
-    /// Run branch-and-bound index search with only specified bounds
-    bounds: Vec<Bounds>,
-}
-
-fn make_boundlist(u: &[Bounds]) -> Vec<Bound> {
-    let mut boundlist = u
-        .iter()
-        .flat_map(|b| match b {
-            Bounds::Log => vec![Bound::Log],
-            Bounds::IntChain => vec![Bound::IntChain],
-            Bounds::VecChain => vec![Bound::VecChainSimple, Bound::VecChainSmallFrags],
-        })
-        .collect::<Vec<_>>();
-    boundlist.dedup();
-    boundlist
-}
-
-fn index_message(mol: &Molecule, bounds: &[Bound], verbose: bool, serial: bool) -> String {
-    let (index, duplicates, space) = if serial {
-        serial_index_search(mol, bounds)
-    } else {
-        index_search(mol, bounds)
-    };
-    if verbose {
-        let mut message = String::new();
-        message.push_str(&format!("Assembly index: {index}\n"));
-        message.push_str(&format!("Duplicate subgraph pairs: {duplicates}\n"));
-        message.push_str(&format!("Search space: {space}"));
-        message
-    } else {
-        index.to_string()
-    }
+    bounds: Vec<Bound>,
 }
 
 fn main() -> Result<()> {
+    // Parse command line arguments.
     let cli = Cli::parse();
-    let molfile = fs::read_to_string(&cli.path).context("Cannot read input file.")?;
-    let molecule = loader::parse_molfile_str(&molfile).context("Cannot parse molfile.")?;
-    if molecule.is_malformed() {
-        bail!("Bad input! Molecule has self-loops or doubled edges")
+
+    // Load the .mol file as a molecule::Molecule.
+    let molfile = fs::read_to_string(&cli.molpath).context("Cannot read input file.")?;
+    let mol = parse_molfile_str(&molfile).context("Cannot parse molfile.")?;
+    if mol.is_malformed() {
+        bail!("Bad input! Molecule has self-loops or multi-edges.")
     }
 
-    if cli.molecule_info {
-        println!("{}", molecule.info());
+    // If --molinfo is set, print molecule graph and exit.
+    if cli.molinfo {
+        println!("{}", mol.info());
         return Ok(());
     }
 
-    let output = match cli.boundgroup {
-        None => index_message(
-            &molecule,
-            &[
-                Bound::IntChain,
-                Bound::VecChainSimple,
-                Bound::VecChainSmallFrags,
-            ],
-            cli.verbose,
-            cli.serial,
-        ),
-        Some(BoundGroup {
+    // If --depth is set, calculate and print assembly depth and exit.
+    if cli.depth {
+        println!("{}", assembly_depth(&mol));
+        return Ok(());
+    }
+
+    // Handle bounding strategy CLI arguments.
+    let boundlist: &[Bound] = match cli.boundsgroup {
+        // By default, use a combination of the integer and vector bounds.
+        None => &[Bound::Int, Bound::VecSimple, Bound::VecSmallFrags],
+        // If --no-bounds is set, do not use any bounds.
+        Some(BoundsGroup {
             no_bounds: true, ..
-        }) => index_message(&molecule, &[], cli.verbose, cli.serial),
-        Some(BoundGroup {
+        }) => &[],
+        // Otherwise, use the bounds that were specified.
+        Some(BoundsGroup {
             no_bounds: false,
             bounds,
-        }) => index_message(&molecule, &make_boundlist(&bounds), cli.verbose, cli.serial),
+        }) => &bounds.clone(),
     };
 
-    println!("{output}");
+    // Call index calculation with all the various options.
+    let (index, num_matches, states_searched) = index_search(
+        &mol,
+        cli.enumerate,
+        cli.canonize,
+        cli.parallel,
+        cli.kernel,
+        boundlist,
+        cli.memoize,
+    );
+
+    // Print final output, depending on --verbose.
+    if cli.verbose {
+        println!("Assembly Index: {index}");
+        println!("Non-Overlapping Isomorphic Subgraph Pairs: {num_matches}");
+        println!("Assembly States Searched: {states_searched}");
+    } else {
+        println!("{index}");
+    }
 
     Ok(())
 }

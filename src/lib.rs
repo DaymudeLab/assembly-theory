@@ -40,6 +40,18 @@ pub mod loader;
 // The hard bit: compute assembly index
 pub mod assembly;
 
+// Bounding strategies for the search phase.
+pub mod bounds;
+
+// Algorithms for enumerating connected subgraphs of a molecular graph.
+pub mod enumerate;
+
+// Molecule graph canonization algorithms.
+pub mod canonize;
+
+// Graph kernelization algorithms.
+pub mod kernels;
+
 // Utility functions
 mod utils;
 

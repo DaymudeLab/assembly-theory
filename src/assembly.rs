@@ -1,22 +1,25 @@
 //! Compute assembly indices of molecules.
+//!
 //! # Example
 //! ```
-//! # use std::fs;
-//! # use std::path::PathBuf;
-//! # use assembly_theory::*;
-//! # fn main() -> Result<(), std::io::Error> {
-//! # let path = PathBuf::from(format!("./data/checks/benzene.mol"));
-//! // Read a molecule data file
-//! let molfile = fs::read_to_string(path)?;
-//! let benzene = loader::parse_molfile_str(&molfile).expect("Cannot parse molfile.");
+//! # use std::{fs, path::PathBuf};
+//! use assembly_theory::assembly::index;
+//! use assembly_theory::loader::parse_molfile_str;
 //!
-//! // Compute assembly index of benzene
-//! assert_eq!(assembly::index(&benzene), 3);
+//! # fn main() -> Result<(), std::io::Error> {
+//! // Load a molecule from a .mol file.
+//! let path = PathBuf::from(format!("./data/checks/anthracene.mol"));
+//! let molfile = fs::read_to_string(path)?;
+//! let anthracene = parse_molfile_str(&molfile).expect("Parsing failure.");
+//!
+//! // Compute the molecule's assembly index.
+//! assert_eq!(index(&anthracene), 6);
 //! # Ok(())
 //! # }
 //! ```
+
 use std::{
-    collections::BTreeSet,
+    collections::HashMap,
     sync::{
         atomic::{AtomicUsize, Ordering::Relaxed},
         Arc,
@@ -24,51 +27,46 @@ use std::{
 };
 
 use bit_set::BitSet;
+use clap::ValueEnum;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
-    molecule::Bond, molecule::Element, molecule::Molecule, utils::connected_components_under_edges,
+    bounds::{bound_exceeded, Bound},
+    canonize::{canonize, CanonizeMode},
+    enumerate::{enumerate_subgraphs, EnumerateMode},
+    kernels::KernelMode,
+    molecule::Molecule,
+    utils::connected_components_under_edges,
 };
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct EdgeType {
-    bond: Bond,
-    ends: (Element, Element),
+/// Parallelization strategy for the search phase.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum ParallelMode {
+    /// No parallelism.
+    None,
+    /// Create a task pool form the recursion's first level only.
+    DepthOne,
+    /// Spawn a new thread at every recursive call.
+    Always,
 }
 
 static PARALLEL_MATCH_SIZE_THRESHOLD: usize = 100;
 
-/// Enum to represent the different bounds available during the computation of molecular assembly
-/// indices.
-/// Bounds are used by `index_search()` to speed up assembly index computations.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Bound {
-    /// `Log` bounds by the logarithm base 2 of remaining edges
-    Log,
-    /// `IntChain` bounds by the length of the smallest addition chain to create the remaining
-    /// fragments
-    IntChain,
-    /// 'VecChainSimple' bounds using addition chain length with the information of the edge types
-    /// in a molecule
-    VecChainSimple,
-    /// 'VecChainSmallFrags' bounds using information on the number of fragments of size 2 in the
-    /// molecule
-    VecChainSmallFrags,
-}
-
-pub fn naive_assembly_depth(mol: &Molecule) -> u32 {
+/// Computes assembly depth; see
+/// [Pagel et al. (2024)](https://arxiv.org/abs/2409.05993).
+pub fn assembly_depth(mol: &Molecule) -> u32 {
     let mut ix = u32::MAX;
     for (left, right) in mol.partitions().unwrap() {
         let l = if left.is_basic_unit() {
             0
         } else {
-            naive_assembly_depth(&left)
+            assembly_depth(&left)
         };
 
         let r = if right.is_basic_unit() {
             0
         } else {
-            naive_assembly_depth(&right)
+            assembly_depth(&right)
         };
 
         ix = ix.min(l.max(r) + 1)
@@ -76,102 +74,76 @@ pub fn naive_assembly_depth(mol: &Molecule) -> u32 {
     ix
 }
 
-fn recurse_naive_index_search(
+/// Return an iterator over all pairs of non-overlapping, isomorphic subgraphs
+/// in the given molecule.
+fn matches(
     mol: &Molecule,
-    matches: &BTreeSet<(BitSet, BitSet)>,
-    fragments: &[BitSet],
-    ix: usize,
-) -> usize {
-    let mut cx = ix;
-    for (h1, h2) in matches {
-        let mut fractures = fragments.to_owned();
-        let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
-        let f2 = fragments.iter().enumerate().find(|(_, c)| h2.is_subset(c));
-
-        let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) else {
-            continue;
-        };
-
-        // All of these clones are on bitsets and cheap enough
-        if i1 == i2 {
-            let mut union = h1.clone();
-            union.union_with(h2);
-            let mut difference = f1.clone();
-            difference.difference_with(&union);
-            let c = connected_components_under_edges(mol.graph(), &difference);
-            fractures.extend(c);
-            fractures.swap_remove(i1);
-            fractures.push(h1.clone());
-        } else {
-            let mut f1r = f1.clone();
-            f1r.difference_with(h1);
-            let mut f2r = f2.clone();
-            f2r.difference_with(h2);
-
-            let c1 = connected_components_under_edges(mol.graph(), &f1r);
-            let c2 = connected_components_under_edges(mol.graph(), &f2r);
-
-            fractures.extend(c1);
-            fractures.extend(c2);
-
-            fractures.swap_remove(i1.max(i2));
-            fractures.swap_remove(i1.min(i2));
-
-            fractures.push(h1.clone());
-        }
-        cx = cx.min(recurse_naive_index_search(
-            mol,
-            matches,
-            &fractures,
-            ix - h1.len() + 1,
-        ));
+    enumerate_mode: EnumerateMode,
+    canonize_mode: CanonizeMode,
+) -> impl Iterator<Item = (BitSet, BitSet)> {
+    // Enumerate all connected, non-induced subgraphs and bin them into
+    // isomorphism classes using canonization.
+    let mut isomorphic_map = HashMap::<_, Vec<BitSet>>::new();
+    for subgraph in enumerate_subgraphs(mol, enumerate_mode) {
+        isomorphic_map
+            .entry(canonize(mol, &subgraph, canonize_mode))
+            .and_modify(|bucket| bucket.push(subgraph.clone()))
+            .or_insert(vec![subgraph.clone()]);
     }
-    cx
+
+    // In each isomorphism class, enumerate non-overlapping pairs of subgraphs.
+    let mut matches = Vec::new();
+    for bucket in isomorphic_map.values() {
+        for (i, first) in bucket.iter().enumerate() {
+            for second in &bucket[i..] {
+                if first.is_disjoint(second) {
+                    matches.push((first.clone(), second.clone()));
+                }
+            }
+        }
+    }
+    matches.into_iter()
 }
 
-/// Calculates the assembly index of a molecule without using any bounding strategy or
-/// parallelization. This function is very inefficient and should only be used as a performance
-/// benchmark against other strategies.
-pub fn naive_index_search(mol: &Molecule) -> u32 {
-    let mut init = BitSet::new();
-    init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
-
-    recurse_naive_index_search(
-        mol,
-        &mol.matches().collect(),
-        &[init],
-        mol.graph().edge_count() - 1,
-    ) as u32
-}
-
+/// Recursive helper for the serial version of index_search.
+///
+/// Inputs:
+/// - `mol`: The molecule whose assembly index is being calculated.
+/// - `matches`: The remaining non-overlapping isomorphic subgraph pairs.
+/// - `fragments`: TODO
+/// - `state_index`: The assembly index of this assembly state.
+/// - `best_index`: The smallest assembly index for all assembly states so far.
+/// - `largest_remove`: The size of the largest match removed so far.
+/// - `bounds`: The list of bounding strategies to apply.
+/// - `states_searched`: The number of assembly states searched so far.
 #[allow(clippy::too_many_arguments)]
-fn recurse_index_search(
+fn recurse_index_search_serial(
     mol: &Molecule,
     matches: &[(BitSet, BitSet)],
     fragments: &[BitSet],
-    ix: usize,
+    state_index: usize,
+    mut best_index: usize,
     largest_remove: usize,
-    mut best: usize,
     bounds: &[Bound],
     states_searched: &mut usize,
 ) -> usize {
-    let mut cx = ix;
+    // Keep track of the best assembly index found in any of this assembly
+    // state's children.
+    let mut best_child_index = state_index;
 
+    // Count this assembly state as searched.
     *states_searched += 1;
 
-    // Branch and Bound
-    for bound_type in bounds {
-        let exceeds = match bound_type {
-            Bound::Log => ix - log_bound(fragments) >= best,
-            Bound::IntChain => ix - addition_bound(fragments, largest_remove) >= best,
-            Bound::VecChainSimple => ix - vec_bound_simple(fragments, largest_remove, mol) >= best,
-            Bound::VecChainSmallFrags => {
-                ix - vec_bound_small_frags(fragments, largest_remove, mol) >= best
-            }
-        };
-        if exceeds {
-            return ix;
-        }
+    // Check if any bounds apply; if so, halt this search branch.
+    if bound_exceeded(
+        mol,
+        fragments,
+        state_index,
+        best_index,
+        largest_remove,
+        bounds,
+    ) {
+        return state_index;
     }
 
     // Search for duplicatable fragment
@@ -214,51 +186,61 @@ fn recurse_index_search(
         fractures.retain(|i| i.len() > 1);
         fractures.push(h1.clone());
 
-        cx = cx.min(recurse_index_search(
+        best_child_index = best_child_index.min(recurse_index_search_serial(
             mol,
             &matches[i + 1..],
             &fractures,
-            ix - h1.len() + 1,
+            state_index - h1.len() + 1,
+            best_index,
             largest_remove,
-            best,
             bounds,
             states_searched,
         ));
-        best = best.min(cx);
+        best_index = best_index.min(best_child_index);
     }
 
-    cx
+    best_child_index
 }
 
+/// Recursive helper for the parallel version of index_search.
+///
+/// Inputs:
+/// - `mol`: The molecule whose assembly index is being calculated.
+/// - `matches`: The remaining non-overlapping isomorphic subgraph pairs.
+/// - `fragments`: TODO
+/// - `state_index`: The assembly index of this assembly state.
+/// - `best_index`: The smallest assembly index for all assembly states so far.
+/// - `largest_remove`: The size of the largest match removed so far.
+/// - `bounds`: The list of bounding strategies to apply.
+/// - `states_searched`: The number of assembly states searched so far.
 #[allow(clippy::too_many_arguments)]
-fn parallel_recurse_index_search(
+fn recurse_index_search_parallel(
     mol: &Molecule,
     matches: &[(BitSet, BitSet)],
     fragments: &[BitSet],
-    ix: usize,
+    state_index: usize,
+    best_index: AtomicUsize,
     largest_remove: usize,
-    best: AtomicUsize,
     bounds: &[Bound],
     states_searched: Arc<AtomicUsize>,
 ) -> usize {
-    let cx = AtomicUsize::from(ix);
+    // Keep track of the best assembly index found in any of this assembly
+    // state's children.
+    let best_child_index = AtomicUsize::from(state_index);
 
+    // Count this assembly state as searched.
     states_searched.fetch_add(1, Relaxed);
 
-    // Branch and Bound
-    for bound_type in bounds {
-        let best = best.load(Relaxed);
-        let exceeds = match bound_type {
-            Bound::Log => ix - log_bound(fragments) >= best,
-            Bound::IntChain => ix - addition_bound(fragments, largest_remove) >= best,
-            Bound::VecChainSimple => ix - vec_bound_simple(fragments, largest_remove, mol) >= best,
-            Bound::VecChainSmallFrags => {
-                ix - vec_bound_small_frags(fragments, largest_remove, mol) >= best
-            }
-        };
-        if exceeds {
-            return ix;
-        }
+    // Check if any bounds apply; if so, halt this search branch.
+    if bound_exceeded(
+        mol,
+        fragments,
+        state_index,
+        best_index.load(Relaxed),
+        largest_remove,
+        bounds,
+    ) {
+        return state_index;
     }
 
     // Search for duplicatable fragment
@@ -301,317 +283,177 @@ fn parallel_recurse_index_search(
         fractures.retain(|i| i.len() > 1);
         fractures.push(h1.clone());
 
-        let output = parallel_recurse_index_search(
+        let output = recurse_index_search_parallel(
             mol,
             &matches[i + 1..],
             &fractures,
-            ix - h1.len() + 1,
+            state_index - h1.len() + 1,
+            best_index.load(Relaxed).into(),
             largest_remove,
-            best.load(Relaxed).into(),
             bounds,
             states_searched.clone(),
         );
-        cx.fetch_min(output, Relaxed);
+        best_child_index.fetch_min(output, Relaxed);
 
-        best.fetch_min(cx.load(Relaxed), Relaxed);
+        best_index.fetch_min(best_child_index.load(Relaxed), Relaxed);
     });
 
-    cx.load(Relaxed)
+    best_child_index.load(Relaxed)
 }
 
-/// Computes information related to the assembly index of a molecule using the provided bounds.
+/// Computes a molecule's assembly index and related information using a top-
+/// down recursive search, parameterized by the specified options.
 ///
-/// The first result in the returned tuple is the assembly index of the molecule. The second result
-/// gives the number of duplicatable subgraphs (pairs of disjoint and isomorphic subgraphs) in the
-/// molecule. The third result is the number of states searched where a new state is considered to
-/// be searched each time a duplicatable subgraph is removed.
+/// See [`EnumerateMode`], [`CanonizeMode`], [`ParallelMode`], [`KernelMode`],
+/// and [`Bound`] for details on how to customize the top-down algorithm.
 ///
-/// If the search space of the molecule is large (>100) parallelization will be used.
+/// Notably, bounds are applied in the order they appear in the `bounds` slice.
+/// It is generally better to provide bounds that are quick to compute first.
 ///
-/// Bounds will be used in the order provided in the `bounds` slice. Execution along a search path
-/// will halt immediately after finding a bound that exceeds the current best assembly pathway. It
-/// is generally better to provide bounds that are quick to compute first.
+/// The results returned are:
+/// - `u32`: The molecule's assembly index.
+/// - `u32`: The molecule's count of non-overlapping isomorphic subgraph pairs.
+/// - `usize`: The total number of assembly states searched, where an assembly
+///   state is a collection of fragments; note that some states may be searched
+///   and thus counted by this value multiple times.
 ///
 /// # Example
 /// ```
-/// # use std::fs;
-/// # use std::path::PathBuf;
-/// # use assembly_theory::*;
-/// use assembly_theory::assembly::{Bound, index_search};
+/// # use std::{fs, path::PathBuf};
+/// use assembly_theory::{
+///     assembly::{index_search, ParallelMode},
+///     bounds::Bound,
+///     canonize::CanonizeMode,
+///     enumerate::EnumerateMode,
+///     kernels::KernelMode,
+///     loader::parse_molfile_str,
+/// };
 /// # fn main() -> Result<(), std::io::Error> {
-/// # let path = PathBuf::from(format!("./data/checks/benzene.mol"));
-/// // Read a molecule data file
-/// let molfile = fs::read_to_string(path).expect("Cannot read input file.");
-/// let benzene = loader::parse_molfile_str(&molfile).expect("Cannot parse molfile.");
+/// // Load a molecule from a .mol file.
+/// let path = PathBuf::from(format!("./data/checks/anthracene.mol"));
+/// let molfile = fs::read_to_string(path)?;
+/// let anthracene = parse_molfile_str(&molfile).expect("Parsing failure.");
 ///
-/// // Compute assembly index of benzene naively, with no bounds.
-/// let (slow_index, _, _) = index_search(&benzene, &[]);
+/// // Compute the molecule's assembly index without parallelism,
+/// // kernelization, bounds, or memoization.
+/// let (slow_index, _, _) = index_search(
+///     &anthracene,
+///     EnumerateMode::GrowErode,
+///     CanonizeMode::Nauty,
+///     ParallelMode::None,
+///     KernelMode::None,
+///     &[],
+///     false);
 ///
-/// // Compute assembly index of benzene with the log and integer chain bounds
-/// let (fast_index, _, _) = index_search(&benzene, &[Bound::Log, Bound::IntChain]);
+/// // Compute the molecule's assembly index with parallelism and some bounds.
+/// let (fast_index, _, _) = index_search(
+///     &anthracene,
+///     EnumerateMode::GrowErode,
+///     CanonizeMode::Nauty,
+///     ParallelMode::Always,
+///     KernelMode::None,
+///     &[Bound::Log, Bound::Int],
+///     false);
 ///
-/// assert_eq!(slow_index, 3);
-/// assert_eq!(fast_index, 3);
+/// assert_eq!(slow_index, 6);
+/// assert_eq!(fast_index, 6);
 /// # Ok(())
 /// # }
 /// ```
-pub fn index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize) {
+pub fn index_search(
+    mol: &Molecule,
+    enumerate_mode: EnumerateMode,
+    canonize_mode: CanonizeMode,
+    parallel_mode: ParallelMode,
+    kernel_mode: KernelMode,
+    bounds: &[Bound],
+    memoize: bool,
+) -> (u32, u32, usize) {
+    // Catch not-yet-implemented modes.
+    if parallel_mode == ParallelMode::DepthOne {
+        panic!("The chosen --parallel mode is not implemented yet!")
+    }
+    if kernel_mode != KernelMode::None {
+        panic!("The chosen --kernel mode is not implemented yet!")
+    }
+    if memoize {
+        panic!("--memoize is not implemented yet!")
+    }
+
+    // Enumerate and sort array of non-overlapping, isomorphic subgraph pairs.
+    let mut matches = matches(mol, enumerate_mode, canonize_mode).collect::<Vec<_>>();
+    matches.sort_by(|e1, e2| e2.0.len().cmp(&e1.0.len()));
+
+    // Initialize fragments as all individual edges.
     let mut init = BitSet::new();
     init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
 
-    // Create and sort matches array
-    let mut matches: Vec<(BitSet, BitSet)> = mol.matches().collect();
-    matches.sort_by(|e1, e2| e2.0.len().cmp(&e1.0.len()));
-
     let edge_count = mol.graph().edge_count();
 
-    let (index, total_search) = if matches.len() > PARALLEL_MATCH_SIZE_THRESHOLD {
-        let total_search = Arc::new(AtomicUsize::from(0));
-        let index = parallel_recurse_index_search(
-            mol,
-            &matches,
-            &[init],
-            edge_count - 1,
-            edge_count,
-            (edge_count - 1).into(),
-            bounds,
-            total_search.clone(),
-        );
-        let total_search = total_search.load(Relaxed);
-        (index as u32, total_search)
-    } else {
-        let mut total_search = 0;
-        let index = recurse_index_search(
-            mol,
-            &matches,
-            &[init],
-            edge_count - 1,
-            edge_count,
-            edge_count - 1,
-            bounds,
-            &mut total_search,
-        );
-        (index as u32, total_search)
-    };
+    // Use parallelism if specified by the parallel_mode and if the molecule's
+    // number of non-overlapping, isomorphic subgraph pairs is large enough;
+    // otherwise, run serially.
+    let (index, states_searched) =
+        if matches.len() > PARALLEL_MATCH_SIZE_THRESHOLD && parallel_mode == ParallelMode::Always {
+            let states_searched = Arc::new(AtomicUsize::from(0));
+            let index = recurse_index_search_parallel(
+                mol,
+                &matches,
+                &[init],
+                edge_count - 1,
+                (edge_count - 1).into(),
+                edge_count,
+                bounds,
+                states_searched.clone(),
+            );
+            let states_searched = states_searched.load(Relaxed);
+            (index as u32, states_searched)
+        } else {
+            let mut states_searched = 0;
+            let index = recurse_index_search_serial(
+                mol,
+                &matches,
+                &[init],
+                edge_count - 1,
+                edge_count - 1,
+                edge_count,
+                bounds,
+                &mut states_searched,
+            );
+            (index as u32, states_searched)
+        };
 
-    (index, matches.len() as u32, total_search)
+    (index, matches.len() as u32, states_searched)
 }
 
-/// Like [`index_search`], but no parallelism is used.
+/// Computes a molecule's assembly index using an efficient default strategy.
 ///
 /// # Example
 /// ```
-/// # use std::fs;
-/// # use std::path::PathBuf;
-/// # use assembly_theory::*;
-/// use assembly_theory::assembly::{Bound, serial_index_search};
+/// # use std::{fs, path::PathBuf};
+/// use assembly_theory::assembly::index;
+/// use assembly_theory::loader::parse_molfile_str;
+///
 /// # fn main() -> Result<(), std::io::Error> {
-/// # let path = PathBuf::from(format!("./data/checks/benzene.mol"));
-/// // Read a molecule data file
-/// let molfile = fs::read_to_string(path).expect("Cannot read input file.");
-/// let benzene = loader::parse_molfile_str(&molfile).expect("Cannot parse molfile.");
+/// // Load a molecule from a .mol file.
+/// let path = PathBuf::from(format!("./data/checks/anthracene.mol"));
+/// let molfile = fs::read_to_string(path)?;
+/// let anthracene = parse_molfile_str(&molfile).expect("Parsing failure.");
 ///
-/// // Compute assembly index of benzene naively, with no bounds.
-/// let (slow_index, _, _) = serial_index_search(&benzene, &[]);
-///
-/// // Compute assembly index of benzene with the log and integer chain bounds
-/// let (fast_index, _, _) = serial_index_search(&benzene, &[Bound::Log, Bound::IntChain]);
-///
-/// assert_eq!(slow_index, 3);
-/// assert_eq!(fast_index, 3);
+/// // Compute the molecule's assembly index.
+/// assert_eq!(index(&anthracene), 6);
 /// # Ok(())
 /// # }
 /// ```
-pub fn serial_index_search(mol: &Molecule, bounds: &[Bound]) -> (u32, u32, usize) {
-    let mut init = BitSet::new();
-    init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
-
-    // Create and sort matches array
-    let mut matches: Vec<(BitSet, BitSet)> = mol.matches().collect();
-    matches.sort_by(|e1, e2| e2.0.len().cmp(&e1.0.len()));
-
-    let edge_count = mol.graph().edge_count();
-    let mut total_search = 0;
-    let index = recurse_index_search(
-        mol,
-        &matches,
-        &[init],
-        edge_count - 1,
-        edge_count,
-        edge_count - 1,
-        bounds,
-        &mut total_search,
-    );
-    (index as u32, matches.len() as u32, total_search)
-}
-
-fn log_bound(fragments: &[BitSet]) -> usize {
-    let mut size = 0;
-    for f in fragments {
-        size += f.len();
-    }
-
-    size - (size as f32).log2().ceil() as usize
-}
-
-fn addition_bound(fragments: &[BitSet], m: usize) -> usize {
-    let mut max_s: usize = 0;
-    let mut frag_sizes: Vec<usize> = Vec::new();
-
-    for f in fragments {
-        frag_sizes.push(f.len());
-    }
-
-    let size_sum: usize = frag_sizes.iter().sum();
-
-    // Test for all sizes m of largest removed duplicate
-    for max in 2..m + 1 {
-        let log = (max as f32).log2().ceil();
-        let mut aux_sum: usize = 0;
-
-        for len in &frag_sizes {
-            aux_sum += (len / max) + (len % max != 0) as usize
-        }
-
-        max_s = max_s.max(size_sum - log as usize - aux_sum);
-    }
-
-    max_s
-}
-
-// Count number of unique edges in a fragment
-// Helper function for vector bounds
-fn unique_edges(fragment: &BitSet, mol: &Molecule) -> Vec<EdgeType> {
-    let g = mol.graph();
-    let mut nodes: Vec<Element> = Vec::new();
-    for v in g.node_weights() {
-        nodes.push(v.element());
-    }
-    let edges: Vec<petgraph::prelude::EdgeIndex> = g.edge_indices().collect();
-    let weights: Vec<Bond> = g.edge_weights().copied().collect();
-
-    // types will hold an element for every unique edge type in fragment
-    let mut types: Vec<EdgeType> = Vec::new();
-    for idx in fragment.iter() {
-        let bond = weights[idx];
-        let e = edges[idx];
-
-        let (e1, e2) = g.edge_endpoints(e).expect("bad");
-        let e1 = nodes[e1.index()];
-        let e2 = nodes[e2.index()];
-        let ends = if e1 < e2 { (e1, e2) } else { (e2, e1) };
-
-        let edge_type = EdgeType { bond, ends };
-
-        if types.contains(&edge_type) {
-            continue;
-        } else {
-            types.push(edge_type);
-        }
-    }
-
-    types
-}
-
-fn vec_bound_simple(fragments: &[BitSet], m: usize, mol: &Molecule) -> usize {
-    // Calculate s (total number of edges)
-    // Calculate z (number of unique edges)
-    let mut s = 0;
-    for f in fragments {
-        s += f.len();
-    }
-
-    let mut union_set = BitSet::new();
-    for f in fragments {
-        union_set.union_with(f);
-    }
-    let z = unique_edges(&union_set, mol).len();
-
-    (s - z) - ((s - z) as f32 / m as f32).ceil() as usize
-}
-
-fn vec_bound_small_frags(fragments: &[BitSet], m: usize, mol: &Molecule) -> usize {
-    let mut size_two_fragments: Vec<BitSet> = Vec::new();
-    let mut large_fragments: Vec<BitSet> = fragments.to_owned();
-    let mut indices_to_remove: Vec<usize> = Vec::new();
-
-    // Find and remove fragments of size 2
-    for (i, frag) in fragments.iter().enumerate() {
-        if frag.len() == 2 {
-            indices_to_remove.push(i);
-        }
-    }
-    for &index in indices_to_remove.iter().rev() {
-        let removed_bitset = large_fragments.remove(index);
-        size_two_fragments.push(removed_bitset);
-    }
-
-    // Compute z = num unique edges of large_fragments NOT also in size_two_fragments
-    let mut fragments_union = BitSet::new();
-    let mut size_two_fragments_union = BitSet::new();
-    for f in fragments {
-        fragments_union.union_with(f);
-    }
-    for f in size_two_fragments.iter() {
-        size_two_fragments_union.union_with(f);
-    }
-    let z = unique_edges(&fragments_union, mol).len()
-        - unique_edges(&size_two_fragments_union, mol).len();
-
-    // Compute s = total number of edges in fragments
-    // Compute sl = total number of edges in large fragments
-    let mut s = 0;
-    let mut sl = 0;
-    for f in fragments {
-        s += f.len();
-    }
-    for f in large_fragments {
-        sl += f.len();
-    }
-
-    // Find number of unique size two fragments
-    let mut size_two_types: Vec<(EdgeType, EdgeType)> = Vec::new();
-    for f in size_two_fragments.iter() {
-        let mut types = unique_edges(f, mol);
-        types.sort();
-        if types.len() == 1 {
-            size_two_types.push((types[0], types[0]));
-        } else {
-            size_two_types.push((types[0], types[1]));
-        }
-    }
-    size_two_types.sort();
-    size_two_types.dedup();
-
-    s - (z + size_two_types.len() + size_two_fragments.len())
-        - ((sl - z) as f32 / m as f32).ceil() as usize
-}
-
-/// Computes the assembly index of a molecule using an effecient bounding strategy
-/// # Example
-/// ```
-/// # use std::fs;
-/// # use std::path::PathBuf;
-/// # use assembly_theory::*;
-/// # fn main() -> Result<(), std::io::Error> {
-/// # let path = PathBuf::from(format!("./data/checks/benzene.mol"));
-/// // Read a molecule data file
-/// let molfile = fs::read_to_string(path).expect("Cannot read input file.");
-/// let benzene = loader::parse_molfile_str(&molfile).expect("Cannot parse molfile.");
-///
-/// // Compute assembly index of benzene
-/// assert_eq!(assembly::index(&benzene), 3);
-/// # Ok(())
-/// # }
-/// ```
-pub fn index(m: &Molecule) -> u32 {
+pub fn index(mol: &Molecule) -> u32 {
     index_search(
-        m,
-        &[
-            Bound::IntChain,
-            Bound::VecChainSimple,
-            Bound::VecChainSmallFrags,
-        ],
+        mol,
+        EnumerateMode::GrowErode,
+        CanonizeMode::Nauty,
+        ParallelMode::Always,
+        KernelMode::None,
+        &[Bound::Int, Bound::VecSimple, Bound::VecSmallFrags],
+        false,
     )
     .0
 }

@@ -1,11 +1,16 @@
 //! Test assembly-theory correctness against all reference datasets.
 
-use csv::Reader;
 use std::{collections::HashMap, ffi::OsStr, fs, path::Path};
 
+use csv::Reader;
+
 use assembly_theory::{
-    assembly::{index_search, serial_index_search, Bound},
-    loader,
+    assembly::{index_search, ParallelMode},
+    bounds::Bound,
+    canonize::CanonizeMode,
+    enumerate::EnumerateMode,
+    kernels::KernelMode,
+    loader::parse_molfile_str,
 };
 
 fn load_ma_index(dataset: &str) -> HashMap<String, u32> {
@@ -53,17 +58,26 @@ fn test_reference_dataset(dataset: &str, bounds: &[Bound], serial: bool) {
         }
 
         // Load the .mol file as an assembly_theory::molecule::Molecule.
-        let mol = loader::parse_molfile_str(
+        let mol = parse_molfile_str(
             &fs::read_to_string(name.clone()).expect(&format!("Could not read file {name:?}")),
         )
         .expect(&format!("Failed to parse {name:?}"));
 
         // Calculate the molecule's assembly index.
-        let (index, _, _) = if serial {
-            serial_index_search(&mol, bounds)
+        let pmode = if serial {
+            ParallelMode::None
         } else {
-            index_search(&mol, bounds)
+            ParallelMode::Always
         };
+        let (index, _, _) = index_search(
+            &mol,
+            EnumerateMode::GrowErode,
+            CanonizeMode::Nauty,
+            pmode,
+            KernelMode::None,
+            bounds,
+            false,
+        );
 
         // Compare calculated assembly index to ground truth.
         let molname = name.file_name().unwrap().to_str().unwrap().to_string();
@@ -95,16 +109,12 @@ fn gdb13_1201_logbound() {
 
 #[test]
 fn gdb13_1201_intbound() {
-    test_reference_dataset("gdb13_1201", &[Bound::IntChain], false);
+    test_reference_dataset("gdb13_1201", &[Bound::Int], false);
 }
 
 #[test]
 fn gdb13_1201_allbounds() {
-    let bounds = vec![
-        Bound::IntChain,
-        Bound::VecChainSimple,
-        Bound::VecChainSmallFrags,
-    ];
+    let bounds = vec![Bound::Int, Bound::VecSimple, Bound::VecSmallFrags];
     test_reference_dataset("gdb13_1201", &bounds, false);
 }
 
@@ -120,16 +130,12 @@ fn gdb13_1201_logbound_serial() {
 
 #[test]
 fn gdb13_1201_intbound_serial() {
-    test_reference_dataset("gdb13_1201", &[Bound::IntChain], true);
+    test_reference_dataset("gdb13_1201", &[Bound::Int], true);
 }
 
 #[test]
 fn gdb13_1201_allbounds_serial() {
-    let bounds = [
-        Bound::IntChain,
-        Bound::VecChainSimple,
-        Bound::VecChainSmallFrags,
-    ];
+    let bounds = [Bound::Int, Bound::VecSimple, Bound::VecSmallFrags];
     test_reference_dataset("gdb13_1201", &bounds, true);
 }
 
@@ -146,16 +152,12 @@ fn gdb17_200_logbound() {
 
 #[test]
 fn gdb17_200_intbound() {
-    test_reference_dataset("gdb17_200", &[Bound::IntChain], false);
+    test_reference_dataset("gdb17_200", &[Bound::Int], false);
 }
 
 #[test]
 fn gdb17_200_allbounds() {
-    let bounds = [
-        Bound::IntChain,
-        Bound::VecChainSimple,
-        Bound::VecChainSmallFrags,
-    ];
+    let bounds = [Bound::Int, Bound::VecSimple, Bound::VecSmallFrags];
     test_reference_dataset("gdb17_200", &bounds, false);
 }
 
@@ -172,16 +174,12 @@ fn checks_logbound() {
 
 #[test]
 fn checks_intbound() {
-    test_reference_dataset("checks", &[Bound::IntChain], false);
+    test_reference_dataset("checks", &[Bound::Int], false);
 }
 
 #[test]
 fn checks_allbounds() {
-    let bounds = [
-        Bound::IntChain,
-        Bound::VecChainSimple,
-        Bound::VecChainSmallFrags,
-    ];
+    let bounds = [Bound::Int, Bound::VecSimple, Bound::VecSmallFrags];
     test_reference_dataset("checks", &bounds, false);
 }
 
@@ -200,16 +198,12 @@ fn checks_allbounds() {
 #[test]
 #[ignore = "expensive test"]
 fn coconut_55_intbound() {
-    test_reference_dataset("coconut_55", &[Bound::IntChain], false);
+    test_reference_dataset("coconut_55", &[Bound::Int], false);
 }
 
 #[test]
 #[ignore = "expensive test"]
 fn coconut_55_allbounds() {
-    let bounds = [
-        Bound::IntChain,
-        Bound::VecChainSimple,
-        Bound::VecChainSmallFrags,
-    ];
+    let bounds = [Bound::Int, Bound::VecSimple, Bound::VecSmallFrags];
     test_reference_dataset("coconut_55", &bounds, false);
 }

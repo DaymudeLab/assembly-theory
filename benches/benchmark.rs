@@ -1,12 +1,14 @@
+use std::{ffi::OsStr, fs, iter::zip, path::Path};
+
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use std::ffi::OsStr;
-use std::fs;
-use std::iter::zip;
-use std::path::Path;
 
 use assembly_theory::{
-    assembly::{index_search, Bound},
-    loader,
+    assembly::{index_search, ParallelMode},
+    bounds::Bound,
+    canonize::CanonizeMode,
+    enumerate::EnumerateMode,
+    kernels::KernelMode,
+    loader::parse_molfile_str,
     molecule::Molecule,
 };
 
@@ -19,12 +21,8 @@ pub fn reference_datasets(c: &mut Criterion) {
     let bounds = [
         vec![],
         vec![Bound::Log],
-        vec![Bound::IntChain],
-        vec![
-            Bound::IntChain,
-            Bound::VecChainSimple,
-            Bound::VecChainSmallFrags,
-        ],
+        vec![Bound::Int],
+        vec![Bound::Int, Bound::VecSimple, Bound::VecSmallFrags],
     ];
     let bound_strs = ["naive", "logbound", "intbound", "allbounds"];
 
@@ -39,7 +37,7 @@ pub fn reference_datasets(c: &mut Criterion) {
                 continue;
             }
             mol_list.push(
-                loader::parse_molfile_str(
+                parse_molfile_str(
                     &fs::read_to_string(name.clone())
                         .expect(&format!("Could not read file {name:?}")),
                 )
@@ -53,7 +51,15 @@ pub fn reference_datasets(c: &mut Criterion) {
             group.bench_with_input(BenchmarkId::new(*dataset, &bound_str), bound, |b, bound| {
                 b.iter(|| {
                     for mol in &mol_list {
-                        index_search(&mol, &bound);
+                        index_search(
+                            &mol,
+                            EnumerateMode::GrowErode,
+                            CanonizeMode::Nauty,
+                            ParallelMode::Always,
+                            KernelMode::None,
+                            &bound,
+                            false,
+                        );
                     }
                 });
             });
