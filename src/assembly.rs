@@ -203,7 +203,7 @@ fn recurse_index_search_serial(
             matches_graph.weight(v) + 1
         }
         else {
-            return state_index;
+            return (state_index, 1);
         }
     };
     // If any bounds are exceeded, halt this search branch.
@@ -234,7 +234,6 @@ fn recurse_index_search_serial(
             // Recurse using the remaining matches and updated fragments.
             let (child_index, child_states_searched) = recurse_index_search_serial(
                 mol,
-                &matches,
                 &fractures,
                 state_index - h1.len() + 1,
                 best_index,
