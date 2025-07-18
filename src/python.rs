@@ -19,8 +19,8 @@ use crate::{
 /// Mirrors the `enumerate::EnumerateMode` enum.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 enum PyEnumerateMode {
-    Bfs,
-    BfsPrune,
+    Extend,
+    ExtendPrune,
     GrowErode,
     GrowErodeIterative,
 }
@@ -69,8 +69,8 @@ impl FromStr for PyEnumerateMode {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "bfs" => Ok(PyEnumerateMode::Bfs),
-            "bfsprune" => Ok(PyEnumerateMode::BfsPrune),
+            "extend" => Ok(PyEnumerateMode::Extend),
+            "extendprune" => Ok(PyEnumerateMode::ExtendPrune),
             "growerode" => Ok(PyEnumerateMode::GrowErode),
             "growerodeiterative" => Ok(PyEnumerateMode::GrowErodeIterative),
             _ => Err(PyValueError::new_err(format!("Invalid enumerate: {s}"))),
@@ -246,8 +246,8 @@ pub fn _index_search(
 
     // Parse the various modes and bound options.
     let enumerate_mode = match PyEnumerateMode::from_str(&enumerate_str) {
-        Ok(PyEnumerateMode::Bfs) => EnumerateMode::Bfs,
-        Ok(PyEnumerateMode::BfsPrune) => EnumerateMode::BfsPrune,
+        Ok(PyEnumerateMode::Extend) => EnumerateMode::ExtendPrune,
+        Ok(PyEnumerateMode::ExtendPrune) => EnumerateMode::ExtendPrune,
         Ok(PyEnumerateMode::GrowErode) => EnumerateMode::GrowErode,
         Ok(PyEnumerateMode::GrowErodeIterative) => EnumerateMode::GrowErodeIterative,
         _ => {
@@ -336,8 +336,8 @@ pub fn _index_search_verbose(
 
     // Parse the various modes and bound options.
     let enumerate_mode = match PyEnumerateMode::from_str(&enumerate_str) {
-        Ok(PyEnumerateMode::Bfs) => EnumerateMode::Bfs,
-        Ok(PyEnumerateMode::BfsPrune) => EnumerateMode::BfsPrune,
+        Ok(PyEnumerateMode::Extend) => EnumerateMode::Extend,
+        Ok(PyEnumerateMode::ExtendPrune) => EnumerateMode::ExtendPrune,
         Ok(PyEnumerateMode::GrowErode) => EnumerateMode::GrowErode,
         Ok(PyEnumerateMode::GrowErodeIterative) => EnumerateMode::GrowErodeIterative,
         _ => {

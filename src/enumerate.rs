@@ -16,11 +16,11 @@ use crate::{
 /// Strategy for enumerating connected, non-induced subgraphs.
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
 pub enum EnumerateMode {
-    /// Grow connected subgraphs from each edge using BFS.
-    Bfs,
-    /// Like Bfs, but at each level of the BFS, prune any subgraphs that do not
-    /// have isomorphic components since these will not be useful later.
-    BfsPrune,
+    /// Grow connected subgraphs from each edge using iterative extension.
+    Extend,
+    /// Like Extend, but at each level, prune any subgraphs that do not have
+    /// isomorphic components since these will not be useful later.
+    ExtendPrune,
     /// From a subgraph, choose an edge from its boundary and recursively grow
     /// it by adding this edge or erode its remainder by discarding the edge.
     GrowErode,
@@ -32,11 +32,53 @@ pub enum EnumerateMode {
 /// molecular graph `mol` using the algorithm specified by `mode`.
 pub fn enumerate_subgraphs(mol: &Molecule, mode: EnumerateMode) -> impl Iterator<Item = BitSet> {
     match mode {
+        EnumerateMode::Extend => extend_iterative(mol).into_iter(),
         EnumerateMode::GrowErode => grow_erode(mol).into_iter(),
         _ => {
             panic!("The chosen --enumerate mode is not implemented yet!");
         }
     }
+}
+
+/// Enumerate connected, non-induced subgraphs with at most |E|/2 edges using
+/// a process of iterative extension starting from each individual edge.
+fn extend_iterative(mol: &Molecule) -> HashSet<BitSet> {
+    // Maintain a vector of sets of subgraphs at each level of the process,
+    // starting with all edges individually at the first level.
+    let mut subgraphs: Vec<HashSet<BitSet>> =
+        vec![HashSet::from_iter(mol.graph().edge_indices().map(|ix| {
+            let mut set = BitSet::new();
+            set.insert(ix.index());
+            set
+        }))];
+
+    // At each level, collect and deduplicate all ways of extending subgraphs
+    // by one neighboring edge.
+    for level in 0..(mol.graph().edge_count() / 2) {
+        let mut extended_subgraphs = HashSet::new();
+        for subgraph in &subgraphs[level] {
+            // Find all "frontier" edges incident to this subgraph (this
+            // contains both this subgraph's edges and its edge boundary).
+            let frontier = BitSet::from_iter(subgraph
+                .iter()
+                .map(|i| edge_neighbors(&mol.graph(), EdgeIndex::new(i)).map(|ix| ix.index()))
+                .flatten(),
+            );
+            
+            // Collect and deduplicate all subgraphs obtained by extending the
+            // current subgraph using one edge from its boundary.
+            for edge in frontier.difference(&subgraph) {
+                let mut extended_subgraph = subgraph.clone();
+                extended_subgraph.insert(edge);
+                extended_subgraphs.insert(extended_subgraph);
+            }
+        }
+
+        subgraphs.push(extended_subgraphs);
+    }
+
+    // Return an iterator over subgraphs, skipping singleton edges.
+    subgraphs.into_iter().skip(1).flatten().collect::<HashSet<_>>()
 }
 
 /// Enumerate connected, non-induced subgraphs with at most |E|/2 edges; at
@@ -105,7 +147,7 @@ fn recurse_grow_erode(
         }
     } else if subset.len() > 1 {
         // When all candidate edges have been exhausted, add this subset as a
-        // new subgraph if it is nonempty.
+        // new subgraph if it is more than just a singleton edge (basic unit).
         subgraphs.insert(subset);
     }
 }
@@ -214,54 +256,3 @@ pub fn matches_by_iterative_expansion(mol: &Molecule) -> impl Iterator<Item = (B
     matches.into_iter()
 }
 
-pub fn naive_matches_by_iterative_expansion(
-    mol: &Molecule,
-) -> impl Iterator<Item = (BitSet, BitSet)> {
-    let mut solutions: Vec<HashSet<BitSet>> =
-        vec![HashSet::from_iter(mol.graph().edge_indices().map(|ix| {
-            let mut set = BitSet::new();
-            set.insert(ix.index());
-            set
-        }))];
-
-    for ix in 0..(mol.graph().edge_count() / 2) {
-        let mut nexts = HashSet::new();
-        for subgraph in &solutions[ix] {
-            let neighborhood = BitSet::from_iter(
-                mol.graph()
-                    .edge_indices()
-                    .map(|ix| edge_neighbors(&mol.graph(), ix).map(|e| e.index()))
-                    .flatten(),
-            );
-            for neighbor in neighborhood.difference(&subgraph) {
-                let mut next = subgraph.clone();
-                next.insert(neighbor);
-                nexts.insert(next);
-            }
-        }
-        solutions.push(nexts);
-    }
-
-    let mut isomorphic_map = HashMap::<CanonLabeling<AtomOrBond>, Vec<BitSet>>::new();
-    for subgraph in solutions.into_iter().skip(1).flatten() {
-        let cgraph = subgraph_to_cgraph(mol, &subgraph);
-        let repr = CanonLabeling::new(&cgraph);
-
-        isomorphic_map
-            .entry(repr)
-            .and_modify(|bucket| bucket.push(subgraph.clone()))
-            .or_insert(vec![subgraph.clone()]);
-    }
-
-    let mut matches = Vec::new();
-    for bucket in isomorphic_map.values() {
-        for (i, first) in bucket.iter().enumerate() {
-            for second in &bucket[i..] {
-                if first.is_disjoint(second) {
-                    matches.push((first.clone(), second.clone()));
-                }
-            }
-        }
-    }
-    matches.into_iter()
-}
