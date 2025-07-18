@@ -107,7 +107,7 @@ fn matches(
 
     // Sort pairs in a deterministic order and return.
     matches.sort_by(|e1, e2| {
-        let ord = vec![
+        let ord = [
             e2.0.len().cmp(&e1.0.len()), // Decreasing subgraph size.
             e1.0.cmp(&e2.0),             // First subgraph lexicographical.
             e1.1.cmp(&e2.1),             // Second subgraph lexicographical.
