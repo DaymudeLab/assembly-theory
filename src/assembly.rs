@@ -108,9 +108,9 @@ fn matches(
     // Sort pairs in a deterministic order and return.
     matches.sort_by(|e1, e2| {
         let ord = vec![
-            e2.0.len().cmp(&e1.0.len()),  // Decreasing subgraph size.
-            e1.0.cmp(&e2.0),              // First subgraph lexicographical.
-            e1.1.cmp(&e2.1)               // Second subgraph lexicographical.
+            e2.0.len().cmp(&e1.0.len()), // Decreasing subgraph size.
+            e1.0.cmp(&e2.0),             // First subgraph lexicographical.
+            e1.1.cmp(&e2.1),             // Second subgraph lexicographical.
         ];
         let mut i = 0;
         while ord[i] == std::cmp::Ordering::Equal {
@@ -119,6 +119,55 @@ fn matches(
         ord[i]
     });
     matches.into_iter()
+}
+
+/// Determine the fragments produced by removing the given pair of duplicatable
+/// subgraphs and then adding one back; return None if not possible.
+fn fractures(mol: &Molecule, fragments: &[BitSet], h1: &BitSet, h2: &BitSet) -> Option<Vec<BitSet>> {
+    // Attempt to find fragments f1 and f2 containing h1 and h2, respectively;
+    // if either do not exist, exit without further fragmentation.
+    // TODO: Are repeated .find() calls across recursion wasteful? Does this
+    // repeat checks of the same matches being subsets of the same fragments?
+    // TODO: Is this partially what Garrett's CompatGraph solves?
+    let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
+    let f2 = fragments.iter().enumerate().find(|(_, c)| h2.is_subset(c));
+    let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) else {
+        return None;
+    };
+
+    let mut fractures = fragments.to_owned();
+
+    // If the same fragment f1 (== f2) contains both h1 and h2, replace this
+    // one fragment f1 with all connected components comprising f1 - (h1 U h2).
+    // Otherwise, replace fragments f1 and f2 with all connected components
+    // comprising f1 - h1 and f2 - h2, respectively.
+    if i1 == i2 {
+        let mut union = h1.clone();
+        union.union_with(h2);
+        let mut difference = f1.clone();
+        difference.difference_with(&union);
+        let c = connected_components_under_edges(mol.graph(), &difference);
+        fractures.extend(c);
+        fractures.swap_remove(i1);
+    } else {
+        let mut diff1 = f1.clone();
+        diff1.difference_with(h1);
+        let c1 = connected_components_under_edges(mol.graph(), &diff1);
+        fractures.extend(c1);
+
+        let mut diff2 = f2.clone();
+        diff2.difference_with(h2);
+        let c2 = connected_components_under_edges(mol.graph(), &diff2);
+        fractures.extend(c2);
+
+        fractures.swap_remove(i1.max(i2));
+        fractures.swap_remove(i1.min(i2));
+    }
+
+    // Drop any singleton fragments, add h1 as a fragment, and return.
+    fractures.retain(|i| i.len() > 1);
+    fractures.push(h1.clone());
+    Some(fractures)
 }
 
 /// Recursive helper for the serial version of index_search.
@@ -134,7 +183,7 @@ fn matches(
 ///
 /// Returns, from this assembly state and any of its descendents:
 /// - `usize`: The best assembly index found.
-/// - `usize`: The number of assembly states searched. 
+/// - `usize`: The number of assembly states searched.
 #[allow(clippy::too_many_arguments)]
 fn recurse_index_search_serial(
     mol: &Molecule,
@@ -162,62 +211,28 @@ fn recurse_index_search_serial(
     let mut best_child_index = state_index;
     let mut states_searched = 1;
 
-    // Search for duplicatable fragment
+    // For every pair of duplicatable subgraphs compatible with the current set
+    // of fragments, recurse using the fragments obtained by removing this pair
+    // and adding one subgraph back.
     for (i, (h1, h2)) in matches.iter().enumerate() {
-        let mut fractures = fragments.to_owned();
-        let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
-        let f2 = fragments.iter().enumerate().find(|(_, c)| h2.is_subset(c));
+        if let Some(fractures) = fractures(mol, fragments, h1, h2) {
+            // Recurse using the remaining matches and updated fragments.
+            let (child_index, child_states_searched) = recurse_index_search_serial(
+                mol,
+                &matches[i + 1..],
+                &fractures,
+                state_index - h1.len() + 1,
+                best_index,
+                h1.len(),
+                bounds,
+            );
 
-        let largest_remove = h1.len();
-
-        let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) else {
-            continue;
-        };
-
-        // All of these clones are on bitsets and cheap enough
-        if i1 == i2 {
-            let mut union = h1.clone();
-            union.union_with(h2);
-            let mut difference = f1.clone();
-            difference.difference_with(&union);
-            let c = connected_components_under_edges(mol.graph(), &difference);
-            fractures.extend(c);
-            fractures.swap_remove(i1);
-        } else {
-            let mut f1r = f1.clone();
-            f1r.difference_with(h1);
-            let mut f2r = f2.clone();
-            f2r.difference_with(h2);
-
-            let c1 = connected_components_under_edges(mol.graph(), &f1r);
-            let c2 = connected_components_under_edges(mol.graph(), &f2r);
-
-            fractures.extend(c1);
-            fractures.extend(c2);
-
-            fractures.swap_remove(i1.max(i2));
-            fractures.swap_remove(i1.min(i2));
+            // Update the best assembly indices (across children states and
+            // the entire search) and the number of descendant states searched.
+            best_child_index = best_child_index.min(child_index);
+            best_index = best_index.min(best_child_index);
+            states_searched += child_states_searched;
         }
-
-        fractures.retain(|i| i.len() > 1);
-        fractures.push(h1.clone());
-
-        // Recurse using TODO.
-        let (child_index, child_states_searched) = recurse_index_search_serial(
-            mol,
-            &matches[i + 1..],
-            &fractures,
-            state_index - h1.len() + 1,
-            best_index,
-            largest_remove,
-            bounds,
-        );
-
-        // Update the best assembly indices (across children states and across
-        // the entire search) and the number of descendant states searched.
-        best_child_index = best_child_index.min(child_index);
-        best_index = best_index.min(best_child_index);
-        states_searched += child_states_searched;
     }
 
     (best_child_index, states_searched)
