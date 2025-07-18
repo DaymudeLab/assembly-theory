@@ -131,7 +131,10 @@ fn matches(
 /// - `best_index`: The smallest assembly index for all assembly states so far.
 /// - `largest_remove`: The size of the largest match removed so far.
 /// - `bounds`: The list of bounding strategies to apply.
-/// - `states_searched`: The number of assembly states searched so far.
+///
+/// Returns, from this assembly state and any of its descendents:
+/// - `usize`: The best assembly index found.
+/// - `usize`: The number of assembly states searched. 
 #[allow(clippy::too_many_arguments)]
 fn recurse_index_search_serial(
     mol: &Molecule,
@@ -141,16 +144,8 @@ fn recurse_index_search_serial(
     mut best_index: usize,
     largest_remove: usize,
     bounds: &[Bound],
-    states_searched: &mut usize,
-) -> usize {
-    // Keep track of the best assembly index found in any of this assembly
-    // state's children.
-    let mut best_child_index = state_index;
-
-    // Count this assembly state as searched.
-    *states_searched += 1;
-
-    // Check if any bounds apply; if so, halt this search branch.
+) -> (usize, usize) {
+    // If any bounds are exceeded, halt this search branch.
     if bound_exceeded(
         mol,
         fragments,
@@ -159,8 +154,13 @@ fn recurse_index_search_serial(
         largest_remove,
         bounds,
     ) {
-        return state_index;
+        return (state_index, 1);
     }
+
+    // Keep track of the best assembly index found in any of this assembly
+    // state's children and the number of states searched, including this one.
+    let mut best_child_index = state_index;
+    let mut states_searched = 1;
 
     // Search for duplicatable fragment
     for (i, (h1, h2)) in matches.iter().enumerate() {
@@ -202,7 +202,8 @@ fn recurse_index_search_serial(
         fractures.retain(|i| i.len() > 1);
         fractures.push(h1.clone());
 
-        best_child_index = best_child_index.min(recurse_index_search_serial(
+        // Recurse using TODO.
+        let (child_index, child_states_searched) = recurse_index_search_serial(
             mol,
             &matches[i + 1..],
             &fractures,
@@ -210,12 +211,16 @@ fn recurse_index_search_serial(
             best_index,
             largest_remove,
             bounds,
-            states_searched,
-        ));
+        );
+
+        // Update the best assembly indices (across children states and across
+        // the entire search) and the number of descendant states searched.
+        best_child_index = best_child_index.min(child_index);
         best_index = best_index.min(best_child_index);
+        states_searched += child_states_searched;
     }
 
-    best_child_index
+    (best_child_index, states_searched)
 }
 
 /// Recursive helper for the depth-one parallel version of index_search.
@@ -574,13 +579,10 @@ pub fn index_search(
 
     let edge_count = mol.graph().edge_count();
 
-    // Use parallelism if specified by the parallel_mode and if the molecule's
-    // number of non-overlapping, isomorphic subgraph pairs is large enough;
-    // otherwise, run serially.
+    // Search for the shortest assembly pathway recursively.
     let (index, states_searched) = match parallel_mode {
         ParallelMode::None => {
-            let mut states_searched = 0;
-            let index = recurse_index_search_serial(
+            let (index, states_searched) = recurse_index_search_serial(
                 mol,
                 &matches,
                 &[init],
@@ -588,7 +590,6 @@ pub fn index_search(
                 edge_count - 1,
                 edge_count,
                 bounds,
-                &mut states_searched,
             );
             (index as u32, states_searched)
         }
