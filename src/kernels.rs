@@ -19,7 +19,7 @@ pub enum KernelMode {
     Always,
 }
 
-fn deletion_kernel(g: &CompatGraph, mut subgraph: BitSet) -> BitSet {
+pub fn deletion_kernel(g: &CompatGraph, mut subgraph: BitSet) -> BitSet{
     let subgraph_copy = subgraph.clone();
 
     for v in subgraph_copy.iter() {
@@ -57,7 +57,7 @@ fn deletion_kernel(g: &CompatGraph, mut subgraph: BitSet) -> BitSet {
     subgraph
 }
 
-fn inclusion_kernel(g: &CompatGraph, subgraph: &BitSet) -> Vec<usize> {
+pub fn inclusion_kernel(g: &CompatGraph, subgraph: &BitSet) -> Vec<usize> {
     let mut kernel = Vec::new();
     let tot = subgraph.iter().map(|v| g.weight(v)).sum::<usize>();
 

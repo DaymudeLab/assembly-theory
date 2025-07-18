@@ -34,7 +34,7 @@ use crate::{
     bounds::{bound_exceeded, Bound},
     canonize::{canonize, CanonizeMode},
     enumerate::{enumerate_subgraphs, EnumerateMode},
-    kernels::KernelMode,
+    kernels::{deletion_kernel, inclusion_kernel, KernelMode},
     molecule::Molecule,
     utils::connected_components_under_edges,
     reductions::CompatGraph,
@@ -195,8 +195,10 @@ fn recurse_index_search_serial(
     state_index: usize,
     best_index: Arc<AtomicUsize>,
     bounds: &[Bound],
+    kernel_mode: KernelMode,
     matches_graph: &CompatGraph,
-    subgraph: BitSet,
+    mut subgraph: BitSet,
+    depth: usize,
 ) -> (usize, usize) {
     let largest_remove = {
         if let Some(v) = subgraph.iter().next() {
@@ -206,6 +208,11 @@ fn recurse_index_search_serial(
             return (state_index, 1);
         }
     };
+    if kernel_mode == KernelMode::Always ||
+       (kernel_mode == KernelMode::Once && depth == 0) ||
+       (kernel_mode == KernelMode::DepthOne && depth <= 1) {
+        subgraph = deletion_kernel(matches_graph, subgraph);
+    }
 
     // If any bounds are exceeded, halt this search branch.
     if bound_exceeded(
@@ -241,8 +248,10 @@ fn recurse_index_search_serial(
                 state_index - h1.len() + 1,
                 best_index.clone(),
                 bounds,
+                kernel_mode,
                 matches_graph,
                 subgraph_clone,
+                depth + 1,
             );
 
             // Update the best assembly indices (across children states and
@@ -255,6 +264,7 @@ fn recurse_index_search_serial(
 
     (best_child_index, states_searched)
 }
+
 /// Recursive helper for the depth-one parallel version of index_search.
 ///
 /// Inputs:
@@ -274,6 +284,7 @@ fn recurse_index_search_depthone(
     state_index: usize,
     best_index: Arc<AtomicUsize>,
     bounds: &[Bound],
+    kernel_mode: KernelMode,
     matches_graph: &CompatGraph,
     subgraph: BitSet,
 ) -> (usize, usize) {
@@ -295,8 +306,10 @@ fn recurse_index_search_depthone(
                 state_index - h1.len() + 1,
                 best_index.clone(),
                 bounds,
+                kernel_mode,
                 matches_graph,
                 subgraph_clone,
+                1
             );
 
             // Update the best assembly indices (across children states and
@@ -457,9 +470,6 @@ pub fn index_search(
     memoize: bool,
 ) -> (u32, u32, usize) {
     // Catch not-yet-implemented modes.
-    if kernel_mode != KernelMode::None {
-        panic!("The chosen --kernel mode is not implemented yet!")
-    }
     if memoize {
         panic!("--memoize is not implemented yet!")
     }
@@ -488,8 +498,10 @@ pub fn index_search(
                 edge_count - 1,
                 best_index,
                 bounds,
+                kernel_mode,
                 &matches_graph,
                 subgraph,
+                0,
             )
         }
         ParallelMode::DepthOne => {
@@ -500,6 +512,7 @@ pub fn index_search(
                 edge_count - 1,
                 best_index,
                 bounds,
+                kernel_mode,
                 &matches_graph,
                 subgraph,
             )
