@@ -275,6 +275,8 @@ fn recurse_index_search_depthone(
     state_index: usize,
     best_index: Arc<AtomicUsize>,
     bounds: &[Bound],
+    matches_graph: &CompatGraph,
+    subgraph: BitSet,
 ) -> (usize, usize) {
     // Keep track of the number of states searched, including this one.
     let states_searched = Arc::new(AtomicUsize::from(1));
@@ -282,8 +284,11 @@ fn recurse_index_search_depthone(
     // For every pair of duplicatable subgraphs compatible with the current set
     // of fragments, recurse using the fragments obtained by removing this pair
     // and adding one subgraph back.
-    matches.par_iter().enumerate().for_each(|(i, (h1, h2))| {
+    subgraph.par_iter().for_each(|v| {
+        let (h1, h2) = matches_graph.matches(v);
         if let Some(fractures) = fractures(mol, fragments, h1, h2) {
+            let subgraph_clone = matches_graph.forward_neighbors(v, &subgraph);
+
             // Recurse using the remaining matches and updated fragments.
             let (child_index, child_states_searched) = recurse_index_search_depthone_helper(
                 mol,
@@ -291,8 +296,9 @@ fn recurse_index_search_depthone(
                 &fractures,
                 state_index - h1.len() + 1,
                 best_index.clone(),
-                h1.len(),
                 bounds,
+                matches_graph,
+                subgraph_clone,
             );
 
             // Update the best assembly indices (across children states and
@@ -327,9 +333,19 @@ fn recurse_index_search_depthone_helper(
     fragments: &[BitSet],
     state_index: usize,
     best_index: Arc<AtomicUsize>,
-    largest_remove: usize,
     bounds: &[Bound],
+    matches_graph: &CompatGraph,
+    subgraph: BitSet,
 ) -> (usize, usize) {
+    let largest_remove = {
+        if let Some(v) = subgraph.iter().next() {
+            matches_graph.weight(v) + 1
+        }
+        else {
+            return (state_index, 1);
+        }
+    };
+
     // If any bounds are exceeded, halt this search branch.
     if bound_exceeded(
         mol,
@@ -338,6 +354,8 @@ fn recurse_index_search_depthone_helper(
         best_index.load(Relaxed),
         largest_remove,
         bounds,
+        matches_graph,
+        &subgraph,
     ) {
         return (state_index, 1);
     }
@@ -350,7 +368,7 @@ fn recurse_index_search_depthone_helper(
     // For every pair of duplicatable subgraphs compatible with the current set
     // of fragments, recurse using the fragments obtained by removing this pair
     // and adding one subgraph back.
-    for (i, (h1, h2)) in matches.iter().enumerate() {
+    for v in subgraph.iter() {
         if let Some(fractures) = fractures(mol, fragments, h1, h2) {
             // Recurse using the remaining matches and updated fragments.
             let (child_index, child_states_searched) = recurse_index_search_depthone_helper(
@@ -359,8 +377,9 @@ fn recurse_index_search_depthone_helper(
                 &fractures,
                 state_index - h1.len() + 1,
                 best_index.clone(),
-                h1.len(),
                 bounds,
+                matches_graph,
+                subgraph_clone,
             );
 
             // Update the best assembly indices (across children states and
@@ -523,6 +542,11 @@ pub fn index_search(
 
     // Enumerate non-overlapping isomorphic subgraph pairs.
     let matches = matches(mol, enumerate_mode, canonize_mode).collect::<Vec<_>>();
+    let matches_graph = CompatGraph::new(matches);
+    let mut subgraph = BitSet::with_capacity(matches_graph.len());
+    for i in 0..matches_graph.len() {
+        subgraph.insert(i);
+    }
 
     // Initialize the first fragment as the entire graph.
     let mut init = BitSet::new();
@@ -534,11 +558,6 @@ pub fn index_search(
     let (index, states_searched) = match parallel_mode {
         ParallelMode::None => {
             // TODO: remove matches.clone() call
-            let matches_graph = CompatGraph::new(matches.clone());
-            let mut subgraph = BitSet::with_capacity(matches_graph.len());
-            for i in 0..matches_graph.len() {
-                subgraph.insert(i);
-            }
 
             recurse_index_search_serial(
                 mol,
@@ -559,6 +578,8 @@ pub fn index_search(
                 edge_count - 1,
                 best_index,
                 bounds,
+                &matches_graph,
+                subgraph,
             )
         }
         ParallelMode::Always => {
@@ -575,7 +596,7 @@ pub fn index_search(
         }
     };
 
-    (index as u32, matches.len() as u32, states_searched)
+    (index as u32, matches_graph.len() as u32, states_searched)
 }
 
 /// Computes a molecule's assembly index using an efficient default strategy.
