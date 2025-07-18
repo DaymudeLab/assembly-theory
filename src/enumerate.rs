@@ -26,11 +26,9 @@ pub enum EnumerateMode {
     /// Like Extend, but only extends subgraphs that are isomoprhic to at least
     /// one other subgraph.
     ExtendIsomorphic,
-    /// From a subgraph, choose an edge from its boundary and recursively grow
-    /// it by adding this edge or erode its remainder by discarding the edge.
+    /// From a subgraph, choose an edge from its boundary and either grow it by
+    /// adding this edge or erode its remainder by discarding the edge.
     GrowErode,
-    /// An iterative (memory-efficient) implementation of GrowErode.
-    GrowErodeIterative,
 }
 
 /// Return an interator over all connected, non-induced subgraphs of the
@@ -39,7 +37,6 @@ pub fn enumerate_subgraphs(mol: &Molecule, mode: EnumerateMode) -> impl Iterator
     match mode {
         EnumerateMode::Extend => extend(mol).into_iter(),
         EnumerateMode::GrowErode => grow_erode(mol).into_iter(),
-        EnumerateMode::GrowErodeIterative => grow_erode_iterative(mol).into_iter(),
         _ => {
             panic!("The chosen --enumerate mode is not implemented yet!");
         }
@@ -161,8 +158,8 @@ fn extend_isomorphic(mol: &Molecule) -> impl Iterator<Item = (BitSet, BitSet)> {
 }
 
 /// Enumerate connected, non-induced subgraphs with at most |E|/2 edges; at
-/// each recursive step, choose one edge from the current subgraph's boundary
-/// and either add it to the subgraph or discard it from the remainder. See:
+/// each step, choose one edge from the current subgraph's boundary and either
+/// add it to the subgraph or discard it from the remainder. See:
 /// - https://stackoverflow.com/a/15722579
 /// - https://stackoverflow.com/a/15658245
 fn grow_erode(mol: &Molecule) -> HashSet<BitSet> {
@@ -176,72 +173,7 @@ fn grow_erode(mol: &Molecule) -> HashSet<BitSet> {
     // Set up a set of subgraphs enumerated so far.
     let mut subgraphs = HashSet::new();
 
-    // Recurse, and ultimately return the final set of enumerated subgraphs.
-    recurse_grow_erode(mol, subgraph, frontier, remainder, &mut subgraphs);
-    subgraphs
-}
-
-/// Recursive helper for grow_erode.
-fn recurse_grow_erode(
-    mol: &Molecule,
-    mut subgraph: BitSet,
-    mut frontier: BitSet,
-    mut remainder: BitSet,
-    subgraphs: &mut HashSet<BitSet>,
-) {
-    // Get the next edge from the subgraph's edge boundary or, if the subgraph
-    // is empty, from the remainder.
-    let candidate = if subgraph.is_empty() {
-        remainder.iter().next()
-    } else {
-        remainder.intersection(&frontier).next()
-    };
-
-    if let Some(e) = candidate {
-        // In the first recursive branch, discard the candidate edge entirely.
-        remainder.remove(e);
-        recurse_grow_erode(
-            mol,
-            subgraph.clone(),
-            frontier.clone(),
-            remainder.clone(),
-            subgraphs,
-        );
-
-        // The other recursive branch adds the candidate edge to the subgraph
-        // and updates the boundary accordingly unless doing so would make the
-        // subgraph too large to be part of a non-overlapping isomorphic pair.
-        if subgraph.len() < mol.graph().edge_count() / 2 {
-            // Add the candidate edge to the subgraph.
-            subgraph.insert(e);
-
-            // Grow the frontier to include edges incident to the candidate.
-            frontier.extend(edge_neighbors(&mol.graph(), EdgeIndex::new(e)).map(|ix| ix.index()));
-
-            // Recurse.
-            recurse_grow_erode(mol, subgraph, frontier, remainder, subgraphs);
-        }
-    } else if subgraph.len() > 1 {
-        // When all candidate edges are exhausted, collect this subgraph unless
-        // it is just a singleton edge (basic unit).
-        subgraphs.insert(subgraph);
-    }
-}
-
-/// Like grow_erode, but runs iteratively instead of recursively.
-fn grow_erode_iterative(mol: &Molecule) -> HashSet<BitSet> {
-    // Initialize the current subgraph and its "frontier" (i.e., the union of
-    // its edges and its edge boundary) as well as the "remainder", which is
-    // all edges not in the current subgraph.
-    let subgraph = BitSet::new();
-    let frontier = BitSet::new();
-    let remainder = BitSet::from_iter(mol.graph().edge_indices().map(|ix| ix.index()));
-
-    // Set up a set of subgraphs enumerated so far.
-    let mut subgraphs = HashSet::new();
-
-    // Do the usual trick of transforming recursive algorithms into iterative
-    // ones by maintaining a stack of instances.
+    // Maintain a stack of subgraph instances to extend.
     let mut stack = vec![(subgraph, frontier, remainder)];
     while let Some((mut subgraph, mut frontier, mut remainder)) = stack.pop() {
         // Get the next edge from the subgraph's edge boundary or, if the
@@ -257,10 +189,10 @@ fn grow_erode_iterative(mol: &Molecule) -> HashSet<BitSet> {
             remainder.remove(e);
             stack.push((subgraph.clone(), frontier.clone(), remainder.clone()));
 
-            // Otherwise, add the candidate edge to the subgraph. If this
-            // subgraph hasn't been enumerated yet and is not too large to be
-            // part of a non-overlapping isomorphic pair, grow the frontier to
-            // include edges incident to the candidate and make a new instance.
+            // Make another instance by adding the candidate edge to the
+            // subgraph and updating the frontier accordingly if the new
+            // subgraph was not previously enumerated and is not too large to
+            // be part of a non-overlapping isomorphic pair.
             subgraph.insert(e);
             if !subgraphs.contains(&subgraph) && subgraph.len() <= mol.graph().edge_count() / 2 {
                 frontier.extend(edge_neighbors(mol.graph(), EdgeIndex::new(e)).map(|ix| ix.index()));
