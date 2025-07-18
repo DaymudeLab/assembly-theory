@@ -7,7 +7,7 @@ pub struct CompatGraph {
 }
 
 impl CompatGraph {
-    pub fn new(init_matches: &Vec<(BitSet, BitSet)>) -> Self{
+    pub fn new(init_matches: Vec<(BitSet, BitSet)>) -> Self {
         let size = init_matches.len();
 
         // Initialize weights and empty graph
@@ -40,12 +40,20 @@ impl CompatGraph {
         Self {
             graph: init_graph,
             weights: init_weights,
-            matches: Vec::new(),
+            matches: init_matches,
         }
     }
 
     pub fn weight(&self, v: usize) -> usize {
         self.weights[v]
+    }
+
+    pub fn matches(&self, v: usize) -> &(BitSet, BitSet) {
+        &self.matches[v]
+    }
+
+    pub fn len(&self) -> usize {
+        self.graph.len()
     }
 
     /*pub fn savings_ground_truth(&self, subgraph: &BitSet) -> usize {
@@ -82,10 +90,6 @@ impl CompatGraph {
 
         cx
     }*/
-
-    pub fn len(&self) -> usize {
-        self.graph.len()
-    }
 
     pub fn degree(&self, v: usize, subgraph: &BitSet) -> usize {
         self.graph[v].intersection(subgraph).count()

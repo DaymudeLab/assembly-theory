@@ -191,7 +191,6 @@ fn fractures(
 #[allow(clippy::too_many_arguments)]
 fn recurse_index_search_serial(
     mol: &Molecule,
-    matches: &[(BitSet, BitSet)],
     fragments: &[BitSet],
     state_index: usize,
     mut best_index: usize,
@@ -228,7 +227,7 @@ fn recurse_index_search_serial(
     // of fragments, recurse using the fragments obtained by removing this pair
     // and adding one subgraph back.
     for v in subgraph.iter() {
-        let (h1, h2) = &matches[v];
+        let (h1, h2) = matches_graph.matches(v);
         if let Some(fractures) = fractures(mol, fragments, h1, h2) {
             let subgraph_clone = matches_graph.forward_neighbors(v, &subgraph);
             
@@ -533,15 +532,15 @@ pub fn index_search(
     // Search for the shortest assembly pathway recursively.
     let (index, states_searched) = match parallel_mode {
         ParallelMode::None => {
-            let matches_graph = CompatGraph::new(&matches);
-            let mut subgraph = BitSet::with_capacity(matches.len());
-            for i in 0..matches.len() {
+            // TODO: remove matches.clone() call
+            let matches_graph = CompatGraph::new(matches.clone());
+            let mut subgraph = BitSet::with_capacity(matches_graph.len());
+            for i in 0..matches_graph.len() {
                 subgraph.insert(i);
             }
 
             recurse_index_search_serial(
                 mol,
-                &matches,
                 &[init],
                 edge_count - 1,
                 edge_count - 1,
