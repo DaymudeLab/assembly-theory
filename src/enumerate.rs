@@ -36,7 +36,9 @@ pub fn enumerate_subgraphs(mol: &Molecule, mode: EnumerateMode) -> impl Iterator
 
 /// Enumerate connected, non-induced subgraphs with at most |E|/2 edges; at
 /// each recursive step, choose one edge from the current subgraph's boundary
-/// and either add it to the subgraph or discard it from the remainder.
+/// and either add it to the subgraph or discard it from the remainder. See:
+/// - https://stackoverflow.com/a/15722579
+/// - https://stackoverflow.com/a/15658245
 fn grow_erode(mol: &Molecule) -> HashSet<BitSet> {
     // Initialize the current subset of edges and its union with its edge
     // boundary (in this algorithm, "subsetplus") as empty.
@@ -51,11 +53,11 @@ fn grow_erode(mol: &Molecule) -> HashSet<BitSet> {
     let mut subgraphs = HashSet::new();
 
     // Recurse, and ultimately return the final set of enumerated subgraphs.
-    grow_erode_recurse(mol, subset, subsetplus, remainder, &mut subgraphs);
+    recurse_grow_erode(mol, subset, subsetplus, remainder, &mut subgraphs);
     subgraphs
 }
 
-fn grow_erode_recurse(
+fn recurse_grow_erode(
     mol: &Molecule,
     mut subset: BitSet,
     mut subsetplus: BitSet,
@@ -73,7 +75,7 @@ fn grow_erode_recurse(
     if let Some(e) = candidate {
         // In the first recursive branch, discard the candidate edge entirely.
         remainder.remove(e);
-        grow_erode_recurse(
+        recurse_grow_erode(
             mol,
             subset.clone(),
             subsetplus.clone(),
@@ -107,7 +109,7 @@ fn grow_erode_recurse(
             );
 
             // Recurse.
-            grow_erode_recurse(mol, subset, subsetplus, remainder, subgraphs);
+            recurse_grow_erode(mol, subset, subsetplus, remainder, subgraphs);
         }
     } else if subset.len() > 1 {
         // When all candidate edges have been exhausted, add this subset as a

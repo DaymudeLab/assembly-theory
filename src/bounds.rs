@@ -1,4 +1,5 @@
-//! TODO
+//! Bounds for identifying assembly states (i.e., collections of fragments)
+//! from which no further assembly index improvements can be found.
 
 use bit_set::BitSet;
 use clap::ValueEnum;
@@ -38,18 +39,20 @@ struct EdgeType {
 pub fn bound_exceeded(
     mol: &Molecule,
     fragments: &[BitSet],
-    ix: usize,
-    best: usize,
+    state_index: usize,
+    best_index: usize,
     largest_remove: usize,
     bounds: &[Bound],
 ) -> bool {
     for bound_type in bounds {
         let exceeds = match bound_type {
-            Bound::Log => ix - log_bound(fragments) >= best,
-            Bound::Int => ix - int_bound(fragments, largest_remove) >= best,
-            Bound::VecSimple => ix - vec_simple_bound(fragments, largest_remove, mol) >= best,
+            Bound::Log => state_index - log_bound(fragments) >= best_index,
+            Bound::Int => state_index - int_bound(fragments, largest_remove) >= best_index,
+            Bound::VecSimple => {
+                state_index - vec_simple_bound(fragments, largest_remove, mol) >= best_index
+            }
             Bound::VecSmallFrags => {
-                ix - vec_small_frags_bound(fragments, largest_remove, mol) >= best
+                state_index - vec_small_frags_bound(fragments, largest_remove, mol) >= best_index
             }
             _ => {
                 panic!("One of the chosen bounds is not implemented yet!")

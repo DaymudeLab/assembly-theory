@@ -25,26 +25,24 @@ pub enum CanonizeMode {
     TreeFaulon,
 }
 
-/// Label returned by our canonization function
+/// Canonical label returned by our graph canonization functions.
 #[derive(Hash, PartialEq, Eq, Debug)]
 pub enum Labeling {
-    /// Use the label returned by the graph_canon crate
-    NautyLabel(CanonLabeling<AtomOrBond>),
+    /// The label returned by the graph_canon crate.
+    Nauty(CanonLabeling<AtomOrBond>),
 
-    /// Use the string returned by our implementation of Faulon's code
+    /// A string label returned by our implementation of Faulon et al. (2004).
     // TODO: This should be a `Vec<u8>`
-    FaulonLabel(String),
+    Faulon(String),
 }
 
 /// Obtain a canonical labeling of the specified `subgraph` using the
 /// algorithm specified by `mode`.
-// TODO: Should return a Box<dyn Hash> to flexibly extend over different
-// canonization algorithms.
 pub fn canonize(mol: &Molecule, subgraph: &BitSet, mode: CanonizeMode) -> Labeling {
     match mode {
         CanonizeMode::Nauty => {
             let cgraph = subgraph_to_cgraph(mol, subgraph);
-            Labeling::NautyLabel(CanonLabeling::new(&cgraph))
+            Labeling::Nauty(CanonLabeling::new(&cgraph))
         }
         _ => {
             panic!("The chosen --canonize mode is not implemented yet!")
@@ -79,4 +77,58 @@ fn subgraph_to_cgraph(mol: &Molecule, subgraph: &BitSet) -> CGraph {
         h.add_edge(*h_dst, h_enode, ());
     }
     h
+}
+
+mod tests {
+    #[allow(unused_imports)]
+    use super::*;
+
+    #[allow(unused_imports)]
+    use petgraph::algo::is_isomorphic_matching;
+
+    #[test]
+    fn noncanonical() {
+        let mut p3_010 = Graph::<u8, (), Undirected>::new_undirected();
+        let n0 = p3_010.add_node(0);
+        let n1 = p3_010.add_node(1);
+        let n2 = p3_010.add_node(0);
+        p3_010.add_edge(n0, n1, ());
+        p3_010.add_edge(n1, n2, ());
+
+        let mut p3_001 = Graph::<u8, (), Undirected>::new_undirected();
+        let n0 = p3_001.add_node(0);
+        let n1 = p3_001.add_node(0);
+        let n2 = p3_001.add_node(1);
+        p3_001.add_edge(n0, n1, ());
+        p3_001.add_edge(n1, n2, ());
+
+        let repr_a = CanonLabeling::new(&p3_010);
+        let repr_b = CanonLabeling::new(&p3_001);
+
+        assert_ne!(repr_a, repr_b);
+    }
+
+    #[test]
+    fn nonisomorphic() {
+        let mut p3_010 = Graph::<u8, (), Undirected>::new_undirected();
+        let n0 = p3_010.add_node(0);
+        let n1 = p3_010.add_node(1);
+        let n2 = p3_010.add_node(0);
+        p3_010.add_edge(n0, n1, ());
+        p3_010.add_edge(n1, n2, ());
+
+        let mut p3_001 = Graph::<u8, (), Undirected>::new_undirected();
+        let n0 = p3_001.add_node(0);
+        let n1 = p3_001.add_node(0);
+        let n2 = p3_001.add_node(1);
+        p3_001.add_edge(n0, n1, ());
+        p3_001.add_edge(n1, n2, ());
+
+        assert!(!is_isomorphic_matching(
+            &p3_001,
+            &p3_010,
+            |e0, e1| e0 == e1,
+            |n0, n1| n0 == n1
+        ))
+    }
 }
