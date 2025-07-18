@@ -45,6 +45,8 @@ pub fn bound_exceeded(
     best: usize,
     largest_remove: usize,
     bounds: &[Bound],
+    matches_graph: &CompatGraph,
+    subgraph: &BitSet,
 ) -> bool {
     for bound_type in bounds {
         let exceeds = match bound_type {
@@ -54,6 +56,9 @@ pub fn bound_exceeded(
             Bound::VecSmallFrags => {
                 ix - vec_small_frags_bound(fragments, largest_remove, mol) >= best
             }
+            Bound::CliqueBudget => ix - clique_budget_bound(matches_graph, subgraph, fragments) >= best,
+            Bound::CoverNoSort => ix - cover_bound(matches_graph, subgraph, false),
+            Bound::CoverSort => ix - cover_bound(matches_graph, subgraph, true),
             _ => {
                 panic!("One of the chosen bounds is not implemented yet!")
             }
@@ -338,7 +343,7 @@ fn cover_bound_helper(graph: &CompatGraph, subgraph: &BitSet, iter: impl Iterato
     col_weights.iter().sum()
 }
 
-pub fn frag_bound(graph: &CompatGraph, subgraph: &BitSet, fragments: &[BitSet]) -> usize {
+pub fn clique_budget_bound(graph: &CompatGraph, subgraph: &BitSet, fragments: &[BitSet]) -> usize {
     let total_bonds = fragments.iter().map(|x| x.len()).sum::<usize>();
     let mut bound = 0;
     let sizes = {

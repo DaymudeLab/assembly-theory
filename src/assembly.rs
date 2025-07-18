@@ -214,6 +214,8 @@ fn recurse_index_search_serial(
         best_index,
         largest_remove,
         bounds,
+        matches_graph,
+        &subgraph,
     ) {
         return (state_index, 1);
     }
