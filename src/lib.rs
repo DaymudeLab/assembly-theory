@@ -55,6 +55,9 @@ pub mod kernels;
 // Utility functions
 mod utils;
 
+// Reductions to other problem instances
+pub mod reductions;
+
 // Python library
 #[cfg(feature = "python")]
 pub mod python;
