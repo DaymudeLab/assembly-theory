@@ -204,7 +204,27 @@ fn recurse_index_search_serial(
     mut best_index: usize,
     largest_remove: usize,
     bounds: &[Bound],
+    memoize: bool,
+    cache: &mut HashMap<Vec<BitSet>, usize>,
 ) -> (usize, usize) {
+    if memoize {
+        let mut fractures = fragments.to_vec();
+        fractures.sort_by(|a, b| a.iter().next().cmp(&b.iter().next()));
+        match cache.get_mut(&fractures) {
+            None => {
+                cache.insert(fractures.clone(), state_index);
+            },
+            Some(x) => {
+                if *x <= state_index {
+                    return (state_index, 1);
+                }
+                else {
+                    *x = state_index;
+                }
+            }
+        }
+    }
+
     // If any bounds are exceeded, halt this search branch.
     if bound_exceeded(
         mol,
@@ -236,6 +256,8 @@ fn recurse_index_search_serial(
                 best_index,
                 h1.len(),
                 bounds,
+                memoize,
+                cache,
             );
 
             // Update the best assembly indices (across children states and
@@ -511,9 +533,6 @@ pub fn index_search(
     if kernel_mode != KernelMode::None {
         panic!("The chosen --kernel mode is not implemented yet!")
     }
-    if memoize {
-        panic!("--memoize is not implemented yet!")
-    }
 
     // Enumerate non-overlapping isomorphic subgraph pairs.
     let (_, matches) = labels_matches(mol, enumerate_mode, canonize_mode);
@@ -534,6 +553,8 @@ pub fn index_search(
             edge_count - 1,
             edge_count,
             bounds,
+            memoize,
+            &mut HashMap::<Vec<BitSet>, usize>::new(),
         ),
         ParallelMode::DepthOne => {
             let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
