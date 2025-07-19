@@ -28,6 +28,7 @@ use std::{
 
 use bit_set::BitSet;
 use clap::ValueEnum;
+use petgraph::graph::EdgeIndex;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
@@ -36,7 +37,7 @@ use crate::{
     enumerate::{enumerate_subgraphs, EnumerateMode},
     kernels::KernelMode,
     molecule::Molecule,
-    utils::connected_components_under_edges,
+    utils::{connected_components_under_edges, edge_neighbors},
 };
 
 /// Parallelization strategy for the search phase.
@@ -74,11 +75,42 @@ pub fn assembly_depth(mol: &Molecule) -> u32 {
 
 /// Return an iterator over all pairs of non-overlapping, isomorphic subgraphs
 /// in the given molecule, sorted to guarantee deterministic iteration.
+// The reason this is split up is because EnumerateMode::ExtendIsomorphic
+// interleaves subgraph enumeration and isomorphism class construction instead
+// of splitting them into two steps like the rest of the enumeration modes.
 fn matches(
     mol: &Molecule,
     enumerate_mode: EnumerateMode,
     canonize_mode: CanonizeMode,
 ) -> impl Iterator<Item = (BitSet, BitSet)> {
+    let mut matches = if enumerate_mode == EnumerateMode::ExtendIsomorphic {
+        matches_extend_isomorphic(mol, canonize_mode)
+    } else {
+        matches_general(mol, enumerate_mode, canonize_mode)
+    };
+
+    // Sort pairs in a deterministic order and return.
+    matches.sort_by(|e1, e2| {
+        let ord = [
+            e2.0.len().cmp(&e1.0.len()), // Decreasing subgraph size.
+            e1.0.cmp(&e2.0),             // First subgraph lexicographical.
+            e1.1.cmp(&e2.1),             // Second subgraph lexicographical.
+        ];
+        let mut i = 0;
+        while ord[i] == std::cmp::Ordering::Equal {
+            i += 1;
+        }
+        ord[i]
+    });
+
+    matches.into_iter()
+}
+
+fn matches_general(
+    mol: &Molecule,
+    enumerate_mode: EnumerateMode,
+    canonize_mode: CanonizeMode,
+) -> Vec<(BitSet, BitSet)> {
     // Enumerate all connected, non-induced subgraphs and bin them into
     // isomorphism classes using canonization.
     let mut isomorphic_map = HashMap::<_, Vec<BitSet>>::new();
@@ -105,20 +137,85 @@ fn matches(
         }
     }
 
-    // Sort pairs in a deterministic order and return.
-    matches.sort_by(|e1, e2| {
-        let ord = [
-            e2.0.len().cmp(&e1.0.len()), // Decreasing subgraph size.
-            e1.0.cmp(&e2.0),             // First subgraph lexicographical.
-            e1.1.cmp(&e2.1),             // Second subgraph lexicographical.
-        ];
-        let mut i = 0;
-        while ord[i] == std::cmp::Ordering::Equal {
-            i += 1;
+    matches
+}
+
+/// Enumerate connected, non-induced subgraphs with at most |E|/2 edges which
+/// are isomorphic to at least one other subgraph (i.e., the subgraphs that
+/// have a chance of being in a non-overlapping, isomorphic subgraph pair later
+/// on). Uses a similar iterative extension process to extend_iterative, but at
+/// each level, removes any subgraphs in singleton isomorphism classes.
+fn matches_extend_isomorphic(mol: &Molecule, canonize_mode: CanonizeMode) -> Vec<(BitSet, BitSet)> {
+    // Set up a container for pairs of non-overlapping, isomorphic subgraphs.
+    let mut matches = Vec::new();
+
+    // Maintain a map of subgraphs to their "frontiers" (i.e., a subgraph's
+    // edges and its edge boundary), starting with all edges individually.
+    let mut subgraphs: HashMap<BitSet, BitSet> =
+        HashMap::from_iter(mol.graph().edge_indices().map(|ix| {
+            let mut subgraph = BitSet::new();
+            subgraph.insert(ix.index());
+            let frontier = BitSet::from_iter(edge_neighbors(mol.graph(), ix).map(|e| e.index()));
+            (subgraph, frontier)
+        }));
+
+    // Enumerate and bin subgraphs by "levels" up to |E|/2, as in extend().
+    for _ in 0..(mol.graph().edge_count() / 2) {
+        // Collect and deduplicate all subgraphs obtained by extending an
+        // existing subgraph using one edge from its boundary.
+        let mut extended_subgraphs = HashMap::new();
+        for (subgraph, frontier) in subgraphs {
+            for edge in frontier.difference(&subgraph) {
+                let mut extended_subgraph = subgraph.clone();
+                extended_subgraph.insert(edge);
+                extended_subgraphs
+                    .entry(extended_subgraph)
+                    .or_insert_with(|| {
+                        let mut extended_frontier = frontier.clone();
+                        extended_frontier.extend(
+                            edge_neighbors(mol.graph(), EdgeIndex::new(edge)).map(|e| e.index()),
+                        );
+                        extended_frontier
+                    });
+            }
         }
-        ord[i]
-    });
-    matches.into_iter()
+
+        // Bin the new subgraphs into isomorphism classes using canonization.
+        let mut isomorphic_map = HashMap::<_, Vec<BitSet>>::new();
+        for subgraph in extended_subgraphs.keys() {
+            isomorphic_map
+                .entry(canonize(mol, subgraph, canonize_mode))
+                .and_modify(|bucket| bucket.push(subgraph.clone()))
+                .or_insert(vec![subgraph.clone()]);
+        }
+
+        // Drop any subgraphs in singleton isomorphism classes and use these to
+        // seed the next level of subgraph extensions.
+        for iso_class in isomorphic_map.values() {
+            if iso_class.len() == 1 {
+                extended_subgraphs.remove(&iso_class[0]);
+            }
+        }
+        subgraphs = extended_subgraphs;
+
+        // In each isomorphism class, collect non-overlapping pairs of
+        // subgraphs, skipping singleton edges (basic units).
+        for bucket in isomorphic_map.values() {
+            for (i, first) in bucket.iter().enumerate() {
+                for second in &bucket[i..] {
+                    if first.is_disjoint(second) {
+                        if first > second {
+                            matches.push((first.clone(), second.clone()));
+                        } else {
+                            matches.push((second.clone(), first.clone()));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    matches
 }
 
 /// Determine the fragments produced by removing the given pair of duplicatable
