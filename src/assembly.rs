@@ -198,7 +198,7 @@ fn recurse_index_search_serial(
     kernel_mode: KernelMode,
     matches_graph: &CompatGraph,
     mut subgraph: BitSet,
-    mut must_include: &Vec<usize>,
+    must_include: &Vec<usize>,
     depth: usize,
 ) -> (usize, usize) {
     let largest_remove = {
@@ -363,6 +363,7 @@ fn recurse_index_search_parallel(
     kernel_mode: KernelMode,
     matches_graph: &CompatGraph,
     mut subgraph: BitSet,
+    must_include: &Vec<usize>,
     depth: usize,
 ) -> (usize, usize) {
     let largest_remove = {
@@ -374,10 +375,12 @@ fn recurse_index_search_parallel(
         }
     };
 
+    let mut must_include_clone = must_include.clone();
     if kernel_mode == KernelMode::Always ||
        (kernel_mode == KernelMode::Once && depth == 0) ||
        (kernel_mode == KernelMode::DepthOne && depth <= 1) {
         subgraph = deletion_kernel(matches_graph, subgraph);
+        must_include_clone.append(&mut inclusion_kernel(matches_graph, &subgraph));
     }
 
     // If any bounds are exceeded, halt this search branch.
@@ -402,7 +405,15 @@ fn recurse_index_search_parallel(
     // For every pair of duplicatable subgraphs compatible with the current set
     // of fragments, recurse using the fragments obtained by removing this pair
     // and adding one subgraph back.
-    subgraph.iter().collect::<Vec<usize>>().par_iter().for_each(|v| {
+    let last =  {
+        if let Some(x) = must_include.iter().min() {
+            x
+        }
+        else {
+            &(matches_graph.len() - 1)
+        }
+    };
+    subgraph.iter().filter(|v| v <= last).collect::<Vec<usize>>().par_iter().for_each(|v| {
         let (h1, h2) = matches_graph.matches(*v);
         if let Some(fractures) = fractures(mol, fragments, h1, h2) {
             let subgraph_clone = matches_graph.forward_neighbors(*v, &subgraph);
@@ -417,6 +428,7 @@ fn recurse_index_search_parallel(
                 kernel_mode,
                 matches_graph,
                 subgraph_clone,
+                &must_include_clone,
                 depth + 1,
             );
 
@@ -562,6 +574,7 @@ pub fn index_search(
                 kernel_mode,
                 &matches_graph,
                 subgraph,
+                &vec![],
                 0,
             )
         }
