@@ -5,16 +5,14 @@
 //! cannot be "duplicatable" (i.e., in a pair of non-overlapping, isomorphic
 //! subgraphs), so we don't need them.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use bit_set::BitSet;
 use clap::ValueEnum;
-use graph_canon::CanonLabeling;
 use petgraph::graph::EdgeIndex;
 
 use crate::{
-    canonize::subgraph_to_cgraph,
-    molecule::{AtomOrBond, Molecule},
+    molecule::Molecule,
     utils::edge_neighbors,
 };
 
@@ -36,10 +34,10 @@ pub enum EnumerateMode {
 pub fn enumerate_subgraphs(mol: &Molecule, mode: EnumerateMode) -> impl Iterator<Item = BitSet> {
     match mode {
         EnumerateMode::Extend => extend(mol).into_iter(),
-        EnumerateMode::GrowErode => grow_erode(mol).into_iter(),
-        _ => {
-            panic!("The chosen --enumerate mode is not implemented yet!");
+        EnumerateMode::ExtendIsomorphic => {
+            panic!("--enumerate extend-isomorphic gets handled in assembly::matches_extend_isomorphic; execution should never have gotten here!")
         }
+        EnumerateMode::GrowErode => grow_erode(mol).into_iter(),
     }
 }
 
@@ -50,9 +48,9 @@ fn extend(mol: &Molecule) -> HashSet<BitSet> {
     // starting with all edges individually at the first level.
     let mut subgraphs: Vec<HashSet<BitSet>> =
         vec![HashSet::from_iter(mol.graph().edge_indices().map(|ix| {
-            let mut set = BitSet::new();
-            set.insert(ix.index());
-            set
+            let mut subgraph = BitSet::new();
+            subgraph.insert(ix.index());
+            subgraph
         }))];
 
     // At each level, collect and deduplicate all ways of extending subgraphs
@@ -82,79 +80,6 @@ fn extend(mol: &Molecule) -> HashSet<BitSet> {
 
     // Return an iterator over subgraphs, skipping singleton edges.
     subgraphs.into_iter().skip(1).flatten().collect::<HashSet<_>>()
-}
-
-/// Enumerate connected, non-induced subgraphs with at most |E|/2 edges which
-/// are isomorphic to at least one other subgraph (i.e., the subgraphs that
-/// have a chance of being in a non-overlapping, isomorphic subgraph pair later
-/// on). Uses a similar iterative extension process to extend_iterative, but at
-/// each level, removes any subgraphs in singleton isomorphism classes. 
-fn extend_isomorphic(mol: &Molecule) -> impl Iterator<Item = (BitSet, BitSet)> {
-    let mut solutions: HashMap<BitSet, BitSet> =
-        HashMap::from_iter(mol.graph().edge_indices().map(|ix| {
-            let mut set = BitSet::new();
-            set.insert(ix.index());
-            let neighborhood =
-                BitSet::from_iter(edge_neighbors(&mol.graph(), ix).map(|e| e.index()));
-            (set, neighborhood)
-        }));
-
-    let mut matches = Vec::new();
-
-    for _ in 0..(mol.graph().edge_count() / 2) {
-        let mut next_set = HashMap::new();
-        for (subgraph, neighborhood) in solutions {
-            for neighbor in neighborhood.difference(&subgraph) {
-                if subgraph.contains(neighbor) {
-                    continue;
-                }
-
-                let mut next = subgraph.clone();
-                next.insert(neighbor);
-
-                if next_set.contains_key(&next) {
-                    continue;
-                }
-
-                let mut next_neighborhood = neighborhood.clone();
-                next_neighborhood.extend(
-                    edge_neighbors(&mol.graph(), EdgeIndex::new(neighbor)).map(|e| e.index()),
-                );
-
-                next_set.insert(next, next_neighborhood);
-            }
-        }
-
-        let mut local_isomorphic_map = HashMap::<CanonLabeling<AtomOrBond>, Vec<BitSet>>::new();
-        for (subgraph, _) in &next_set {
-            let cgraph = subgraph_to_cgraph(mol, &subgraph);
-            let repr = CanonLabeling::new(&cgraph);
-
-            local_isomorphic_map
-                .entry(repr)
-                .and_modify(|bucket| bucket.push(subgraph.clone()))
-                .or_insert(vec![subgraph.clone()]);
-        }
-
-        for (_, sets) in &local_isomorphic_map {
-            if sets.len() == 1 {
-                next_set.remove(&sets[0]);
-            }
-        }
-
-        solutions = next_set;
-        for bucket in local_isomorphic_map.values().filter(|v| v.len() > 1) {
-            for (i, first) in bucket.iter().enumerate() {
-                for second in &bucket[i..] {
-                    if first.is_disjoint(second) {
-                        matches.push((first.clone(), second.clone()));
-                    }
-                }
-            }
-        }
-    }
-
-    matches.into_iter()
 }
 
 /// Enumerate connected, non-induced subgraphs with at most |E|/2 edges; at

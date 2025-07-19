@@ -54,7 +54,7 @@ pub fn canonize(mol: &Molecule, subgraph: &BitSet, mode: CanonizeMode) -> Labeli
 type CGraph = Graph<AtomOrBond, (), Undirected, Index>;
 
 /// Convert the specified `subgraph` to the format expected by Nauty.
-pub(crate) fn subgraph_to_cgraph(mol: &Molecule, subgraph: &BitSet) -> CGraph {
+fn subgraph_to_cgraph(mol: &Molecule, subgraph: &BitSet) -> CGraph {
     let mut h = CGraph::with_capacity(subgraph.len(), 2 * subgraph.len());
     let mut vtx_map = HashMap::<NodeIndex, NodeIndex>::new();
     for e in subgraph {
