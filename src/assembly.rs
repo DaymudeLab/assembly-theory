@@ -208,6 +208,7 @@ fn recurse_index_search_serial(
             return (state_index, 1);
         }
     };
+
     if kernel_mode == KernelMode::Always ||
        (kernel_mode == KernelMode::Once && depth == 0) ||
        (kernel_mode == KernelMode::DepthOne && depth <= 1) {
@@ -286,10 +287,14 @@ fn recurse_index_search_depthone(
     bounds: &[Bound],
     kernel_mode: KernelMode,
     matches_graph: &CompatGraph,
-    subgraph: BitSet,
+    mut subgraph: BitSet,
 ) -> (usize, usize) {
     // Keep track of the number of states searched, including this one.
     let states_searched = Arc::new(AtomicUsize::from(1));
+
+    if kernel_mode == KernelMode::Always || kernel_mode == KernelMode::Once {
+        subgraph = deletion_kernel(matches_graph, subgraph);
+    }
 
     // For every pair of duplicatable subgraphs compatible with the current set
     // of fragments, recurse using the fragments obtained by removing this pair
@@ -343,11 +348,27 @@ fn recurse_index_search_parallel(
     fragments: &[BitSet],
     state_index: usize,
     best_index: Arc<AtomicUsize>,
-    largest_remove: usize,
     bounds: &[Bound],
+    kernel_mode: KernelMode,
     matches_graph: &CompatGraph,
-    subgraph: BitSet,
+    mut subgraph: BitSet,
+    depth: usize,
 ) -> (usize, usize) {
+    let largest_remove = {
+        if let Some(v) = subgraph.iter().next() {
+            matches_graph.weight(v) + 1
+        }
+        else {
+            return (state_index, 1);
+        }
+    };
+
+    if kernel_mode == KernelMode::Always ||
+       (kernel_mode == KernelMode::Once && depth == 0) ||
+       (kernel_mode == KernelMode::DepthOne && depth <= 1) {
+        subgraph = deletion_kernel(matches_graph, subgraph);
+    }
+
     // If any bounds are exceeded, halt this search branch.
     if bound_exceeded(
         mol,
@@ -381,10 +402,11 @@ fn recurse_index_search_parallel(
                 &fractures,
                 state_index - h1.len() + 1,
                 best_index.clone(),
-                h1.len(),
                 bounds,
+                kernel_mode,
                 matches_graph,
                 subgraph_clone,
+                depth + 1,
             );
 
             // Update the best assembly indices (across children states and
@@ -524,10 +546,11 @@ pub fn index_search(
                 &[init],
                 edge_count - 1,
                 best_index,
-                edge_count,
                 bounds,
+                kernel_mode,
                 &matches_graph,
                 subgraph,
+                0,
             )
         }
     };
