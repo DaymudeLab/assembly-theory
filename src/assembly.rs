@@ -144,11 +144,8 @@ fn matches_general(
 /// are isomorphic to at least one other subgraph (i.e., the subgraphs that
 /// have a chance of being in a non-overlapping, isomorphic subgraph pair later
 /// on). Uses a similar iterative extension process to extend_iterative, but at
-/// each level, removes any subgraphs in singleton isomorphism classes. 
-fn matches_extend_isomorphic(
-    mol: &Molecule,
-    canonize_mode: CanonizeMode
-) -> Vec<(BitSet, BitSet)> {
+/// each level, removes any subgraphs in singleton isomorphism classes.
+fn matches_extend_isomorphic(mol: &Molecule, canonize_mode: CanonizeMode) -> Vec<(BitSet, BitSet)> {
     // Set up a container for pairs of non-overlapping, isomorphic subgraphs.
     let mut matches = Vec::new();
 
@@ -171,28 +168,30 @@ fn matches_extend_isomorphic(
             for edge in frontier.difference(&subgraph) {
                 let mut extended_subgraph = subgraph.clone();
                 extended_subgraph.insert(edge);
-                if !extended_subgraphs.contains_key(&extended_subgraph) {
-                    let mut extended_frontier = frontier.clone();
-                    extended_frontier.extend(
-                        edge_neighbors(mol.graph(), EdgeIndex::new(edge)).map(|e| e.index()),
-                    );
-                    extended_subgraphs.insert(extended_subgraph, extended_frontier);
-                }
+                extended_subgraphs
+                    .entry(extended_subgraph)
+                    .or_insert_with(|| {
+                        let mut extended_frontier = frontier.clone();
+                        extended_frontier.extend(
+                            edge_neighbors(mol.graph(), EdgeIndex::new(edge)).map(|e| e.index()),
+                        );
+                        extended_frontier
+                    });
             }
         }
 
         // Bin the new subgraphs into isomorphism classes using canonization.
         let mut isomorphic_map = HashMap::<_, Vec<BitSet>>::new();
-        for (subgraph, _) in &extended_subgraphs {
+        for subgraph in extended_subgraphs.keys() {
             isomorphic_map
-                .entry(canonize(mol, &subgraph, canonize_mode))
+                .entry(canonize(mol, subgraph, canonize_mode))
                 .and_modify(|bucket| bucket.push(subgraph.clone()))
                 .or_insert(vec![subgraph.clone()]);
         }
 
         // Drop any subgraphs in singleton isomorphism classes and use these to
         // seed the next level of subgraph extensions.
-        for (_, iso_class) in &isomorphic_map {
+        for iso_class in isomorphic_map.values() {
             if iso_class.len() == 1 {
                 extended_subgraphs.remove(&iso_class[0]);
             }

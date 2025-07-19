@@ -11,10 +11,7 @@ use bit_set::BitSet;
 use clap::ValueEnum;
 use petgraph::graph::EdgeIndex;
 
-use crate::{
-    molecule::Molecule,
-    utils::edge_neighbors,
-};
+use crate::{molecule::Molecule, utils::edge_neighbors};
 
 /// Strategy for enumerating connected, non-induced subgraphs.
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
@@ -35,7 +32,7 @@ pub fn enumerate_subgraphs(mol: &Molecule, mode: EnumerateMode) -> impl Iterator
     match mode {
         EnumerateMode::Extend => extend(mol).into_iter(),
         EnumerateMode::ExtendIsomorphic => {
-            panic!("--enumerate extend-isomorphic gets handled in assembly::matches_extend_isomorphic; execution should never have gotten here!")
+            panic!("EnumerateMode::ExtendIsomorphic gets handled in assembly::matches_extend_isomorphic; execution should never have gotten here!")
         }
         EnumerateMode::GrowErode => grow_erode(mol).into_iter(),
     }
@@ -60,15 +57,14 @@ fn extend(mol: &Molecule) -> HashSet<BitSet> {
         for subgraph in &subgraphs[level] {
             // Find all "frontier" edges incident to this subgraph (contains
             // both this subgraph's edges and its edge boundary).
-            let frontier = BitSet::from_iter(subgraph
-                .iter()
-                .map(|i| edge_neighbors(&mol.graph(), EdgeIndex::new(i)).map(|ix| ix.index()))
-                .flatten(),
-            );
-            
+            let frontier =
+                BitSet::from_iter(subgraph.iter().flat_map(|i| {
+                    edge_neighbors(mol.graph(), EdgeIndex::new(i)).map(|ix| ix.index())
+                }));
+
             // Collect and deduplicate all subgraphs obtained by extending the
             // current subgraph using one edge from its boundary.
-            for edge in frontier.difference(&subgraph) {
+            for edge in frontier.difference(subgraph) {
                 let mut extended_subgraph = subgraph.clone();
                 extended_subgraph.insert(edge);
                 extended_subgraphs.insert(extended_subgraph);
@@ -79,7 +75,11 @@ fn extend(mol: &Molecule) -> HashSet<BitSet> {
     }
 
     // Return an iterator over subgraphs, skipping singleton edges.
-    subgraphs.into_iter().skip(1).flatten().collect::<HashSet<_>>()
+    subgraphs
+        .into_iter()
+        .skip(1)
+        .flatten()
+        .collect::<HashSet<_>>()
 }
 
 /// Enumerate connected, non-induced subgraphs with at most |E|/2 edges; at
@@ -120,7 +120,8 @@ fn grow_erode(mol: &Molecule) -> HashSet<BitSet> {
             // be part of a non-overlapping isomorphic pair.
             subgraph.insert(e);
             if !subgraphs.contains(&subgraph) && subgraph.len() <= mol.graph().edge_count() / 2 {
-                frontier.extend(edge_neighbors(mol.graph(), EdgeIndex::new(e)).map(|ix| ix.index()));
+                frontier
+                    .extend(edge_neighbors(mol.graph(), EdgeIndex::new(e)).map(|ix| ix.index()));
                 stack.push((subgraph, frontier, remainder));
             }
         } else if subgraph.len() > 1 {
