@@ -52,7 +52,7 @@ struct Cli {
     boundsgroup: Option<BoundsGroup>,
 
     /// Strategy for performing graph kernelization during the search phase.
-    #[arg(long, value_enum, default_value_t = KernelMode::None)]
+    #[arg(long, value_enum, default_value_t = KernelMode::Once)]
     kernel: KernelMode,
 }
 
