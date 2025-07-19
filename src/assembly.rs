@@ -29,6 +29,7 @@ use std::{
 use bit_set::BitSet;
 use clap::ValueEnum;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use dashmap::DashMap;
 
 use crate::{
     bounds::{bound_exceeded, Bound},
@@ -292,6 +293,8 @@ fn recurse_index_search_depthone(
 ) -> (usize, usize) {
     // Keep track of the number of states searched, including this one.
     let states_searched = Arc::new(AtomicUsize::from(1));
+    let cache: DashMap<Vec<BitSet>, usize> = DashMap::new();
+    let shared_cache  = Arc::new(cache);
 
     // For every pair of duplicatable subgraphs compatible with the current set
     // of fragments, recurse using the fragments obtained by removing this pair
@@ -307,6 +310,7 @@ fn recurse_index_search_depthone(
                 best_index.clone(),
                 h1.len(),
                 bounds,
+                shared_cache.clone(),
             );
 
             // Update the best assembly indices (across children states and
@@ -343,7 +347,26 @@ fn recurse_index_search_depthone_helper(
     best_index: Arc<AtomicUsize>,
     largest_remove: usize,
     bounds: &[Bound],
+    cache: Arc<DashMap<Vec<BitSet>, usize>>,
 ) -> (usize, usize) {
+    // Dynamic Programming
+    let mut fragment_vec = fragments.to_vec();
+    fragment_vec.sort_by(|a, b| a.iter().next().cmp(&b.iter().next()));
+    match cache.get_mut(&fragment_vec) {
+        None => {
+            cache.insert(fragment_vec.clone(), state_index);
+        },
+        Some(mut x) => {
+            if *x <= state_index {
+                return (state_index, 1);
+            }
+            else {
+                *x = state_index;
+            }
+        }
+    }
+
+
     // If any bounds are exceeded, halt this search branch.
     if bound_exceeded(
         mol,
@@ -375,6 +398,7 @@ fn recurse_index_search_depthone_helper(
                 best_index.clone(),
                 h1.len(),
                 bounds,
+                cache.clone(),
             );
 
             // Update the best assembly indices (across children states and
