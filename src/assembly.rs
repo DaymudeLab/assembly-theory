@@ -204,15 +204,14 @@ fn recurse_index_search_serial(
     mut best_index: usize,
     largest_remove: usize,
     bounds: &[Bound],
-    memoize: bool,
-    cache: &mut HashMap<Vec<BitSet>, usize>,
+    cache: &mut Option<HashMap<Vec<BitSet>, usize>>,
 ) -> (usize, usize) {
-    if memoize {
+    if let Some(frag_cache) = cache {
         let mut fractures = fragments.to_vec();
         fractures.sort_by(|a, b| a.iter().next().cmp(&b.iter().next()));
-        match cache.get_mut(&fractures) {
+        match frag_cache.get_mut(&fractures) {
             None => {
-                cache.insert(fractures.clone(), state_index);
+                frag_cache.insert(fractures.clone(), state_index);
             },
             Some(x) => {
                 if *x <= state_index {
@@ -256,7 +255,6 @@ fn recurse_index_search_serial(
                 best_index,
                 h1.len(),
                 bounds,
-                memoize,
                 cache,
             );
 
@@ -545,17 +543,29 @@ pub fn index_search(
 
     // Search for the shortest assembly pathway recursively.
     let (index, states_searched) = match parallel_mode {
-        ParallelMode::None => recurse_index_search_serial(
-            mol,
-            &matches,
-            &[init],
-            edge_count - 1,
-            edge_count - 1,
-            edge_count,
-            bounds,
-            memoize,
-            &mut HashMap::<Vec<BitSet>, usize>::new(),
-        ),
+        ParallelMode::None => {
+            let map;
+            let mut cache = {
+                if memoize {
+                    map = HashMap::<Vec<BitSet>, usize>::new();
+                    Some(map)
+                }
+                else {
+                    None
+                }
+            };
+
+            recurse_index_search_serial(
+                mol,
+                &matches,
+                &[init],
+                edge_count - 1,
+                edge_count - 1,
+                edge_count,
+                bounds,
+                &mut cache,
+            )
+        },
         ParallelMode::DepthOne => {
             let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
             recurse_index_search_depthone(
