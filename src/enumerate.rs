@@ -173,13 +173,19 @@ fn grow_erode(mol: &Molecule) -> HashSet<BitSet> {
     // Set up a set of subgraphs enumerated so far.
     let mut subgraphs = HashSet::new();
 
-    // Maintain a stack of subgraph instances to extend.
-    let mut stack = vec![(subgraph, frontier, remainder)];
-    while let Some((mut subgraph, mut frontier, mut remainder)) = stack.pop() {
+    // Maintain a stack of subgraph instances to extend. The fourth member of
+    // these instance tuples is the index of the first edge that was ever added
+    // to the subgraph. This is used to avoid multiply enumerating subgraphs.
+    let mut stack = vec![(subgraph, frontier, remainder, 0)];
+    while let Some((mut subgraph, mut frontier, mut remainder, mut first)) = stack.pop() {
         // Get the next edge from the subgraph's edge boundary or, if the
         // subgraph is empty, from the remainder.
         let candidate = if subgraph.is_empty() {
-            remainder.iter().next()
+            let e_iter = remainder.iter().next();
+            if let Some(e) = e_iter {
+                first = e;
+            }
+            e_iter
         } else {
             remainder.intersection(&frontier).next()
         };
@@ -187,16 +193,16 @@ fn grow_erode(mol: &Molecule) -> HashSet<BitSet> {
         if let Some(e) = candidate {
             // Make a new instance by discarding the candidate edge entirely.
             remainder.remove(e);
-            stack.push((subgraph.clone(), frontier.clone(), remainder.clone()));
+            stack.push((subgraph.clone(), frontier.clone(), remainder.clone(), first));
 
             // Make another instance by adding the candidate edge to the
             // subgraph and updating the frontier accordingly if the new
             // subgraph was not previously enumerated and is not too large to
             // be part of a non-overlapping isomorphic pair.
-            subgraph.insert(e);
-            if !subgraphs.contains(&subgraph) && subgraph.len() <= mol.graph().edge_count() / 2 {
+            if (subgraph.is_empty() || e > first) && subgraph.len() < mol.graph().edge_count() / 2 {
+                subgraph.insert(e);
                 frontier.extend(edge_neighbors(mol.graph(), EdgeIndex::new(e)).map(|ix| ix.index()));
-                stack.push((subgraph, frontier, remainder));
+                stack.push((subgraph, frontier, remainder, first));
             }
         } else if subgraph.len() > 1 {
             // When all candidate edges are exhausted, collect this subgraph
