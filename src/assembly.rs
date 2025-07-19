@@ -290,11 +290,10 @@ fn recurse_index_search_depthone(
     state_index: usize,
     best_index: Arc<AtomicUsize>,
     bounds: &[Bound],
+    cache: Option<Arc<DashMap<Vec<BitSet>, usize>>>,
 ) -> (usize, usize) {
     // Keep track of the number of states searched, including this one.
     let states_searched = Arc::new(AtomicUsize::from(1));
-    let cache: DashMap<Vec<BitSet>, usize> = DashMap::new();
-    let shared_cache  = Arc::new(cache);
 
     // For every pair of duplicatable subgraphs compatible with the current set
     // of fragments, recurse using the fragments obtained by removing this pair
@@ -310,7 +309,7 @@ fn recurse_index_search_depthone(
                 best_index.clone(),
                 h1.len(),
                 bounds,
-                shared_cache.clone(),
+                cache.clone(),
             );
 
             // Update the best assembly indices (across children states and
@@ -347,21 +346,23 @@ fn recurse_index_search_depthone_helper(
     best_index: Arc<AtomicUsize>,
     largest_remove: usize,
     bounds: &[Bound],
-    cache: Arc<DashMap<Vec<BitSet>, usize>>,
+    cache: Option<Arc<DashMap<Vec<BitSet>, usize>>>,
 ) -> (usize, usize) {
     // Dynamic Programming
-    let mut fragment_vec = fragments.to_vec();
-    fragment_vec.sort_by(|a, b| a.iter().next().cmp(&b.iter().next()));
-    match cache.get_mut(&fragment_vec) {
-        None => {
-            cache.insert(fragment_vec.clone(), state_index);
-        },
-        Some(mut x) => {
-            if *x <= state_index {
-                return (state_index, 1);
-            }
-            else {
-                *x = state_index;
+    if let Some(ref frag_cache) = cache {
+        let mut fragment_vec = fragments.to_vec();
+        fragment_vec.sort_by(|a, b| a.iter().next().cmp(&b.iter().next()));
+        match frag_cache.get_mut(&fragment_vec) {
+            None => {
+                frag_cache.insert(fragment_vec.clone(), state_index);
+            },
+            Some(mut x) => {
+                if *x <= state_index {
+                    return (state_index, 1);
+                }
+                else {
+                    *x = state_index;
+                }
             }
         }
     }
@@ -592,6 +593,16 @@ pub fn index_search(
         },
         ParallelMode::DepthOne => {
             let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
+            let cache = {
+                if memoize {
+                    let cache: DashMap<Vec<BitSet>, usize> = DashMap::new();
+                    let shared_cache = Arc::new(cache);
+                    Some(shared_cache)
+                }
+                else {
+                    None
+                }
+            };
             recurse_index_search_depthone(
                 mol,
                 &matches,
@@ -599,6 +610,7 @@ pub fn index_search(
                 edge_count - 1,
                 best_index,
                 bounds,
+                cache,
             )
         }
         ParallelMode::Always => {
