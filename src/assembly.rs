@@ -198,6 +198,7 @@ fn recurse_index_search_serial(
     kernel_mode: KernelMode,
     matches_graph: &CompatGraph,
     mut subgraph: BitSet,
+    mut must_include: &Vec<usize>,
     depth: usize,
 ) -> (usize, usize) {
     let largest_remove = {
@@ -209,10 +210,12 @@ fn recurse_index_search_serial(
         }
     };
 
+    let mut must_include_clone = must_include.clone();
     if kernel_mode == KernelMode::Always ||
        (kernel_mode == KernelMode::Once && depth == 0) ||
        (kernel_mode == KernelMode::DepthOne && depth <= 1) {
         subgraph = deletion_kernel(matches_graph, subgraph);
+        must_include_clone.append(&mut inclusion_kernel(matches_graph, &subgraph));
     }
 
     // If any bounds are exceeded, halt this search branch.
@@ -252,6 +255,7 @@ fn recurse_index_search_serial(
                 kernel_mode,
                 matches_graph,
                 subgraph_clone,
+                &must_include_clone,
                 depth + 1,
             );
 
@@ -260,6 +264,10 @@ fn recurse_index_search_serial(
             best_child_index = best_child_index.min(child_index);
             best_index.fetch_min(best_child_index, Relaxed);
             states_searched += child_states_searched;
+        }
+
+        if must_include.contains(&v) {
+            break;
         }
     }
 
@@ -291,9 +299,11 @@ fn recurse_index_search_depthone(
 ) -> (usize, usize) {
     // Keep track of the number of states searched, including this one.
     let states_searched = Arc::new(AtomicUsize::from(1));
+    let mut must_include = vec![];
 
     if kernel_mode == KernelMode::Always || kernel_mode == KernelMode::Once {
         subgraph = deletion_kernel(matches_graph, subgraph);
+        must_include.append(&mut inclusion_kernel(matches_graph, &subgraph));
     }
 
     // For every pair of duplicatable subgraphs compatible with the current set
@@ -314,6 +324,7 @@ fn recurse_index_search_depthone(
                 kernel_mode,
                 matches_graph,
                 subgraph_clone,
+                &must_include,
                 1
             );
 
@@ -523,6 +534,7 @@ pub fn index_search(
                 kernel_mode,
                 &matches_graph,
                 subgraph,
+                &vec![],
                 0,
             )
         }
