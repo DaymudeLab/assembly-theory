@@ -436,7 +436,26 @@ fn recurse_index_search_parallel(
     best_index: Arc<AtomicUsize>,
     largest_remove: usize,
     bounds: &[Bound],
+    cache: Option<Arc<DashMap<Vec<BitSet>, usize>>>,
 ) -> (usize, usize) {
+    if let Some(ref frag_cache) = cache {
+        let mut fragment_vec = fragments.to_vec();
+        fragment_vec.sort_by(|a, b| a.iter().next().cmp(&b.iter().next()));
+        match frag_cache.get_mut(&fragment_vec) {
+            None => {
+                frag_cache.insert(fragment_vec.clone(), state_index);
+            },
+            Some(mut x) => {
+                if *x <= state_index {
+                    return (state_index, 1);
+                }
+                else {
+                    *x = state_index;
+                }
+            }
+        }
+    }
+
     // If any bounds are exceeded, halt this search branch.
     if bound_exceeded(
         mol,
@@ -468,6 +487,7 @@ fn recurse_index_search_parallel(
                 best_index.clone(),
                 h1.len(),
                 bounds,
+                cache.clone(),
             );
 
             // Update the best assembly indices (across children states and
@@ -615,6 +635,16 @@ pub fn index_search(
         }
         ParallelMode::Always => {
             let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
+            let cache = {
+                if memoize {
+                    let cache: DashMap<Vec<BitSet>, usize> = DashMap::new();
+                    let shared_cache = Arc::new(cache);
+                    Some(shared_cache)
+                }
+                else {
+                    None
+                }
+            };
             recurse_index_search_parallel(
                 mol,
                 &matches,
@@ -623,6 +653,7 @@ pub fn index_search(
                 best_index,
                 edge_count,
                 bounds,
+                cache,
             )
         }
     };
