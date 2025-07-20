@@ -52,6 +52,8 @@ pub mod canonize;
 // Graph kernelization algorithms.
 pub mod kernels;
 
+pub mod memoize;
+
 // Utility functions
 mod utils;
 

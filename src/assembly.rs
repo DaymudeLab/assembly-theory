@@ -19,11 +19,10 @@
 //! ```
 
 use std::{
-    collections::HashMap,
-    sync::{
+    collections::HashMap, sync::{
         atomic::{AtomicUsize, Ordering::Relaxed},
         Arc,
-    },
+    }
 };
 
 use bit_set::BitSet;
@@ -38,6 +37,7 @@ use crate::{
     kernels::KernelMode,
     molecule::Molecule,
     utils::connected_components_under_edges,
+    memoize::{Cache, CacheMode},
 };
 
 /// Parallelization strategy for the search phase.
@@ -205,24 +205,10 @@ fn recurse_index_search_serial(
     mut best_index: usize,
     largest_remove: usize,
     bounds: &[Bound],
-    cache: &mut Option<HashMap<Vec<BitSet>, usize>>,
+    cache: &mut Cache,
 ) -> (usize, usize) {
-    if let Some(frag_cache) = cache {
-        let mut fractures = fragments.to_vec();
-        fractures.sort_by(|a, b| a.iter().next().cmp(&b.iter().next()));
-        match frag_cache.get_mut(&fractures) {
-            None => {
-                frag_cache.insert(fractures.clone(), state_index);
-            },
-            Some(x) => {
-                if *x <= state_index {
-                    return (state_index, 1);
-                }
-                else {
-                    *x = state_index;
-                }
-            }
-        }
+    if let Some(res) = cache.get(fragments, state_index) {
+        return (res, 1);
     }
 
     // If any bounds are exceeded, halt this search branch.
@@ -266,6 +252,8 @@ fn recurse_index_search_serial(
             states_searched += child_states_searched;
         }
     }
+
+    cache.insert(fragments, state_index, state_index - best_child_index);
 
     (best_child_index, states_searched)
 }
@@ -570,7 +558,7 @@ pub fn index_search(
     parallel_mode: ParallelMode,
     kernel_mode: KernelMode,
     bounds: &[Bound],
-    memoize: bool,
+    memoize: CacheMode,
 ) -> (u32, u32, usize) {
     // Catch not-yet-implemented modes.
     if kernel_mode != KernelMode::None {
@@ -589,16 +577,7 @@ pub fn index_search(
     // Search for the shortest assembly pathway recursively.
     let (index, states_searched) = match parallel_mode {
         ParallelMode::None => {
-            let map;
-            let mut cache = {
-                if memoize {
-                    map = HashMap::<Vec<BitSet>, usize>::new();
-                    Some(map)
-                }
-                else {
-                    None
-                }
-            };
+            let mut cache = Cache::new(memoize);
 
             recurse_index_search_serial(
                 mol,
@@ -614,7 +593,7 @@ pub fn index_search(
         ParallelMode::DepthOne => {
             let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
             let cache = {
-                if memoize {
+                if memoize != CacheMode::None {
                     let cache: DashMap<Vec<BitSet>, usize> = DashMap::new();
                     let shared_cache = Arc::new(cache);
                     Some(shared_cache)
@@ -636,7 +615,7 @@ pub fn index_search(
         ParallelMode::Always => {
             let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
             let cache = {
-                if memoize {
+                if memoize != CacheMode::None {
                     let cache: DashMap<Vec<BitSet>, usize> = DashMap::new();
                     let shared_cache = Arc::new(cache);
                     Some(shared_cache)
@@ -688,7 +667,7 @@ pub fn index(mol: &Molecule) -> u32 {
         ParallelMode::DepthOne,
         KernelMode::None,
         &[Bound::Int, Bound::VecSimple, Bound::VecSmallFrags],
-        false,
+        CacheMode::None,
     )
     .0
 }

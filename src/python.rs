@@ -11,6 +11,7 @@ use crate::{
     enumerate::EnumerateMode,
     kernels::KernelMode,
     loader::parse_molfile_str,
+    memoize::CacheMode,
 };
 
 // TODO: Is there a clean way of avoiding the duplication of all our various
@@ -285,7 +286,7 @@ pub fn _index_search(
         parallel_mode,
         kernel_mode,
         &boundlist,
-        memoize,
+        CacheMode::None,
     );
 
     Ok(index)
@@ -373,7 +374,7 @@ pub fn _index_search_verbose(
         parallel_mode,
         kernel_mode,
         &boundlist,
-        memoize,
+        CacheMode::None,
     );
 
     // Package results and return.
