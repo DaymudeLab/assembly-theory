@@ -207,10 +207,6 @@ fn recurse_index_search_serial(
     bounds: &[Bound],
     cache: &mut Cache,
 ) -> (usize, usize) {
-    if let Some(res) = cache.get(fragments, state_index) {
-        return (res, 1);
-    }
-
     // If any bounds are exceeded, halt this search branch.
     if bound_exceeded(
         mol,
@@ -221,6 +217,10 @@ fn recurse_index_search_serial(
         bounds,
     ) {
         return (state_index, 1);
+    }
+
+    if let Some(res) = cache.get(fragments, state_index) {
+        return (res, 1);
     }
 
     // Keep track of the best assembly index found in any of this assembly
@@ -337,10 +337,6 @@ fn recurse_index_search_depthone_helper(
     bounds: &[Bound],
     cache: &mut Cache,
 ) -> (usize, usize) {
-    if let Some(res) = cache.get(fragments, state_index) {
-        return (res, 1);
-    }
-
     // If any bounds are exceeded, halt this search branch.
     if bound_exceeded(
         mol,
@@ -351,6 +347,10 @@ fn recurse_index_search_depthone_helper(
         bounds,
     ) {
         return (state_index, 1);
+    }
+
+    if let Some(res) = cache.get(fragments, state_index) {
+        return (res, 1);
     }
 
     // Keep track of the best assembly index found in any of this assembly
@@ -414,10 +414,6 @@ fn recurse_index_search_parallel(
     bounds: &[Bound],
     cache: &mut Cache,
 ) -> (usize, usize) {
-    if let Some(res) = cache.get(fragments, state_index) {
-        return (res, 1);
-    }
-
     // If any bounds are exceeded, halt this search branch.
     if bound_exceeded(
         mol,
@@ -428,6 +424,10 @@ fn recurse_index_search_parallel(
         bounds,
     ) {
         return (state_index, 1);
+    }
+
+    if let Some(res) = cache.get(fragments, state_index) {
+        return (res, 1);
     }
 
     // Keep track of the best assembly index found in any of this assembly
