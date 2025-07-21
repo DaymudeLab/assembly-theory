@@ -29,7 +29,6 @@ use std::{
 use bit_set::BitSet;
 use clap::ValueEnum;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
-use dashmap::DashMap;
 
 use crate::{
     bounds::{bound_exceeded, Bound},
@@ -254,7 +253,8 @@ fn recurse_index_search_serial(
         }
     }
 
-    cache.insert(fragments, state_index, state_index - best_child_index);
+    let savings = state_index - best_child_index;
+    cache.insert(fragments, state_index, savings);
 
     (best_child_index, states_searched)
 }
@@ -383,7 +383,9 @@ fn recurse_index_search_depthone_helper(
         }
     }
 
-    cache.insert(fragments, state_index, state_index - best_child_index);
+    let savings = state_index - best_child_index;
+    cache.insert(fragments, state_index, savings);
+
     (best_child_index, states_searched)
 }
 
@@ -410,24 +412,10 @@ fn recurse_index_search_parallel(
     best_index: Arc<AtomicUsize>,
     largest_remove: usize,
     bounds: &[Bound],
-    cache: Option<Arc<DashMap<Vec<BitSet>, usize>>>,
+    cache: &mut Cache,
 ) -> (usize, usize) {
-    if let Some(ref frag_cache) = cache {
-        let mut fragment_vec = fragments.to_vec();
-        fragment_vec.sort_by(|a, b| a.iter().next().cmp(&b.iter().next()));
-        match frag_cache.get_mut(&fragment_vec) {
-            None => {
-                frag_cache.insert(fragment_vec.clone(), state_index);
-            },
-            Some(mut x) => {
-                if *x <= state_index {
-                    return (state_index, 1);
-                }
-                else {
-                    *x = state_index;
-                }
-            }
-        }
+    if let Some(res) = cache.get(fragments, state_index) {
+        return (res, 1);
     }
 
     // If any bounds are exceeded, halt this search branch.
@@ -461,7 +449,7 @@ fn recurse_index_search_parallel(
                 best_index.clone(),
                 h1.len(),
                 bounds,
-                cache.clone(),
+                &mut cache.clone(),
             );
 
             // Update the best assembly indices (across children states and
@@ -471,6 +459,9 @@ fn recurse_index_search_parallel(
             states_searched.fetch_add(child_states_searched, Relaxed);
         }
     });
+
+    let savings = state_index - best_child_index.load(Relaxed);
+    cache.insert(fragments, state_index, savings);
 
     (
         best_child_index.load(Relaxed),
@@ -592,16 +583,7 @@ pub fn index_search(
         }
         ParallelMode::Always => {
             let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
-            let cache = {
-                if memoize != CacheMode::None {
-                    let cache: DashMap<Vec<BitSet>, usize> = DashMap::new();
-                    let shared_cache = Arc::new(cache);
-                    Some(shared_cache)
-                }
-                else {
-                    None
-                }
-            };
+            let mut cache = Cache::new(memoize, &mol);
             recurse_index_search_parallel(
                 mol,
                 &matches,
@@ -610,7 +592,7 @@ pub fn index_search(
                 best_index,
                 edge_count,
                 bounds,
-                cache,
+                &mut cache,
             )
         }
     };
@@ -645,7 +627,7 @@ pub fn index(mol: &Molecule) -> u32 {
         ParallelMode::DepthOne,
         KernelMode::None,
         &[Bound::Int, Bound::VecSimple, Bound::VecSmallFrags],
-        CacheMode::None,
+        CacheMode::Savings,
     )
     .0
 }

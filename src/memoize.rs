@@ -28,16 +28,6 @@ pub struct Cache {
     mol: Option<Molecule>,
 }
 
-/*impl Clone for Cache {
-    fn clone(&self) -> Self {
-        Self {
-            mode: self.mode.clone(),
-            cache: self.mode.clone(),
-            mol: self.mol.clone(),
-        }
-    }
-}*/
-
 impl Cache {
     pub fn new(mode: CacheMode, mol: &Molecule) -> Self {
         let mol = {
