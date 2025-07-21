@@ -25,10 +25,10 @@ pub enum EnumerateMode {
 
 /// Return an interator over all connected, non-induced subgraphs of the
 /// molecular graph `mol` using the algorithm specified by `mode`.
-pub fn enumerate_subgraphs(mol: &Molecule, mode: EnumerateMode) -> impl Iterator<Item = BitSet> {
+pub fn enumerate_subgraphs(mol: &Molecule, mode: EnumerateMode) -> HashSet<BitSet> {
     match mode {
-        EnumerateMode::Extend => extend(mol).into_iter(),
-        EnumerateMode::GrowErode => grow_erode(mol).into_iter(),
+        EnumerateMode::Extend => extend(mol),
+        EnumerateMode::GrowErode => grow_erode(mol),
     }
 }
 
