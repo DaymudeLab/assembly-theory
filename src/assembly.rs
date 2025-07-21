@@ -88,18 +88,12 @@ fn labels_matches(
     let mut isomorphism_classes = HashMap::<Labeling, Vec<BitSet>>::new();
     let mut subgraph_labels = HashMap::<BitSet, Labeling>::new();
     for subgraph in enumerate_subgraphs(mol, enumerate_mode) {
-        // TODO: Because canonize::Labeling does not implement Copy or Clone,
-        // but we want to use the canonical label in two places, we have to
-        // compute it twice. Implementing Copy or Clone on canonize::Labeling
-        // requires modifying graph_canon::CanonLabeling which we don't have
-        // access to. Update this after a fix is implemented.
         let label = canonize(mol, &subgraph, canonize_mode);
-        let label2 = canonize(mol, &subgraph, canonize_mode);
         isomorphism_classes
-            .entry(label)
+            .entry(label.clone())
             .and_modify(|bucket| bucket.push(subgraph.clone()))
             .or_insert(vec![subgraph.clone()]);
-        subgraph_labels.insert(subgraph, label2);
+        subgraph_labels.insert(subgraph, label);
     }
 
     // In each isomorphism class, collect non-overlapping pairs of subgraphs.
