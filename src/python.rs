@@ -20,7 +20,6 @@ use crate::{
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 enum PyEnumerateMode {
     Extend,
-    ExtendIsomorphic,
     GrowErode,
 }
 
@@ -69,7 +68,6 @@ impl FromStr for PyEnumerateMode {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "extend" => Ok(PyEnumerateMode::Extend),
-            "extendisomorphic" => Ok(PyEnumerateMode::ExtendIsomorphic),
             "growerode" => Ok(PyEnumerateMode::GrowErode),
             _ => Err(PyValueError::new_err(format!("Invalid enumerate: {s}"))),
         }
@@ -245,7 +243,6 @@ pub fn _index_search(
     // Parse the various modes and bound options.
     let enumerate_mode = match PyEnumerateMode::from_str(&enumerate_str) {
         Ok(PyEnumerateMode::Extend) => EnumerateMode::Extend,
-        Ok(PyEnumerateMode::ExtendIsomorphic) => EnumerateMode::ExtendIsomorphic,
         Ok(PyEnumerateMode::GrowErode) => EnumerateMode::GrowErode,
         _ => {
             panic!("Unrecognized enumerate mode {enumerate_str}.")
@@ -334,7 +331,6 @@ pub fn _index_search_verbose(
     // Parse the various modes and bound options.
     let enumerate_mode = match PyEnumerateMode::from_str(&enumerate_str) {
         Ok(PyEnumerateMode::Extend) => EnumerateMode::Extend,
-        Ok(PyEnumerateMode::ExtendIsomorphic) => EnumerateMode::ExtendIsomorphic,
         Ok(PyEnumerateMode::GrowErode) => EnumerateMode::GrowErode,
         _ => {
             panic!("Unrecognized enumerate mode {enumerate_str}.")
