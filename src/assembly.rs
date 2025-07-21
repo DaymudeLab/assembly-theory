@@ -577,7 +577,7 @@ pub fn index_search(
     // Search for the shortest assembly pathway recursively.
     let (index, states_searched) = match parallel_mode {
         ParallelMode::None => {
-            let mut cache = Cache::new(memoize);
+            let mut cache = Cache::new(memoize, &mol);
 
             recurse_index_search_serial(
                 mol,
