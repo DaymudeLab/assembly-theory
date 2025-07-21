@@ -18,9 +18,6 @@ use crate::{molecule::Molecule, utils::edge_neighbors};
 pub enum EnumerateMode {
     /// Grow connected subgraphs from each edge using iterative extension.
     Extend,
-    /// Like Extend, but only extends subgraphs that are isomoprhic to at least
-    /// one other subgraph.
-    ExtendIsomorphic,
     /// From a subgraph, choose an edge from its boundary and either grow it by
     /// adding this edge or erode its remainder by discarding the edge.
     GrowErode,
@@ -31,9 +28,6 @@ pub enum EnumerateMode {
 pub fn enumerate_subgraphs(mol: &Molecule, mode: EnumerateMode) -> impl Iterator<Item = BitSet> {
     match mode {
         EnumerateMode::Extend => extend(mol).into_iter(),
-        EnumerateMode::ExtendIsomorphic => {
-            panic!("EnumerateMode::ExtendIsomorphic gets handled in assembly::matches_extend_isomorphic; execution should never have gotten here!")
-        }
         EnumerateMode::GrowErode => grow_erode(mol).into_iter(),
     }
 }
