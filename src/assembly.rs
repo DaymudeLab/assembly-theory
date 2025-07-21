@@ -545,6 +545,9 @@ pub fn index_search(
     // Enumerate non-overlapping isomorphic subgraph pairs.
     let (_, matches) = labels_matches(mol, enumerate_mode, canonize_mode);
 
+    // Create cache for dynamic programming
+    let mut cache = Cache::new(memoize, &mol);
+
     // Initialize the first fragment as the entire graph.
     let mut init = BitSet::new();
     init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
@@ -554,8 +557,6 @@ pub fn index_search(
     // Search for the shortest assembly pathway recursively.
     let (index, states_searched) = match parallel_mode {
         ParallelMode::None => {
-            let mut cache = Cache::new(memoize, &mol);
-
             recurse_index_search_serial(
                 mol,
                 &matches,
@@ -569,7 +570,6 @@ pub fn index_search(
         },
         ParallelMode::DepthOne => {
             let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
-            let cache = Cache::new(memoize, &mol);
 
             recurse_index_search_depthone(
                 mol,
@@ -583,7 +583,7 @@ pub fn index_search(
         }
         ParallelMode::Always => {
             let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
-            let mut cache = Cache::new(memoize, &mol);
+
             recurse_index_search_parallel(
                 mol,
                 &matches,
