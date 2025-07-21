@@ -10,7 +10,10 @@ use petgraph::{
     Undirected,
 };
 
-use crate::molecule::{AtomOrBond, Index, Molecule};
+use crate::{
+    molecule::{AtomOrBond, Index, Molecule},
+    utils::{edge_induced_subgraph, is_subset_connected},
+};
 
 /// Algorithm for graph canonization.
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
@@ -79,10 +82,24 @@ fn subgraph_to_cgraph(mol: &Molecule, subgraph: &BitSet) -> CGraph {
     h
 }
 
-// First checks if the subgraph forms a tree (given the assumption that subgraph is always connected)
-// returns None if not a tree
-// Otherwise returns canon string for the (labeled) tree
-pub fn canonize_subtree(molecule: &Molecule, subgraph: &BitSet) -> Option<Vec<u8>> {
+/// Returns a canonical label for the given subgraph if it is a tree (i.e., a
+/// connected, acyclic graph) and otherwise returns `None`.
+pub fn canonize_subtree(mol: &Molecule, subgraph: &BitSet) -> Option<Vec<u8>> {
+    // A tree must be connected and have #nodes = #edges - 1. If the given
+    // subgraph is not a tree, return None.
+    let g_subgraph = edge_induced_subgraph(mol.graph(), subgraph);
+    if !is_subset_connected(mol.graph(), subgraph) ||
+        (g_subgraph.node_count() != g_subgraph.edge_count() - 1) {
+        return None;
+    }
+
+    // Subtrees of a molecule are unrooted, so choose a canonical root by
+    // finding a node of minimum centrality. If there are two nodes of minimum
+    // centrality, compute canonizations for both and take the minimum.
+    // TODO
+
+
+    // Devendra's original implementation, minus tree checking.
     let mgraph = molecule.graph();
     let mut vtx_set = BitSet::with_capacity(mgraph.node_count());
     let mut subgraph_adj = vec![BitSet::with_capacity(mgraph.node_count()); mgraph.node_count()];
@@ -128,79 +145,72 @@ pub fn canonize_subtree(molecule: &Molecule, subgraph: &BitSet) -> Option<Vec<u8
         }
     }
 
-    // check if the subgraph is a tree or not (given the assumption that subgraph is connected graph)
-    // e = n - 1
+    // keep merging the labels until 1/2 vertices remain
+    while vtx_set.len() > 2 {
+        // locate all the leaves
+        let leaves: Vec<usize> = subgraph_adj
+            .iter()
+            .enumerate()
+            .filter_map(|(i, adj_list)| if adj_list.len() == 1 { Some(i) } else { None })
+            .collect();
+        let mut parents = BitSet::with_capacity(mgraph.node_count());
+        // add strings of the leaves to the parent's string array
+        leaves.iter().for_each(|leaf_id| {
+            let parent = subgraph_adj[*leaf_id].iter().next().unwrap();
+            let leaf_str = &vtx_label[*leaf_id];
+            vtx_strs[parent].push(leaf_str.clone());
 
-    if subgraph.len() == (vtx_set.len() - 1) {
-        // keep merging the labels until 1/2 vertices remain
-        while vtx_set.len() > 2 {
-            // locate all the leaves
-            let leaves: Vec<usize> = subgraph_adj
-                .iter()
-                .enumerate()
-                .filter_map(|(i, adj_list)| if adj_list.len() == 1 { Some(i) } else { None })
-                .collect();
-            let mut parents = BitSet::with_capacity(mgraph.node_count());
-            // add strings of the leaves to the parent's string array
-            leaves.iter().for_each(|leaf_id| {
-                let parent = subgraph_adj[*leaf_id].iter().next().unwrap();
-                let leaf_str = &vtx_label[*leaf_id];
-                vtx_strs[parent].push(leaf_str.clone());
+            // add parent to parents list
+            parents.insert(parent);
 
-                // add parent to parents list
-                parents.insert(parent);
+            // remove leaf node from adj matrix
+            subgraph_adj[*leaf_id].clear();
+            subgraph_adj[parent].remove(*leaf_id);
+            // remove leaf node from bit-set
+            vtx_set.remove(*leaf_id);
+        });
 
-                // remove leaf node from adj matrix
-                subgraph_adj[*leaf_id].clear();
-                subgraph_adj[parent].remove(*leaf_id);
-                // remove leaf node from bit-set
-                vtx_set.remove(*leaf_id);
-            });
+        // merge leaf strings in parent's primary string
+        parents.iter().for_each(|parent| {
+            // only do this once the parent has seen all its children and becomes a leaf in next iteration
+            if subgraph_adj[parent].len() <= 1 {
+                vtx_strs[parent].sort();
+                let parent_str = vtx_strs[parent].join(&b',');
 
-            // merge leaf strings in parent's primary string
-            parents.iter().for_each(|parent| {
-                // only do this once the parent has seen all its children and becomes a leaf in next iteration
-                if subgraph_adj[parent].len() <= 1 {
-                    vtx_strs[parent].sort();
-                    let parent_str = vtx_strs[parent].join(&b',');
-
-                    vtx_label[parent].pop(); // remove the closing bracket in starting parent label: "(X)"
-                    vtx_label[parent].push(b',');
-                    vtx_label[parent].extend_from_slice(&parent_str);
-                    vtx_label[parent].push(b')');
-                }
-            });
-        }
-
-        let vtx_1 = vtx_set.iter().next().unwrap();
-        let vtx_1_str = &vtx_label[vtx_1];
-
-        // when 2 vertices are left, merge their labels
-        if vtx_set.len() == 2 {
-            let vtx_2 = vtx_set.iter().next().unwrap();
-            let vtx_2_str = &vtx_label[vtx_2];
-            let mut return_str_vec: Vec<u8> = vec![];
-            if vtx_1_str.cmp(vtx_2_str) == Ordering::Less {
-                return_str_vec.push(b'(');
-                return_str_vec.extend(vtx_1_str);
-                return_str_vec.push(b',');
-                return_str_vec.extend(vtx_2_str);
-                return_str_vec.push(b')');
-                Some(return_str_vec)
-            } else {
-                return_str_vec.push(b'(');
-                return_str_vec.extend(vtx_2_str);
-                return_str_vec.push(b',');
-                return_str_vec.extend(vtx_1_str);
-                return_str_vec.push(b')');
-                Some(return_str_vec)
+                vtx_label[parent].pop(); // remove the closing bracket in starting parent label: "(X)"
+                vtx_label[parent].push(b',');
+                vtx_label[parent].extend_from_slice(&parent_str);
+                vtx_label[parent].push(b')');
             }
+        });
+    }
+
+    let vtx_1 = vtx_set.iter().next().unwrap();
+    let vtx_1_str = &vtx_label[vtx_1];
+
+    // when 2 vertices are left, merge their labels
+    if vtx_set.len() == 2 {
+        let vtx_2 = vtx_set.iter().next().unwrap();
+        let vtx_2_str = &vtx_label[vtx_2];
+        let mut return_str_vec: Vec<u8> = vec![];
+        if vtx_1_str.cmp(vtx_2_str) == Ordering::Less {
+            return_str_vec.push(b'(');
+            return_str_vec.extend(vtx_1_str);
+            return_str_vec.push(b',');
+            return_str_vec.extend(vtx_2_str);
+            return_str_vec.push(b')');
+            Some(return_str_vec)
         } else {
-            // Some(vtx_1_str.as_bytes().to_vec())
-            Some(vtx_1_str.clone())
+            return_str_vec.push(b'(');
+            return_str_vec.extend(vtx_2_str);
+            return_str_vec.push(b',');
+            return_str_vec.extend(vtx_1_str);
+            return_str_vec.push(b')');
+            Some(return_str_vec)
         }
     } else {
-        None
+        // Some(vtx_1_str.as_bytes().to_vec())
+        Some(vtx_1_str.clone())
     }
 }
 
