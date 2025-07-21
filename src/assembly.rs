@@ -32,7 +32,7 @@ use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIter
 
 use crate::{
     bounds::{bound_exceeded, Bound},
-    canonize::{canonize, CanonizeMode},
+    canonize::{canonize, CanonizeMode, Labeling},
     enumerate::{enumerate_subgraphs, EnumerateMode},
     kernels::KernelMode,
     molecule::Molecule,
@@ -72,21 +72,34 @@ pub fn assembly_depth(mol: &Molecule) -> u32 {
     ix
 }
 
-/// Return an iterator over all pairs of non-overlapping, isomorphic subgraphs
-/// in the given molecule, sorted to guarantee deterministic iteration.
-fn matches(
+/// Return (1) a map of the given molecule's connected, non-induced subgraphs
+/// with at most |E|/2 edges to their canonical labels and (2) all pairs of
+/// non-overlapping, isomorphic subgraphs in the molecule, sorted to guarantee
+/// deterministic iteration.
+fn labels_matches(
     mol: &Molecule,
     enumerate_mode: EnumerateMode,
     canonize_mode: CanonizeMode,
-) -> impl Iterator<Item = (BitSet, BitSet)> {
-    // Enumerate all connected, non-induced subgraphs and bin them into
-    // isomorphism classes using canonization.
-    let mut isomorphism_classes = HashMap::<_, Vec<BitSet>>::new();
+) -> (HashMap<BitSet, Labeling>, Vec<(BitSet, BitSet)>) {
+    // Enumerate all connected, non-induced subgraphs with at most |E|/2 edges
+    // and bin them into isomorphism classes using canonization. Store these
+    // subgraphs' canonical labels for later use in memoization (this way, we
+    // only have to compute them once).
+    let mut isomorphism_classes = HashMap::<Labeling, Vec<BitSet>>::new();
+    let mut subgraph_labels = HashMap::<BitSet, Labeling>::new();
     for subgraph in enumerate_subgraphs(mol, enumerate_mode) {
+        // TODO: Because canonize::Labeling does not implement Copy or Clone,
+        // but we want to use the canonical label in two places, we have to
+        // compute it twice. Implementing Copy or Clone on canonize::Labeling
+        // requires modifying graph_canon::CanonLabeling which we don't have
+        // access to. Update this after a fix is implemented.
+        let label = canonize(mol, &subgraph, canonize_mode);
+        let label2 = canonize(mol, &subgraph, canonize_mode);
         isomorphism_classes
-            .entry(canonize(mol, &subgraph, canonize_mode))
+            .entry(label)
             .and_modify(|bucket| bucket.push(subgraph.clone()))
             .or_insert(vec![subgraph.clone()]);
+        subgraph_labels.insert(subgraph, label2);
     }
 
     // In each isomorphism class, collect non-overlapping pairs of subgraphs.
@@ -119,7 +132,7 @@ fn matches(
         ord[i]
     });
 
-    matches.into_iter()
+    (subgraph_labels, matches)
 }
 
 /// Determine the fragments produced by removing the given pair of duplicatable
@@ -509,7 +522,7 @@ pub fn index_search(
     }
 
     // Enumerate non-overlapping isomorphic subgraph pairs.
-    let matches = matches(mol, enumerate_mode, canonize_mode).collect::<Vec<_>>();
+    let (_, matches) = labels_matches(mol, enumerate_mode, canonize_mode);
 
     // Initialize the first fragment as the entire graph.
     let mut init = BitSet::new();
