@@ -156,7 +156,7 @@ pub fn bench_index_search(c: &mut Criterion) {
                             &mol,
                             EnumerateMode::GrowErode,
                             CanonizeMode::Nauty,
-                            ParallelMode::Always,
+                            ParallelMode::DepthOne,
                             KernelMode::None,
                             &bounds,
                             false,
