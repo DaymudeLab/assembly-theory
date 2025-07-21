@@ -1,7 +1,7 @@
 use bit_set::BitSet;
 use clap::ValueEnum;
 use dashmap::DashMap;
-
+use std::sync::Arc;
 use crate::{
     canonize::{CanonizeMode, Labeling, canonize},
     molecule::Molecule,
@@ -21,11 +21,22 @@ enum CacheType {
     Canon(Labeling),
 }
 
+#[derive(Clone)]
 pub struct Cache {
     mode: CacheMode,
-    cache: DashMap<CacheType, usize>,
+    cache: Arc<DashMap<CacheType, usize>>,
     mol: Option<Molecule>,
 }
+
+/*impl Clone for Cache {
+    fn clone(&self) -> Self {
+        Self {
+            mode: self.mode.clone(),
+            cache: self.mode.clone(),
+            mol: self.mol.clone(),
+        }
+    }
+}*/
 
 impl Cache {
     pub fn new(mode: CacheMode, mol: &Molecule) -> Self {
@@ -38,7 +49,7 @@ impl Cache {
 
         Self {
             mode,
-            cache: DashMap::<CacheType, usize>::new(),
+            cache: Arc::new(DashMap::<CacheType, usize>::new()),
             mol,
         }
     }

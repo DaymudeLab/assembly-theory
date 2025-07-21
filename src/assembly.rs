@@ -19,7 +19,8 @@
 //! ```
 
 use std::{
-    collections::HashMap, sync::{
+    collections::HashMap, 
+    sync::{
         atomic::{AtomicUsize, Ordering::Relaxed},
         Arc,
     }
@@ -278,7 +279,7 @@ fn recurse_index_search_depthone(
     state_index: usize,
     best_index: Arc<AtomicUsize>,
     bounds: &[Bound],
-    cache: Option<Arc<DashMap<Vec<BitSet>, usize>>>,
+    cache: Cache,
 ) -> (usize, usize) {
     // Keep track of the number of states searched, including this one.
     let states_searched = Arc::new(AtomicUsize::from(1));
@@ -297,7 +298,7 @@ fn recurse_index_search_depthone(
                 best_index.clone(),
                 h1.len(),
                 bounds,
-                cache.clone(),
+                &mut cache.clone(),
             );
 
             // Update the best assembly indices (across children states and
@@ -334,27 +335,11 @@ fn recurse_index_search_depthone_helper(
     best_index: Arc<AtomicUsize>,
     largest_remove: usize,
     bounds: &[Bound],
-    cache: Option<Arc<DashMap<Vec<BitSet>, usize>>>,
+    cache: &mut Cache,
 ) -> (usize, usize) {
-    // Dynamic Programming
-    if let Some(ref frag_cache) = cache {
-        let mut fragment_vec = fragments.to_vec();
-        fragment_vec.sort_by(|a, b| a.iter().next().cmp(&b.iter().next()));
-        match frag_cache.get_mut(&fragment_vec) {
-            None => {
-                frag_cache.insert(fragment_vec.clone(), state_index);
-            },
-            Some(mut x) => {
-                if *x <= state_index {
-                    return (state_index, 1);
-                }
-                else {
-                    *x = state_index;
-                }
-            }
-        }
+    if let Some(res) = cache.get(fragments, state_index) {
+        return (res, 1);
     }
-
 
     // If any bounds are exceeded, halt this search branch.
     if bound_exceeded(
@@ -387,7 +372,7 @@ fn recurse_index_search_depthone_helper(
                 best_index.clone(),
                 h1.len(),
                 bounds,
-                cache.clone(),
+                &mut cache.clone(),
             );
 
             // Update the best assembly indices (across children states and
@@ -398,6 +383,7 @@ fn recurse_index_search_depthone_helper(
         }
     }
 
+    cache.insert(fragments, state_index, state_index - best_child_index);
     (best_child_index, states_searched)
 }
 
@@ -592,16 +578,8 @@ pub fn index_search(
         },
         ParallelMode::DepthOne => {
             let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
-            let cache = {
-                if memoize != CacheMode::None {
-                    let cache: DashMap<Vec<BitSet>, usize> = DashMap::new();
-                    let shared_cache = Arc::new(cache);
-                    Some(shared_cache)
-                }
-                else {
-                    None
-                }
-            };
+            let cache = Cache::new(memoize, &mol);
+
             recurse_index_search_depthone(
                 mol,
                 &matches,
