@@ -1,8 +1,22 @@
-//! Expose functionality to python library using pyo3.
-use pyo3::exceptions::PyValueError;
-use pyo3::prelude::*;
-use std::collections::{HashMap, HashSet};
-use std::str::FromStr;
+//! Expose public `assembly_theory` functionality to a Python library using
+//! [`pyo3`](https://docs.rs/pyo3/latest/pyo3/).
+//!
+//! The Python library is available on PyPI as
+//! [`assembly-theory`](https://pypi.org/project/assembly-theory/); see that
+//! README for installation and usage instructions. To build the Python library
+//! directly from this crate's source code, see the instructions in the
+//! [GitHub README](https://github.com/DaymudeLab/assembly-theory).
+
+use std::{
+    collections::{HashMap, HashSet},
+    str::FromStr,
+};
+
+use pyo3::{
+    exceptions::{PyOSError, PyValueError},
+    prelude::*,
+    PyErr,
+};
 
 use crate::{
     assembly::{index, index_search, ParallelMode},
@@ -10,8 +24,15 @@ use crate::{
     canonize::CanonizeMode,
     enumerate::EnumerateMode,
     kernels::KernelMode,
-    loader::parse_molfile_str,
+    loader::{parse_molfile_str, ParserError},
 };
+
+/// Implement a Python version of [`crate::loader::ParserError`].
+impl From<ParserError> for PyErr {
+    fn from(err: ParserError) -> PyErr {
+        PyOSError::new_err(err.to_string())
+    }
+}
 
 // TODO: Is there a clean way of avoiding the duplication of all our various
 // algorithm variant enums?
@@ -163,15 +184,13 @@ fn make_boundlist(pybounds: &[PyBound]) -> Vec<OurBound> {
     boundlist
 }
 
-/// Retrieves molecular information from a given mol block.
+/// Python version of [`molecule::Molecule::info`].
 ///
 /// # Parameters
 /// - `mol_block`: The contents of a .mol file as a string.
 ///
 /// # Returns
 /// - A `String` containing molecular information.
-///
-/// TODO: Add Python example.
 #[pyfunction]
 pub fn _mol_info(mol_block: String) -> PyResult<String> {
     // Parse the .mol file contents as a molecule::Molecule.
@@ -185,15 +204,13 @@ pub fn _mol_info(mol_block: String) -> PyResult<String> {
     Ok(mol.info())
 }
 
-/// Computes a molecule's assembly index using an efficient default strategy.
+/// Python version of [`assembly::index`].
 ///
 /// # Parameters
 /// - `mol_block`: The contents of a .mol file as a string.
 ///
 /// # Returns
 /// - The molecule's assembly index as a `u32`.
-///
-/// TODO: Add Python example.
 #[pyfunction]
 pub fn _index(mol_block: String) -> PyResult<u32> {
     // Parse the .mol file contents as a molecule::Molecule.
@@ -207,8 +224,8 @@ pub fn _index(mol_block: String) -> PyResult<u32> {
     Ok(index(&mol))
 }
 
-/// Computes the molecular assembly index using a top-down recursive algorithm
-/// that is parameterized by the specified options.
+/// Python version of [`assembly::index_search`] returning only the assembly
+/// index.
 ///
 /// # Parameters
 /// - `mol_block`: The contents of a .mol file as a string.
@@ -221,8 +238,6 @@ pub fn _index(mol_block: String) -> PyResult<u32> {
 ///
 /// # Returns
 /// - The molecule's assembly index as a `u32`.
-///
-/// TODO: Add Python example.
 #[pyfunction]
 pub fn _index_search(
     mol_block: String,
@@ -291,8 +306,8 @@ pub fn _index_search(
     Ok(index)
 }
 
-/// Computes the molecular assembly index and related information using a top-
-/// down recursive algorithm that is parameterized by the specified options.
+/// Python version of [`assembly::index_search`] returning the assembly index
+/// and related information.
 ///
 /// # Parameters
 /// - `mol_block`: The contents of a .mol file as a string.
@@ -309,8 +324,6 @@ pub fn _index_search(
 ///   - `"num_matches"`: The molecule's number of non-overlapping isomorphic
 ///   subgraph pairs.
 ///   - `"states_searched"`: The number of assembly states searchede.
-///
-/// TODO: Add Python example.
 #[pyfunction]
 pub fn _index_search_verbose(
     mol_block: String,
@@ -385,10 +398,9 @@ pub fn _index_search_verbose(
     Ok(data)
 }
 
-// Registers the Rust functions as a Python module.
-//
-// This function must match the `lib.name` setting in `Cargo.toml`,
-// otherwise, Python will not be able to import the module.
+/// A python wrapper for the assembly_theory Rust crate.
+// Registers the listed functions as a Python module accessible as _pyat; the
+// above line is used as a docstring.
 #[pymodule]
 fn _pyat(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_mol_info, m)?)?;
