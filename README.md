@@ -79,10 +79,10 @@ pipx install maturin     # using pipx
 uv tool install maturin  # using uv
 ```
 
-Then, within the corresponding virtual environment, build and install this project as a Python package:
+Then, within a virtual environment, build and install this project as a Python package:
 
 ```shell
-maturin develop
+maturin develop --release
 ```
 
 Once installed, this Python package can be combined with standard cheminformatic packages like [`RDKit`](https://www.rdkit.org/docs/index.html#) to flexibly manipulate molecular representations and compute their assembly indices.
@@ -91,11 +91,15 @@ Once installed, this Python package can be combined with standard cheminformatic
 import assembly_theory as at
 from rdkit import Chem
 
+# Get a mol block from a molecule's SMILES representation.
 anthracene = Chem.MolFromSmiles("c1ccc2cc3ccccc3cc2c1")
+anthracene = Chem.MolBlockFromMol(anthracene)
+
+# Calculate the molecule's assembly index.
 at.index(anthracene)  # 6
 ```
 
-See the documentation on [PyPI](https://pypi.org/project/assembly-theory/) for a complete list of functions exposed to the Python package.
+See the [`assembly_theory::python` documentation](https://docs.rs/assembly-theory/latest/assembly_theory/python) for a complete list of functions exposed to the Python package along with usage examples.
 
 
 ## Known Issues
