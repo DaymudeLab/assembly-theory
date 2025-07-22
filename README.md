@@ -1,122 +1,141 @@
 # Open, Reproducible Calculation of Assembly Indices
 
-This repository contains the Rust source code for a faster
-calculation of molecular assembly indices. This is a collaboration in the
-Biodesign Center for Biocomputing, Security and Society at Arizona State
-University involving (in alphabetical order) Cole Mathis, Devansh Vimal,
-Devendra Parkar, Joshua Daymude, Garrett Parzych, Olivia Smith, and Sean
-Bergen.
-
-## Functionality and Usage Examples
-
-`assembly-theory` can be used to compute assembly indices as a standalone executable, as a library imported by other Rust code, or via a Python interface.
-Here, we provide usage examples of each; in the next section, we demonstrate testing and benchmarking functionality.
+`assembly-theory` is an open-source, high-performance library for computing *assembly indices* of molecular structures (see, e.g., [Sharma et al., 2023](https://doi.org/10.1038/s41586-023-06600-9); [Walker et al., 2024](https://doi.org/10.1098/rsif.2024.0367)).
+It is implemented in Rust and is available as a [Rust crate](https://crates.io/crates/assembly-theory), [Python package](https://pypi.org/project/assembly-theory/), and standalone executable. 
 
 
-### Building and Running the Executable
+## Getting Started
 
-This crate currently only builds on unix-like systems (MacOS and Linux).
+If you want to use the Rust crate in a Rust project, refer to the [docs.rs](https://docs.rs/assembly-theory) documentation for installation and usage examples.
+If you want to use the Python library (e.g., to take advantage of RDKit-compatible molecule loaders), refer to the documentation on [PyPI](https://pypi.org/project/assembly-theory/).
+
+Otherwise, clone/download this repository if you want to:
+
+- Build and run the standalone executable
+- Build and run tests and benchmarks on our reference datasets
+- Build the Python package locally
+
+
+### Requirements
+
+Currently, this project only supports Unix-like systems (macOS and Linux).
 Windows is supported through [WSL](https://learn.microsoft.com/en-us/windows/wsl/install).
-Rust provides the `cargo` build system and package manager for dependency management, compilation, packaging, and versioning.
-To build the standalone executable, first install [clang](https://clang.llvm.org/), then run:
+
+You need Rust, installed either [using `rustup`](https://www.rust-lang.org/tools/install) or via your system package manager of choice.
+This provides the `cargo` build system and dependency manager for compilation, testing, benchmarking, documentation, and packaging.
+
+You will also need the [clang](https://clang.llvm.org) toolkit for C/C++.
+
+
+### Using the Standalone Executable
+
+Build an optimized (release) version of the standalone executable with:
 
 ```shell
 cargo build --release
 ```
 
-This creates an optimized, portable, standalone executable named `target/release/assembly-theory`.
-It takes as input a path to a `.mol` file and returns that molecule's integer assembly index:
+Simply pass this executable a `.mol` file path to compute that molecule's assembly index:
 
 ```shell
 > ./target/release/assembly-theory data/checks/anthracene.mol
 6
 ```
 
-Running with the `--verbose` flag provides additional information, including the input molecule's *number of disjoint, isomorphic subgraph pairs* (i.e., the number of times any molecular substructure is repeated inside the molecule) and the size of the top-down algorithm's *search space* (i.e., its total number of recursive calls).
+A full list of options for returning more information or customizing the assembly index calculation procedure can be found by running:
 
 ```shell
-> ./target/release/assembly-theory data/checks/anthracene.mol --verbose
-Assembly Index: 6
-Duplicate subgraph pairs: 406
-Search Space: 3143
+./target/release/assembly-theory --help
 ```
 
-By default, `assembly-theory` uses its fastest algorithm for assembly index calculation (currently `assembly-theory`-allbounds, see the previous section).
-To use a specific bound or disable bounds altogether, set the `--bounds` or `--no-bounds` flags:
+
+### Tests and Benchmarks
+
+`assembly-theory` comes with a variety of unit, integration, and documentation example tests ensuring the correct calculation of assembly indices.
+To run all tests, use:
 
 ```shell
-# naive, no bounds
-./target/release/assembly-theory <molpath> --no-bounds
-
-# logbound, only logarithmic bound (Jirasek et al., 2024)
-./target/release/assembly-theory <molpath> --bounds log
-
-# intbound, only integer addition chain bound (Seet et al., 2024)
-./target/release/assembly-theory <molpath> --bounds int-chain
-
-# allbounds, both integer and vector addition chain bounds
-./target/release/assembly-theory <molpath> --bounds int-chain vec-chain
+cargo test
 ```
 
-Finally, the `--molecule-info` flag prints the molecule's graph representation as a vertex and edge list, the `--help` flag prints a guide to this command line interface, and the `--version` flag prints the current `assembly-theory` version.
+We actively encourage the use of `assembly-theory` as a framework within which new algorithmic improvements can be implemented and tested.
+To measure the performance of a potential improvement, we've implemented benchmarks using the [`criterion`](https://crates.io/crates/criterion) crate.
+These benchmarks run assembly index calculation against reference datasets of molecules, timing only the calculation part (skipping molecule parsing, etc.).
+To run all benchmarks, use:
 
-
-### Installing and using the Python library
-
-The python library uses `maturin` as a build tool. This needs to be run in a virtual environment. Use the following commands to build and install the library:
 ```shell
-pip install maturin
+cargo bench
+```
+
+See the [`criterion` command line options](https://bheisler.github.io/criterion.rs/book/user_guide/command_line_options.html) for details on how to run only specific benchmarks or save baselines for comparison.
+
+
+### Building the Python Package Locally
+
+We use the [`pyo3`](https://crates.io/crates/pyo3) crate to package functionality from our Rust library as a Python package called `assembly_theory`.
+To build this package locally, first install [`maturin`](https://pypi.org/project/maturin/) using your virtual environment manager of choice:
+
+```shell
+pip install maturin      # using pip
+pipx install maturin     # using pipx
+uv tool install maturin  # using uv
+```
+
+Then, within the corresponding virtual environment, build and install this Rust library as a Python package:
+
+```shell
 maturin develop
 ```
 
-This library computes the assembly index of molecules using RDKit's `Mol` class. Here's a basic example:
+Once installed, this Python package can be combined with standard cheminformatic packages like [`RDKit`](https://www.rdkit.org/docs/index.html#)) to flexibly manipulate molecular representations and compute their assembly indices.
 
 ```python
 import assembly_theory as at
 from rdkit import Chem
 
 anthracene = Chem.MolFromSmiles("c1ccc2cc3ccccc3cc2c1")
-at.molecular_assembly(anthracene)  # 6
+at.index(anthracene)  # 6
 ```
 
-### Core Functions  
+See the documentation on [PyPI](https://pypi.org/project/assembly-theory/) for a complete list of functions exposed to the Python package.
 
-The python library provides three main functions:
-
-- **`molecular_assembly(mol: Chem.Mol, bounds: set[str] = None, no_bounds: bool = False, timeout: int = None, serial: bool = False) -> int`**  
-  Computes the assembly index of a given molecule.
-  - `timeout` (in seconds) sets a limit on computation time, raising a `TimeoutError` if exceeded.  
-  - `serial=True` forces a serial execution mode, mainly useful for debugging.
-
-
-- **`molecular_assembly_verbose(mol: Chem.Mol, bounds: set[str] = None, no_bounds: bool = False, timeout: int = None, serial: bool = False) -> dict`**  
-  Returns additional details, including the number of duplicated isomorphic subgraphs (`duplicates`) and the size of the search space (`space`).  
-  - `timeout` (in seconds) sets a limit on computation time, raising a `TimeoutError` if exceeded.  
-  - `serial=True` forces a serial execution mode, mainly useful for debugging.
-
-- **`molecule_info(mol: Chem.Mol) -> str`**  
-  Returns a string representation of the molecule’s atom and bond structure for debugging.
-
-## Contributing
-See [`HACKING`](HACKING.md)
 
 ## Known Issues
 
-The current implementation follows the approach of Seet et. al. 2024 and
-enumerates all duplicable subgraphs of the input molecule. The size of the
-enumeration is stored in a usize. If there are enough duplicate subgraph pairs
-in the molecule, then it is possible for the usize to overflow, resulting in a
-panic. This behavior was observed in previous versions which used a u32 on
-molecules in the coconut_220 benchmark, only using the naive implementation.
-This problem is unavoidable as chemical space is vast, and naive enumeration of
-it is a bad idea. In principle a molecular graph could be constructed such that
-its duplicable subgraph enumeration would overflow arbitrary memory. Such an
-error is unlikely to occur on reasonable compute time-scales. The discovery and
-discussion of this issue is documented in
-[Issue #49](https://github.com/DaymudeLab/assembly-theory/issues/49).
+- The current implementation tallies the number of states searched during recursive assembly index calculation.
+If the number of states searched exceeds the (very large) limit of a `usize`, the code panics.
+This is unlikely to occur when various kernelization, memoization, and bounding strategies are enabled to prune the search space, but is theoretically always possible given a large enough molecule and sufficiently long search time.
+See [#49](https://github.com/DaymudeLab/assembly-theory/issues/49) for details.
+
+
+## Contributing
+
+This project is under active development!
+Any code on the `main` branch is considered usable, but not necessarily stable or feature-complete.
+See our [releases](https://github.com/DaymudeLab/assembly-theory/releases) for more reliable snapshots of the project.
+
+Have a suggestion for new features or a bug you need fixed?
+Open a [new issue](https://github.com/DaymudeLab/assembly-theory/issues/new).
+
+Want to contribute your own code?
+
+- Familiarize yourself with the [Rust API Guidelines](https://github.com/DaymudeLab/assembly-theory/compare) and overall architecture of `assembly-theory`.
+- Development team members should work in individual feature branches.
+External contributors work in repository forks.
+- Before opening a pull request onto `main`, make sure you have (1) rebased onto `main` and (2) run `cargo fmt` and `cargo clippy`.
+- Open a [new pull request](https://github.com/DaymudeLab/assembly-theory/compare), provide a descriptive list of your changes (along with referencing any issues your PR resolves) and assign one of @AgentElement, @jdaymude, or @colemathis as a reviewer. 
+Your PR will not be reviewed until it passes all GitHub Actions (compilation, formatting, tests, etc.).
+
+
+## Governance
+
+`assembly-theory` is maintained by Devansh Vimal (@AgentElement), Josh Daymude (@jdaymude), and Cole Mathis (@colemathis), with support from other members of the [Biodesign Center for Biocomputing, Security and Society](https://biodesign.asu.edu/biocomputing-security-and-society/) at Arizona State University including Garrett Parzych (@Garrett-Pz), Olivia M. Smith (@omsmith161), Devendra Parkar (@devrz45), and Sean Bergen(@ARandomCl0wn).
+
+The maintainers govern the project using the committee model: high-level decisions about the project's direction require maintainer consensus, major code changes require majority approval, hotfixes and patches require just one maintainer approval, new maintainers can be added by unanimous decision of the existing maintainers, and existing maintainers can step down with advance notice.
+
 
 ## License
 
-Licensed under either of the [Apache License, Version 2.0](https://choosealicense.com/licenses/apache-2.0/) or the [MIT License](https://choosealicense.com/licenses/mit/), at your option.
+`assembly-theory` is licensed under either of the [Apache License, Version 2.0](https://choosealicense.com/licenses/apache-2.0/) or the [MIT License](https://choosealicense.com/licenses/mit/), at your option.
 
 Unless you explicitly state otherwise, any contribution you intentionally submit for inclusion in this repository/package (as defined by the Apache-2.0 License) shall be dual-licensed as above, without any additional terms or conditions.

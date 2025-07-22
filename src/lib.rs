@@ -38,32 +38,21 @@
 
 // TODO: Cite ORCA JOSS paper when it's out.
 
-// Molecule definition, joining operation
-pub mod molecule;
-
-// Data IO
-pub mod loader;
-
-// The hard bit: compute assembly index
-pub mod assembly;
-
-// Bounding strategies for the search phase.
-pub mod bounds;
-
-// Algorithms for enumerating connected subgraphs of a molecular graph.
-pub mod enumerate;
-
-// Molecule graph canonization algorithms.
-pub mod canonize;
-
-// Graph kernelization algorithms.
-pub mod kernels;
-
-// Utility functions
+// Graph-theoretic utility functions.
 mod utils;
 
-// Python library
+// Graph representations of molecules and associated parsing.
+pub mod molecule;
+pub mod loader;
+
+// Assembly index calculation and supporting functions.
+pub mod assembly;
+pub mod enumerate;
+pub mod canonize;
+pub mod bounds;
+pub mod kernels;
+mod vf3;
+
+// Python wrapper.
 #[cfg(feature = "python")]
 pub mod python;
-
-mod vf3;
