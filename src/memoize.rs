@@ -25,31 +25,22 @@ enum CacheType {
 pub struct Cache {
     mode: CacheMode,
     cache: Arc<DashMap<CacheType, usize>>,
-    mol: Option<Molecule>,
 }
 
 impl Cache {
-    pub fn new(mode: CacheMode, mol: &Molecule) -> Self {
-        let mol = {
-            match mode {
-                CacheMode::SavingsCanon => Some(mol.clone()),
-                _ => None,
-            }
-        };
-
+    pub fn new(mode: CacheMode) -> Self {
         Self {
             mode,
             cache: Arc::new(DashMap::<CacheType, usize>::new()),
-            mol,
         }
     }
 
-    pub fn get(&self, fragments: &[BitSet], state_index: usize) -> Option<usize> {
+    pub fn get(&self, mol: &Molecule, fragments: &[BitSet], state_index: usize) -> Option<usize> {
         match self.mode {
             CacheMode::None => None,
             CacheMode::Index => self.index_get(fragments, state_index),
             CacheMode::Savings => self.savings_get(fragments, state_index),
-            CacheMode::SavingsCanon => self.savings_canon_get(fragments, state_index),
+            CacheMode::SavingsCanon => self.savings_canon_get(mol, fragments, state_index),
         }
     }
 
@@ -82,8 +73,7 @@ impl Cache {
         }
     }
 
-    fn savings_canon_get(&self, fragments: &[BitSet], state_index: usize) -> Option<usize> {
-        let mol = self.mol.as_ref().unwrap();
+    fn savings_canon_get(&self, mol: &Molecule, fragments: &[BitSet], state_index: usize) -> Option<usize> {
         let mut subgraph = BitSet::with_capacity(mol.graph().edge_count());
         for frag in fragments {
             subgraph.union_with(frag);
@@ -98,7 +88,7 @@ impl Cache {
         }
     }
 
-    pub fn insert(&mut self, fragments: &[BitSet], state_index: usize, savings: usize) {
+    pub fn insert(&mut self, mol: &Molecule, fragments: &[BitSet], state_index: usize, savings: usize) {
         match self.mode {
             CacheMode::None => (),
             CacheMode::Index => {
@@ -112,7 +102,6 @@ impl Cache {
                 self.cache.insert(CacheType::Set(frag_vec), savings);
             },
             CacheMode::SavingsCanon => {
-                let mol = self.mol.as_ref().unwrap();
                 let mut subgraph = BitSet::with_capacity(mol.graph().edge_count());
                 for frag in fragments {
                     subgraph.union_with(frag);

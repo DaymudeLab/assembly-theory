@@ -219,7 +219,7 @@ fn recurse_index_search_serial(
         return (state_index, 1);
     }
 
-    if let Some(res) = cache.get(fragments, state_index) {
+    if let Some(res) = cache.get(mol, fragments, state_index) {
         return (res, 1);
     }
 
@@ -254,7 +254,7 @@ fn recurse_index_search_serial(
     }
 
     let savings = state_index - best_child_index;
-    cache.insert(fragments, state_index, savings);
+    cache.insert(mol, fragments, state_index, savings);
 
     (best_child_index, states_searched)
 }
@@ -349,7 +349,7 @@ fn recurse_index_search_depthone_helper(
         return (state_index, 1);
     }
 
-    if let Some(res) = cache.get(fragments, state_index) {
+    if let Some(res) = cache.get(mol, fragments, state_index) {
         return (res, 1);
     }
 
@@ -384,7 +384,7 @@ fn recurse_index_search_depthone_helper(
     }
 
     let savings = state_index - best_child_index;
-    cache.insert(fragments, state_index, savings);
+    cache.insert(mol, fragments, state_index, savings);
 
     (best_child_index, states_searched)
 }
@@ -426,7 +426,7 @@ fn recurse_index_search_parallel(
         return (state_index, 1);
     }
 
-    if let Some(res) = cache.get(fragments, state_index) {
+    if let Some(res) = cache.get(mol, fragments, state_index) {
         return (res, 1);
     }
 
@@ -461,7 +461,7 @@ fn recurse_index_search_parallel(
     });
 
     let savings = state_index - best_child_index.load(Relaxed);
-    cache.insert(fragments, state_index, savings);
+    cache.insert(mol, fragments, state_index, savings);
 
     (
         best_child_index.load(Relaxed),
@@ -546,7 +546,7 @@ pub fn index_search(
     let (_, matches) = labels_matches(mol, enumerate_mode, canonize_mode);
 
     // Create cache for dynamic programming
-    let mut cache = Cache::new(memoize, &mol);
+    let mut cache = Cache::new(memoize);
 
     // Initialize the first fragment as the entire graph.
     let mut init = BitSet::new();
