@@ -18,7 +18,7 @@ pub enum CacheMode {
 #[derive(Eq, Hash, PartialEq)]
 enum CacheType {
     Set(Vec<BitSet>),
-    Canon(Labeling),
+    Canon(Vec<Labeling>),
 }
 
 #[derive(Clone)]
@@ -74,13 +74,13 @@ impl Cache {
     }
 
     fn savings_canon_get(&self, mol: &Molecule, fragments: &[BitSet], state_index: usize) -> Option<usize> {
-        let mut subgraph = BitSet::with_capacity(mol.graph().edge_count());
-        for frag in fragments {
-            subgraph.union_with(frag);
-        }
-        let canon = canonize(mol, &subgraph, CanonizeMode::Nauty);
+        let mut canons: Vec<Labeling> = fragments
+            .iter()
+            .map(|f| canonize(mol, f, CanonizeMode::Nauty))
+            .collect();
+        canons.sort_by(|a, b| a.cmp(b));
 
-        if let Some(res) = self.cache.get(&CacheType::Canon(canon)) {
+        if let Some(res) = self.cache.get(&CacheType::Canon(canons)) {
             Some(state_index - *res)
         }
         else {
@@ -102,13 +102,13 @@ impl Cache {
                 self.cache.insert(CacheType::Set(frag_vec), savings);
             },
             CacheMode::SavingsCanon => {
-                let mut subgraph = BitSet::with_capacity(mol.graph().edge_count());
-                for frag in fragments {
-                    subgraph.union_with(frag);
-                }
-                let canon = canonize(mol, &subgraph, CanonizeMode::Nauty);
+                let mut canons: Vec<Labeling> = fragments
+                    .iter()
+                    .map(|f| canonize(mol, f, CanonizeMode::Nauty))
+                    .collect();
+                canons.sort_by(|a, b| a.cmp(b));
 
-                self.cache.insert(CacheType::Canon(canon), savings);
+                self.cache.insert(CacheType::Canon(canons), savings);
             },
         };
     }
