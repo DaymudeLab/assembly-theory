@@ -23,7 +23,6 @@ Windows is supported through [WSL](https://learn.microsoft.com/en-us/windows/wsl
 
 You need Rust, installed either [using `rustup`](https://www.rust-lang.org/tools/install) or via your system package manager of choice.
 This provides the `cargo` build system and dependency manager for compilation, testing, benchmarking, documentation, and packaging.
-
 You will also need the [clang](https://clang.llvm.org) toolkit for C/C++.
 
 
@@ -38,8 +37,7 @@ cargo build --release
 Simply pass this executable a `.mol` file path to compute that molecule's assembly index:
 
 ```shell
-> ./target/release/assembly-theory data/checks/anthracene.mol
-6
+./target/release/assembly-theory data/checks/anthracene.mol  # 6
 ```
 
 A full list of options for returning more information or customizing the assembly index calculation procedure can be found by running:
@@ -72,7 +70,7 @@ See the [`criterion` command line options](https://bheisler.github.io/criterion.
 
 ### Building the Python Package Locally
 
-We use the [`pyo3`](https://crates.io/crates/pyo3) crate to package functionality from our Rust library as a Python package called `assembly_theory`.
+We use [`pyo3`](https://crates.io/crates/pyo3) to package functionality from our Rust crate as a Python package called `assembly_theory`.
 To build this package locally, first install [`maturin`](https://pypi.org/project/maturin/) using your virtual environment manager of choice:
 
 ```shell
@@ -81,13 +79,13 @@ pipx install maturin     # using pipx
 uv tool install maturin  # using uv
 ```
 
-Then, within the corresponding virtual environment, build and install this Rust library as a Python package:
+Then, within the corresponding virtual environment, build and install this project as a Python package:
 
 ```shell
 maturin develop
 ```
 
-Once installed, this Python package can be combined with standard cheminformatic packages like [`RDKit`](https://www.rdkit.org/docs/index.html#)) to flexibly manipulate molecular representations and compute their assembly indices.
+Once installed, this Python package can be combined with standard cheminformatic packages like [`RDKit`](https://www.rdkit.org/docs/index.html#) to flexibly manipulate molecular representations and compute their assembly indices.
 
 ```python
 import assembly_theory as at
@@ -122,20 +120,20 @@ Want to contribute your own code?
 - Familiarize yourself with the [Rust API Guidelines](https://github.com/DaymudeLab/assembly-theory/compare) and overall architecture of `assembly-theory`.
 - Development team members should work in individual feature branches.
 External contributors work in repository forks.
-- Before opening a pull request onto `main`, make sure you have (1) rebased onto `main` and (2) run `cargo fmt` and `cargo clippy`.
-- Open a [new pull request](https://github.com/DaymudeLab/assembly-theory/compare), provide a descriptive list of your changes (along with referencing any issues your PR resolves) and assign one of @AgentElement, @jdaymude, or @colemathis as a reviewer. 
+- Before opening a pull request onto `main`, make sure you (1) rebase onto `main` and (2) run `cargo fmt` and `cargo clippy`.
+- Open a [new pull request](https://github.com/DaymudeLab/assembly-theory/compare), provide a descriptive list of your changes (along with referencing any issues your PR resolves), and assign one of [@AgentElement](https://github.com/AgentElement), [@jdaymude](https://github.com/jdaymude), or [@colemathis](https://github.com/colemathis) as a reviewer. 
 Your PR will not be reviewed until it passes all GitHub Actions (compilation, formatting, tests, etc.).
 
 
 ## Governance
 
-`assembly-theory` is maintained by Devansh Vimal (@AgentElement), Josh Daymude (@jdaymude), and Cole Mathis (@colemathis), with support from other members of the [Biodesign Center for Biocomputing, Security and Society](https://biodesign.asu.edu/biocomputing-security-and-society/) at Arizona State University including Garrett Parzych (@Garrett-Pz), Olivia M. Smith (@omsmith161), Devendra Parkar (@devrz45), and Sean Bergen(@ARandomCl0wn).
+`assembly-theory` is maintained by Devansh Vimal ([@AgentElement](https://github.com/AgentElement)), Joshua J. Daymude ([@jdaymude](https://github.com/jdaymude)), and Cole Mathis ([@colemathis](https://github.com/colemathis)), with support from other members of the [Biodesign Center for Biocomputing, Security and Society](https://biodesign.asu.edu/biocomputing-security-and-society/) at Arizona State University including Garrett Parzych ([@Garrett-Pz](https://github.com/Garrett-Pz)), Olivia M. Smith ([@omsmith161](https://github.com/omsmith161)), Devendra Parkar ([@devrz45](https://github.com/devrz45)), and Sean Bergen ([@ARandomCl0wn](https://github.com/ARandomCl0wn)).
 
 The maintainers govern the project using the committee model: high-level decisions about the project's direction require maintainer consensus, major code changes require majority approval, hotfixes and patches require just one maintainer approval, new maintainers can be added by unanimous decision of the existing maintainers, and existing maintainers can step down with advance notice.
 
 
 ## License
 
-`assembly-theory` is licensed under either of the [Apache License, Version 2.0](https://choosealicense.com/licenses/apache-2.0/) or the [MIT License](https://choosealicense.com/licenses/mit/), at your option.
+`assembly-theory` is licensed under the [Apache License, Version 2.0](https://choosealicense.com/licenses/apache-2.0/) or the [MIT License](https://choosealicense.com/licenses/mit/), at your option.
 
-Unless you explicitly state otherwise, any contribution you intentionally submit for inclusion in this repository/package (as defined by the Apache-2.0 License) shall be dual-licensed as above, without any additional terms or conditions.
+Unless you explicitly state otherwise, any contribution you intentionally submit for inclusion in this repository (as defined by Apache-2.0) shall be dual-licensed as above, without any additional terms or conditions.
