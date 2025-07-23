@@ -50,6 +50,15 @@ at.index(anthracene)  # 6
 See the [`assembly_theory::python` documentation](https://docs.rs/assembly-theory/latest/assembly_theory/python) for a complete list of functions exposed to this package along with usage examples.
 
 
+## Citation
+
+If you use this package in your own scientific work, please consider citing us:
+
+```bibtex
+Coming soon!
+```
+
+
 ## License
 
 `assembly-theory` is licensed under the [Apache License, Version 2.0](https://choosealicense.com/licenses/apache-2.0/) or the [MIT License](https://choosealicense.com/licenses/mit/), at your option.

@@ -1,4 +1,4 @@
-# Open, Reproducible Calculation of Assembly Indices
+# assembly-theory
 
 `assembly-theory` is an open-source, high-performance library for computing *assembly indices* of molecular structures (see, e.g., [Sharma et al., 2023](https://doi.org/10.1038/s41586-023-06600-9); [Walker et al., 2024](https://doi.org/10.1098/rsif.2024.0367)).
 It is implemented in Rust and is available as a [Rust crate](https://crates.io/crates/assembly-theory), [Python package](https://pypi.org/project/assembly-theory/), and standalone executable. 
@@ -135,6 +135,15 @@ Your PR will not be reviewed unless it passes all GitHub Actions (compilation, f
 `assembly-theory` is maintained by Devansh Vimal ([@AgentElement](https://github.com/AgentElement)), Joshua J. Daymude ([@jdaymude](https://github.com/jdaymude)), and Cole Mathis ([@colemathis](https://github.com/colemathis)) with support from other members of the [Biodesign Center for Biocomputing, Security and Society](https://biodesign.asu.edu/biocomputing-security-and-society/) at Arizona State University including Garrett Parzych ([@Garrett-Pz](https://github.com/Garrett-Pz)), Olivia M. Smith ([@omsmith161](https://github.com/omsmith161)), Devendra Parkar ([@devrz45](https://github.com/devrz45)), and Sean Bergen ([@ARandomCl0wn](https://github.com/ARandomCl0wn)).
 
 The maintainers govern the project using the committee model: high-level decisions about the project's direction require maintainer consensus, major code changes require majority approval, hotfixes and patches require just one maintainer approval, new maintainers can be added by unanimous decision of the existing maintainers, and existing maintainers can step down with advance notice.
+
+
+## Citation
+
+If you use this crate in your own scientific work, please consider citing us:
+
+```bibtex
+Coming soon!
+```
 
 
 ## License

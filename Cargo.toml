@@ -4,7 +4,7 @@ version = "0.4.0"
 edition = "2021"
 description = "Open, reproducible calculation of assembly indices"
 documentation = "https://docs.rs/assembly-theory"
-readme = "README.md"
+readme = "README-crate.md"
 repository = "https://github.com/DaymudeLab/assembly-theory"
 license = "MIT OR Apache-2.0"
 
