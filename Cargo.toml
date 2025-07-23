@@ -2,8 +2,11 @@
 name = "assembly-theory"
 version = "0.4.0"
 edition = "2021"
+description = "Open, reproducible calculation of assembly indices"
+documentation = "https://docs.rs/assembly-theory"
+readme = "README.md"
+repository = "https://github.com/DaymudeLab/assembly-theory"
 license = "MIT OR Apache-2.0"
-description = "Open, Reproducible Calculation of Assembly Indices"
 
 [dependencies]
 anyhow = "1.0.95"
