@@ -29,15 +29,30 @@ pub enum Bound {
     /// "largest duplicatable subgraph" for this state in an integer addition
     /// chain; see [Seet et al. (2024)](https://arxiv.org/abs/2410.09100).
     Int,
-    /// TODO: Implemented, but need a description from @Garrett-Pz.
+    /// Uses the types of bonds in the molecule to bound the number of assembly
+    /// steps remaining. The first time a unique bond type is added to the graph,
+    /// it could not have been part of a duplicate since that bond type has not
+    /// been used yet. Thus the number of unique bond types gives information on
+    /// how many more joins are required.
     VecSimple,
-    /// TODO: Implemented, but need a description from @Garrett-Pz.
+    /// Considers the fragments of size two in the current fragmentation. In
+    /// the remaining top-down process, such fragments will require one step
+    /// to remove if there is a duplicate set of two bonds in the graph.
+    /// Otherwise, they will require two steps.
     VecSmallFrags,
-    /// TODO: Not yet implemented.
-    CoverSort,
-    /// TODO: Not yet implemented.
+    /// A weighted independent set cover provides a bound on the size of a
+    /// max weight clique in the compatibility graph. Uses a greedy algorithm 
+    /// to construct such a cover and obtain a bound. See 
+    /// [Lamm et al. (2019)](https://doi.org/10.1137/1.9781611975499.12)
+    /// for the definition of a cover (Note that they solve the equivalent 
+    /// weighted independent set problem and thus use a clique cover instead).
     CoverNoSort,
-    /// TODO: Not yet implemented.
+    /// Similar to CoverNoSort, buts sorts the vertices of the compatibility 
+    /// graph by degree before creating the greedy independent set cover.
+    CoverSort,
+    /// Uses the compatibility graph to determine the largest duplicatable subraphs
+    /// remaining in each fragment. Uses this to bound the best possible savings
+    /// obtainable for each fragment.
     CliqueBudget,
 }
 
