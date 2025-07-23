@@ -94,7 +94,7 @@ from rdkit import Chem
 
 # Get a mol block from a molecule's SMILES representation.
 anthracene = Chem.MolFromSmiles("c1ccc2cc3ccccc3cc2c1")
-anthracene = Chem.MolBlockFromMol(anthracene)
+anthracene = Chem.MolToMolBlock(anthracene)
 
 # Calculate the molecule's assembly index.
 at.index(anthracene)  # 6
