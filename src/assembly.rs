@@ -39,32 +39,53 @@ use crate::{
     utils::connected_components_under_edges,
 };
 
-/// Parallelization strategy for the search phase.
+/// Parallelization strategy for the recursive search phase.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum ParallelMode {
     /// No parallelism.
     None,
-    /// Create a task pool form the recursion's first level only.
+    /// Create a task pool from the recursion's first level only.
     DepthOne,
     /// Spawn a new thread at every recursive call.
     Always,
 }
 
-/// Computes assembly depth; see
+/// Compute assembly depth; see
 /// [Pagel et al. (2024)](https://arxiv.org/abs/2409.05993).
-pub fn assembly_depth(mol: &Molecule) -> u32 {
+///
+/// Note: This function is currently very (unusably) slow. It primarily exists
+/// in this crate as a proof of concept.
+///
+/// # Example
+/// ```
+/// # use std::{fs, path::PathBuf};
+/// use assembly_theory::assembly::depth;
+/// use assembly_theory::loader::parse_molfile_str;
+///
+/// # fn main() -> Result<(), std::io::Error> {
+/// // Load a molecule from a .mol file.
+/// let path = PathBuf::from(format!("./data/checks/benzene.mol"));
+/// let molfile = fs::read_to_string(path)?;
+/// let benzene = parse_molfile_str(&molfile).expect("Parsing failure.");
+///
+/// // Compute the molecule's assembly depth.
+/// assert_eq!(depth(&benzene), 3);
+/// # Ok(())
+/// # }
+/// ```
+pub fn depth(mol: &Molecule) -> u32 {
     let mut ix = u32::MAX;
     for (left, right) in mol.partitions().unwrap() {
         let l = if left.is_basic_unit() {
             0
         } else {
-            assembly_depth(&left)
+            depth(&left)
         };
 
         let r = if right.is_basic_unit() {
             0
         } else {
-            assembly_depth(&right)
+            depth(&right)
         };
 
         ix = ix.min(l.max(r) + 1)
@@ -439,21 +460,20 @@ fn recurse_index_search_parallel(
     )
 }
 
-/// Computes a molecule's assembly index and related information using a top-
-/// down recursive search, parameterized by the specified options.
+/// Compute a molecule's assembly index and related information using a
+/// top-down recursive algorithm, parameterized by the specified options.
 ///
 /// See [`EnumerateMode`], [`CanonizeMode`], [`ParallelMode`], [`KernelMode`],
-/// and [`Bound`] for details on how to customize the top-down algorithm.
-///
-/// Notably, bounds are applied in the order they appear in the `bounds` slice.
-/// It is generally better to provide bounds that are quick to compute first.
+/// and [`Bound`] for details on how to customize the algorithm. Notably,
+/// bounds are applied in the order they appear in the `bounds` slice. It is
+/// generally better to provide bounds that are quick to compute first.
 ///
 /// The results returned are:
-/// - `u32`: The molecule's assembly index.
-/// - `u32`: The molecule's count of non-overlapping isomorphic subgraph pairs.
-/// - `usize`: The total number of assembly states searched, where an assembly
-///   state is a collection of fragments; note that some states may be searched
-///   and thus counted by this value multiple times.
+/// - The molecule's `u32` assembly index.
+/// - The molecule's `u32` number of non-overlapping isomorphic subgraph pairs.
+/// - The `usize` total number of assembly states searched, where an assembly
+///   state is a collection of fragments. Note that, depending on the algorithm
+///   parameters used, some states may be searched/counted multiple times.
 ///
 /// # Example
 /// ```
@@ -466,6 +486,7 @@ fn recurse_index_search_parallel(
 ///     kernels::KernelMode,
 ///     loader::parse_molfile_str,
 /// };
+///
 /// # fn main() -> Result<(), std::io::Error> {
 /// // Load a molecule from a .mol file.
 /// let path = PathBuf::from(format!("./data/checks/anthracene.mol"));
@@ -563,7 +584,7 @@ pub fn index_search(
     (index as u32, matches.len() as u32, states_searched)
 }
 
-/// Computes a molecule's assembly index using an efficient default strategy.
+/// Compute a molecule's assembly index using an efficient default strategy.
 ///
 /// # Example
 /// ```

@@ -15,29 +15,32 @@ use crate::molecule::{AtomOrBond, Index, Molecule};
 /// Algorithm for graph canonization.
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
 pub enum CanonizeMode {
-    /// Use the Nauty algorithm of McKay & Piperno (2014).
+    /// Use the Nauty algorithm of [McKay & Piperno
+    /// (2014)](https://doi.org/10.1016/j.jsc.2013.09.003).
     Nauty,
-    /// Use the algorithm of Faulon et al. (2004).
+    /// Use the algorithm of
+    /// [Faulon et al. (2004)](https://doi.org/10.1021/ci0341823).
     Faulon,
-    /// Use a fast tree canonization algorithm if applicable; else use Nauty.
+    /// Use a tree canonization algorithm if applicable; else use `Nauty`.
     TreeNauty,
-    /// Use a fast tree canonization algorithm if applicable; else use Faulon.
+    /// Use a tree canonization algorithm if applicable; else use `Faulon`.
     TreeFaulon,
 }
 
-/// Canonical label returned by our graph canonization functions.
+/// Canonical labeling returned by our graph canonization functions.
 #[derive(Clone, Hash, PartialEq, Eq, Debug)]
 pub enum Labeling {
-    /// The label returned by the graph_canon crate.
+    /// Labeling returned by the `graph_canon` crate.
     Nauty(CanonLabeling<AtomOrBond>),
 
-    /// A string label returned by our implementation of Faulon et al. (2004).
+    /// A string labeling returned by our implementation of
+    /// [Faulon et al. (2004)](https://doi.org/10.1021/ci0341823).
     // TODO: This should be a `Vec<u8>`
     Faulon(String),
 }
 
-/// Obtain a canonical labeling of the specified `subgraph` using the
-/// algorithm specified by `mode`.
+/// Obtain a canonical labeling of the specified subgraph using the specified
+/// algorithm.
 pub fn canonize(mol: &Molecule, subgraph: &BitSet, mode: CanonizeMode) -> Labeling {
     match mode {
         CanonizeMode::Nauty => {
