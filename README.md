@@ -102,7 +102,7 @@ at.index(anthracene)  # 6
 
 See the [`assembly_theory::python` documentation](https://docs.rs/assembly-theory/latest/assembly_theory/python) for a complete list of functions exposed to the Python package along with usage examples.
 
-To run the Python test suite, install `pytest` in your virtual environment and then simply run `pytest`.
+To run the Python test suite, install [`pytest`](https://pypi.org/project/pytest/) in your virtual environment and then simply run `pytest`.
 
 
 ## Known Issues
