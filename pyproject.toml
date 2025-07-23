@@ -27,3 +27,6 @@ Documentation = "https://docs.rs/assembly-theory/latest/assembly_theory/python"
 features = ["pyo3/extension-module"]
 python-source   = "python"
 python-packages = ["assembly_theory"]
+
+[pytest]
+testpaths = "python/tests"

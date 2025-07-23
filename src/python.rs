@@ -103,7 +103,9 @@ impl FromStr for PyEnumerateMode {
         match s.to_lowercase().as_str() {
             "extend" => Ok(PyEnumerateMode::Extend),
             "grow-erode" => Ok(PyEnumerateMode::GrowErode),
-            _ => Err(PyValueError::new_err(format!("Invalid enumerate: {s}"))),
+            _ => Err(PyValueError::new_err(format!(
+                        "Invalid enumeration mode \"{s}\", options are: \
+                        [\"extend\", \"grow-erode\"]"))),
         }
     }
 }
@@ -118,7 +120,10 @@ impl FromStr for PyCanonizeMode {
             "faulon" => Ok(PyCanonizeMode::Faulon),
             "tree-nauty" => Ok(PyCanonizeMode::TreeNauty),
             "tree-faulon" => Ok(PyCanonizeMode::TreeFaulon),
-            _ => Err(PyValueError::new_err(format!("Invalid canonize: {s}"))),
+            _ => Err(PyValueError::new_err(format!(
+                        "Invalid canonization mode \"{s}\", options are: \
+                        [\"nauty\", \"faulon\", \"tree-nauty\", \
+                        \"tree-faulon\"]"))),
         }
     }
 }
@@ -132,7 +137,9 @@ impl FromStr for PyParallelMode {
             "none" => Ok(PyParallelMode::None),
             "depth-one" => Ok(PyParallelMode::DepthOne),
             "always" => Ok(PyParallelMode::Always),
-            _ => Err(PyValueError::new_err(format!("Invalid parallel: {s}"))),
+            _ => Err(PyValueError::new_err(format!(
+                        "Invalid parallelization mode \"{s}\", options are: \
+                        [\"none\", \"depth-one\", \"always\"]"))),
         }
     }
 }
@@ -147,7 +154,9 @@ impl FromStr for PyKernelMode {
             "once" => Ok(PyKernelMode::Once),
             "depth-one" => Ok(PyKernelMode::DepthOne),
             "always" => Ok(PyKernelMode::Always),
-            _ => Err(PyValueError::new_err(format!("Invalid kernel: {s}"))),
+            _ => Err(PyValueError::new_err(format!("
+                        Invalid kernelization mode \"{s}\", options are: \
+                        [\"none\", \"once\", \"depth-one\", \"always\"]"))),
         }
     }
 }
@@ -165,7 +174,11 @@ impl FromStr for PyBound {
             "cover-sort" => Ok(PyBound::CoverSort),
             "cover-no-sort" => Ok(PyBound::CoverNoSort),
             "clique-budget" => Ok(PyBound::CliqueBudget),
-            _ => Err(PyValueError::new_err(format!("Invalid bound: {s}"))),
+            _ => Err(PyValueError::new_err(format!("
+                        Invalid bound \"{s}\", options are: [\"log\", \
+                        \"int\", \"vec-simple\", \"vec-small-frags\", \
+                        \"cover-sort\", \"cover-no-sort\", \
+                        \"clique-budget\"]"))),
         }
     }
 }
@@ -387,35 +400,27 @@ pub fn _index_search(
     let enumerate_mode = match PyEnumerateMode::from_str(&enumerate_str) {
         Ok(PyEnumerateMode::Extend) => EnumerateMode::Extend,
         Ok(PyEnumerateMode::GrowErode) => EnumerateMode::GrowErode,
-        _ => {
-            panic!("Unrecognized enumerate mode {enumerate_str}.")
-        }
+        Err(e) => return Err(e.into()),
     };
     let canonize_mode = match PyCanonizeMode::from_str(&canonize_str) {
         Ok(PyCanonizeMode::Nauty) => CanonizeMode::Nauty,
         Ok(PyCanonizeMode::Faulon) => CanonizeMode::Faulon,
         Ok(PyCanonizeMode::TreeNauty) => CanonizeMode::TreeNauty,
         Ok(PyCanonizeMode::TreeFaulon) => CanonizeMode::TreeFaulon,
-        _ => {
-            panic!("Unrecognized canonize mode {canonize_str}.")
-        }
+        Err(e) => return Err(e.into()),
     };
     let parallel_mode = match PyParallelMode::from_str(&parallel_str) {
         Ok(PyParallelMode::None) => ParallelMode::None,
         Ok(PyParallelMode::DepthOne) => ParallelMode::DepthOne,
         Ok(PyParallelMode::Always) => ParallelMode::Always,
-        _ => {
-            panic!("Unrecognized parallel mode {parallel_str}.")
-        }
+        Err(e) => return Err(e.into()),
     };
     let kernel_mode = match PyKernelMode::from_str(&kernel_str) {
         Ok(PyKernelMode::None) => KernelMode::None,
         Ok(PyKernelMode::Once) => KernelMode::Once,
         Ok(PyKernelMode::DepthOne) => KernelMode::DepthOne,
         Ok(PyKernelMode::Always) => KernelMode::Always,
-        _ => {
-            panic!("Unrecognized parallel mode {parallel_str}.")
-        }
+        Err(e) => return Err(e.into()),
     };
     let pybounds = process_bound_strs(bound_strs)?;
     let boundlist = make_boundlist(&pybounds);
