@@ -439,8 +439,8 @@ fn recurse_index_search_parallel(
     )
 }
 
-/// Computes a molecule's assembly index and related information using a top-
-/// down recursive search, parameterized by the specified options.
+/// Computes a molecule's assembly index and related information using a
+/// top-down recursive search, parameterized by the specified options.
 ///
 /// See [`EnumerateMode`], [`CanonizeMode`], [`ParallelMode`], [`KernelMode`],
 /// and [`Bound`] for details on how to customize the top-down algorithm.

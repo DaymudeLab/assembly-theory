@@ -1,11 +1,27 @@
-//! Expose public `assembly_theory` functionality to a Python library using
+//! Expose public `assembly_theory` functionality to a Python package using
 //! [`pyo3`](https://docs.rs/pyo3/latest/pyo3/).
 //!
-//! The Python library is available on PyPI as
-//! [`assembly-theory`](https://pypi.org/project/assembly-theory/); see that
-//! README for installation and usage instructions. To build the Python library
-//! directly from this crate's source code, see the instructions in the
-//! [GitHub README](https://github.com/DaymudeLab/assembly-theory).
+//! The package is available [on PyPI](https://pypi.org/project/assembly-theory/);
+//! see that README for installation and usage instructions. To build the
+//! Python package directly from this crate's source code, see the instructions
+//! in the [GitHub README](https://github.com/DaymudeLab/assembly-theory).
+//!
+//! Note that all Rust functions in this module have the form `_fn_name`, which
+//! correspond to the actual Rust function `fn_name` elsewhere in the crate and
+//! are exposed to the Python package as `fn_name`.
+//!
+//! # Python Example
+//!
+//! ```custom,{class=language-python}
+//! import assembly_theory as at
+//! 
+//! # Load a mol block from file.
+//! with open('data/checks/anthracene.mol') as f:
+//!     mol_block = f.read()
+//! 
+//! # Calculate the molecule's assembly index.
+//! at.index(mol_block)  # 6
+//! ```
 
 use std::{collections::HashSet, str::FromStr};
 
@@ -86,7 +102,7 @@ impl FromStr for PyEnumerateMode {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "extend" => Ok(PyEnumerateMode::Extend),
-            "growerode" => Ok(PyEnumerateMode::GrowErode),
+            "grow-erode" => Ok(PyEnumerateMode::GrowErode),
             _ => Err(PyValueError::new_err(format!("Invalid enumerate: {s}"))),
         }
     }
@@ -100,8 +116,8 @@ impl FromStr for PyCanonizeMode {
         match s.to_lowercase().as_str() {
             "nauty" => Ok(PyCanonizeMode::Nauty),
             "faulon" => Ok(PyCanonizeMode::Faulon),
-            "treenauty" => Ok(PyCanonizeMode::TreeNauty),
-            "treefaulon" => Ok(PyCanonizeMode::TreeFaulon),
+            "tree-nauty" => Ok(PyCanonizeMode::TreeNauty),
+            "tree-faulon" => Ok(PyCanonizeMode::TreeFaulon),
             _ => Err(PyValueError::new_err(format!("Invalid canonize: {s}"))),
         }
     }
@@ -114,7 +130,7 @@ impl FromStr for PyParallelMode {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "none" => Ok(PyParallelMode::None),
-            "depthone" => Ok(PyParallelMode::DepthOne),
+            "depth-one" => Ok(PyParallelMode::DepthOne),
             "always" => Ok(PyParallelMode::Always),
             _ => Err(PyValueError::new_err(format!("Invalid parallel: {s}"))),
         }
@@ -129,7 +145,7 @@ impl FromStr for PyKernelMode {
         match s.to_lowercase().as_str() {
             "none" => Ok(PyKernelMode::None),
             "once" => Ok(PyKernelMode::Once),
-            "depthone" => Ok(PyKernelMode::DepthOne),
+            "depth-one" => Ok(PyKernelMode::DepthOne),
             "always" => Ok(PyKernelMode::Always),
             _ => Err(PyValueError::new_err(format!("Invalid kernel: {s}"))),
         }
@@ -144,11 +160,11 @@ impl FromStr for PyBound {
         match s.to_lowercase().as_str() {
             "log" => Ok(PyBound::Log),
             "int" => Ok(PyBound::Int),
-            "vecsimple" => Ok(PyBound::VecSimple),
-            "vecsmallfrags" => Ok(PyBound::VecSmallFrags),
-            "coversort" => Ok(PyBound::CoverSort),
-            "covernosort" => Ok(PyBound::CoverNoSort),
-            "cliquebudget" => Ok(PyBound::CliqueBudget),
+            "vec-simple" => Ok(PyBound::VecSimple),
+            "vec-small-frags" => Ok(PyBound::VecSmallFrags),
+            "cover-sort" => Ok(PyBound::CoverSort),
+            "cover-no-sort" => Ok(PyBound::CoverNoSort),
+            "clique-budget" => Ok(PyBound::CliqueBudget),
             _ => Err(PyValueError::new_err(format!("Invalid bound: {s}"))),
         }
     }
@@ -181,13 +197,39 @@ fn make_boundlist(pybounds: &[PyBound]) -> Vec<OurBound> {
     boundlist
 }
 
+/// Get a pretty-printable string of this molecule's graph representation.
+///
 /// Python version of [`crate::molecule::Molecule::info`].
 ///
-/// # Parameters
-/// - `mol_block`: The contents of a .mol file as a string.
+/// # Python Parameters
+/// - `mol_block`: The contents of a `.mol` file as a `str`.
 ///
-/// # Returns
-/// - A `String` containing molecular information.
+/// # Python Returns
+/// - A pretty-printable `str` detailing the molecule's atoms and bonds.
+///
+/// # Python Example
+///
+/// ```custom,{class=language-python}
+/// import assembly_theory as at
+/// 
+/// # Load a mol block from file.
+/// with open('data/checks/anthracene.mol') as f:
+///     mol_block = f.read()
+/// 
+/// # Print the molecule's graph structure.
+/// print(at.mol_info(mol_block))
+///
+/// # graph {
+/// #     0 [ label = "Atom { element: Carbon, capacity: 0 }" ]
+/// #     1 [ label = "Atom { element: Carbon, capacity: 0 }" ]
+/// #     2 [ label = "Atom { element: Carbon, capacity: 0 }" ]
+/// #     ...
+/// #     0 -- 1 [ label = "Double" ]
+/// #     1 -- 2 [ label = "Single" ]
+/// #     2 -- 5 [ label = "Double" ]
+/// #     ...
+/// # }
+/// ```
 #[pyfunction(name = "mol_info")]
 pub fn _mol_info(mol_block: String) -> PyResult<String> {
     // Parse the .mol file contents as a molecule::Molecule.
@@ -201,13 +243,28 @@ pub fn _mol_info(mol_block: String) -> PyResult<String> {
     Ok(mol.info())
 }
 
-/// Python version of [`crate::assembly::index`].
+/// Computes a molecule's assembly index using an efficient default strategy.
 ///
-/// # Parameters
-/// - `mol_block`: The contents of a .mol file as a string.
+/// Python version of [`index`].
 ///
-/// # Returns
-/// - The molecule's assembly index as a `u32`.
+/// # Python Parameters
+/// - `mol_block`: The contents of a `.mol` file as a `str`.
+///
+/// # Python Returns
+/// - The molecule's `int` assembly index.
+///
+/// # Python Example
+///
+/// ```custom,{class=language-python}
+/// import assembly_theory as at
+/// 
+/// # Load a mol block from file.
+/// with open('data/checks/anthracene.mol') as f:
+///     mol_block = f.read()
+/// 
+/// # Calculate the molecule's assembly index.
+/// at.index(mol_block)  # 6
+/// ```
 #[pyfunction(name = "index")]
 pub fn _index(mol_block: String) -> PyResult<u32> {
     // Parse the .mol file contents as a molecule::Molecule.
@@ -221,22 +278,56 @@ pub fn _index(mol_block: String) -> PyResult<u32> {
     Ok(index(&mol))
 }
 
-/// Python version of [`crate::assembly::index_search`].
+/// Computes a molecule's assembly index and related information using a
+/// top-down recursive search, parameterized by the specified options.
 ///
-/// # Parameters
-/// - `mol_block`: The contents of a .mol file as a string.
-/// - `enumerate_str`: The enumeration mode as a string.
-/// - `canonize_str`: The canonization mode as a string.
-/// - `parallel_str`: The parallelization mode as a string.
-/// - `kernel_str`: The kernelization mode as a string.
-/// - `bound_strs`: A set of bounds as strings (from Python).
-/// - `memoize`: True iff memoization should be used in search.
+/// Python version of [`index_search`].
 ///
-/// # Returns
-/// - A `(u32, u32, usize)` tuple containing:
-///   - The molecule's assembly index.
-///   - The molecule's number of non-overlapping isomorphic subgraph pairs.
-///   - The number of assembly states searched.
+/// # Python Parameters
+///
+/// - `mol_block`: The contents of a `.mol` file as a `str`.
+/// - `enumerate_str`: An enumeration mode from [`"extend"`, `"grow-erode"`].
+/// See [`EnumerateMode`] for details.
+/// - `canonize_str`: A canonization mode from [`"nauty"`, `"faulon"`,
+/// `"tree-nauty"`, `"tree-faulon"`]. See [`CanonizeMode`] for details.
+/// - `parallel_str`: A parallelization mode from [`"none"`, `"depth-one"`,
+/// `"always"`]. See [`ParallelMode`] for details.
+/// - `kernel_str`: A kernelization mode from [`"none"`, `"once"`,
+/// `"depth-one"`, `"always"`]. See [`KernelMode`] for details.
+/// - `bound_strs`: A `set` of bounds containing zero or more of [`"log"`,
+/// `"int"`, `"vec-simple"`, `"vec-small-frags"`, `"cover-sort"`,
+/// `"cover-no-sort"`, `"clique-budget"`]. See [`Bound`] for details.
+/// - `memoize`: `True` iff memoization should be used in search.
+///
+/// # Python Returns
+///
+/// A 3-tuple containing:
+/// - The molecule's `int` assembly index.
+/// - The molecule's `int` number of non-overlapping isomorphic subgraph pairs.
+/// - The `int` number of assembly states searched.
+///
+/// # Python Example
+///
+/// ```custom,{class=language-python}
+/// import assembly_theory as at
+/// 
+/// # Load a mol block from file.
+/// with open('data/checks/anthracene.mol') as f:
+///     mol_block = f.read()
+/// 
+/// # Calculate the molecule's assembly index using the specified options.
+/// (index, num_matches, states_searched) = at.index_search(
+///     mol_block,
+///     "grow-erode",
+///     "nauty",
+///     "none",
+///     "none",
+///     set(["int", "vec-simple", "vec-small-frags"]),
+///     False)
+/// print(f"Assembly Index: {index}")  # 6
+/// print(f"Non-Overlapping Isomorphic Subgraph Pairs: {num_matches}")  # 466
+/// print(f"Assembly States Searched: {states_searched}")  # 2562
+/// ```
 #[pyfunction(name = "index_search")]
 pub fn _index_search(
     mol_block: String,
