@@ -29,6 +29,7 @@ use std::{
 use bit_set::BitSet;
 use clap::ValueEnum;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use::dashmap::DashMap;
 
 use crate::{
     bounds::{bound_exceeded, Bound},
@@ -81,20 +82,23 @@ fn labels_matches(
     mol: &Molecule,
     enumerate_mode: EnumerateMode,
     canonize_mode: CanonizeMode,
-) -> (HashMap<BitSet, Labeling>, Vec<(BitSet, BitSet)>) {
+    memoize: CacheMode,
+) -> (DashMap<BitSet, Labeling>, Vec<(BitSet, BitSet)>) {
     // Enumerate all connected, non-induced subgraphs with at most |E|/2 edges
     // and bin them into isomorphism classes using canonization. Store these
     // subgraphs' canonical labels for later use in memoization (this way, we
     // only have to compute them once).
     let mut isomorphism_classes = HashMap::<Labeling, Vec<BitSet>>::new();
-    let mut subgraph_labels = HashMap::<BitSet, Labeling>::new();
+    let subgraph_labels = DashMap::<BitSet, Labeling>::new();
     for subgraph in enumerate_subgraphs(mol, enumerate_mode) {
         let label = canonize(mol, &subgraph, canonize_mode);
         isomorphism_classes
             .entry(label.clone())
             .and_modify(|bucket| bucket.push(subgraph.clone()))
             .or_insert(vec![subgraph.clone()]);
-        subgraph_labels.insert(subgraph, label);
+        /*if memoize == CacheMode::SavingsCanon {
+            subgraph_labels.insert(subgraph, label);
+        }*/
     }
 
     // In each isomorphism class, collect non-overlapping pairs of subgraphs.
@@ -279,7 +283,7 @@ fn recurse_index_search_depthone(
     state_index: usize,
     best_index: Arc<AtomicUsize>,
     bounds: &[Bound],
-    cache: Cache,
+    cache: &mut Cache,
 ) -> (usize, usize) {
     // Keep track of the number of states searched, including this one.
     let states_searched = Arc::new(AtomicUsize::from(1));
@@ -543,10 +547,10 @@ pub fn index_search(
     }
 
     // Enumerate non-overlapping isomorphic subgraph pairs.
-    let (_, matches) = labels_matches(mol, enumerate_mode, canonize_mode);
+    let (frags_to_labels, matches) = labels_matches(mol, enumerate_mode, canonize_mode, memoize);
 
     // Create cache for dynamic programming
-    let mut cache = Cache::new(memoize);
+    let mut cache = Cache::new(memoize, frags_to_labels);
 
     // Initialize the first fragment as the entire graph.
     let mut init = BitSet::new();
@@ -578,7 +582,7 @@ pub fn index_search(
                 edge_count - 1,
                 best_index,
                 bounds,
-                cache,
+                &mut cache,
             )
         }
         ParallelMode::Always => {

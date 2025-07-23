@@ -25,13 +25,15 @@ enum CacheType {
 pub struct Cache {
     mode: CacheMode,
     cache: Arc<DashMap<CacheType, usize>>,
+    frags_to_labels: Arc<DashMap<BitSet, Labeling>>,
 }
 
 impl Cache {
-    pub fn new(mode: CacheMode) -> Self {
+    pub fn new(mode: CacheMode, frags_to_labels: DashMap<BitSet, Labeling>) -> Self {
         Self {
             mode,
             cache: Arc::new(DashMap::<CacheType, usize>::new()),
+            frags_to_labels: Arc::new(frags_to_labels),
         }
     }
 
@@ -74,13 +76,23 @@ impl Cache {
     }
 
     fn savings_canon_get(&self, mol: &Molecule, fragments: &[BitSet], state_index: usize) -> Option<usize> {
-        let mut canons: Vec<Labeling> = fragments
+        // Use map
+        let mut labels: Vec<Labeling> = fragments
             .iter()
-            .map(|f| canonize(mol, f, CanonizeMode::Nauty))
+            .map(|f| {
+                if let Some(res) = self.frags_to_labels.get(f) {
+                    (*res).clone()
+                }
+                else {
+                    let label = canonize(mol, f, CanonizeMode::Nauty);
+                    self.frags_to_labels.insert(f.clone(), label.clone());
+                    label
+                }
+            })
             .collect();
-        canons.sort_by(|a, b| a.cmp(b));
+        labels.sort_by(|a, b| a.cmp(b));
 
-        if let Some(res) = self.cache.get(&CacheType::Canon(canons)) {
+        if let Some(res) = self.cache.get(&CacheType::Canon(labels)) {
             Some(state_index - *res)
         }
         else {
@@ -102,13 +114,14 @@ impl Cache {
                 self.cache.insert(CacheType::Set(frag_vec), savings);
             },
             CacheMode::SavingsCanon => {
-                let mut canons: Vec<Labeling> = fragments
+                let mut labels: Vec<Labeling> = fragments
                     .iter()
-                    .map(|f| canonize(mol, f, CanonizeMode::Nauty))
+                    .filter_map(|f| self.frags_to_labels.get(f))
+                    .map(|res| (*res).clone())
                     .collect();
-                canons.sort_by(|a, b| a.cmp(b));
+                labels.sort_by(|a, b| a.cmp(b));
 
-                self.cache.insert(CacheType::Canon(canons), savings);
+                self.cache.insert(CacheType::Canon(labels), savings);
             },
         };
     }
