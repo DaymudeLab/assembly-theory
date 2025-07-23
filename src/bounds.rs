@@ -1,30 +1,43 @@
-//! Bounds for identifying assembly states (i.e., collections of fragments)
-//! from which no further assembly index improvements can be found.
+//! Prune assembly states from which the assembly index cannot improve.
+//!
+//! Each bound takes information about the current assembly state (i.e., set of
+//! fragments) and computes an upper bound on the "savings" (in terms of number
+//! of joining operations) that can possibly be obtained when constructing the
+//! molecule using this state's fragments and subfragments thereof. Let
+//! `state_index` be this assembly state's assembly index, `best_index` be the
+//! smallest assembly index found across any assembly state so far, and `bound`
+//! be the upper bound on this assembly state's possible savings. If ever
+//! `state_index` - `bound` >= `best_index`, then no descendant of this
+//! assembly state can possibly yield an assembly index better than
+//! `best_index` and thus this assembly state can be pruned.
 
 use bit_set::BitSet;
 use clap::ValueEnum;
 
 use crate::molecule::{Bond, Element, Molecule};
 
-/// Bounding strategies for the search phase of assembly index calcluation.
+/// Type of upper bound on the "savings" possible from an assembly state.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum Bound {
-    /// Trivial bound of log_2(# remaining bonds/edges).
+    /// The shortest number of joining operations to create a molecule with |E|
+    /// bonds is log_2(|E|), i.e., if it is possible to always join the largest
+    /// fragment with itself to produce the molecule. Thus, an upper bound on
+    /// a state's savings is [#fragment bonds] - log_2([#fragment bonds]); see
+    /// [Jirasek et al. (2024)](https://doi.org/10.1021/acscentsci.4c00120).
     Log,
-    /// Bound using the length of the shortest integer addition chain defined
-    /// using fragment sizes.
+    /// An improvement on the logarithmic bound that also uses the size of the
+    /// "largest duplicatable subgraph" for this state in an integer addition
+    /// chain; see [Seet et al. (2024)](https://arxiv.org/abs/2410.09100).
     Int,
-    /// Bound using the length of the shortest vector addition chain defined
-    /// using fragments' number and types of edges.
+    /// TODO: Implemented, but need a description from @Garrett-Pz.
     VecSimple,
-    /// Bound using the length of the shortest vector addition chain defined
-    /// using information about the molecule's number of fragments of size 2.
+    /// TODO: Implemented, but need a description from @Garrett-Pz.
     VecSmallFrags,
-    /// TODO
+    /// TODO: Not yet implemented.
     CoverSort,
-    /// TODO
+    /// TODO: Not yet implemented.
     CoverNoSort,
-    /// TODO
+    /// TODO: Not yet implemented.
     CliqueBudget,
 }
 
@@ -35,7 +48,7 @@ struct EdgeType {
     ends: (Element, Element),
 }
 
-/// TODO
+/// Returns `true` iff any of the given bounds would prune this assembly state.
 pub fn bound_exceeded(
     mol: &Molecule,
     fragments: &[BitSet],
@@ -66,7 +79,7 @@ pub fn bound_exceeded(
 }
 
 /// TODO
-pub fn log_bound(fragments: &[BitSet]) -> usize {
+fn log_bound(fragments: &[BitSet]) -> usize {
     let mut size = 0;
     for f in fragments {
         size += f.len();
@@ -76,7 +89,7 @@ pub fn log_bound(fragments: &[BitSet]) -> usize {
 }
 
 /// TODO
-pub fn int_bound(fragments: &[BitSet], m: usize) -> usize {
+fn int_bound(fragments: &[BitSet], m: usize) -> usize {
     let mut max_s: usize = 0;
     let mut frag_sizes: Vec<usize> = Vec::new();
 
@@ -137,7 +150,7 @@ fn unique_edges(fragment: &BitSet, mol: &Molecule) -> Vec<EdgeType> {
 }
 
 /// TODO
-pub fn vec_simple_bound(fragments: &[BitSet], m: usize, mol: &Molecule) -> usize {
+fn vec_simple_bound(fragments: &[BitSet], m: usize, mol: &Molecule) -> usize {
     // Calculate s (total number of edges)
     // Calculate z (number of unique edges)
     let mut s = 0;
@@ -155,7 +168,7 @@ pub fn vec_simple_bound(fragments: &[BitSet], m: usize, mol: &Molecule) -> usize
 }
 
 /// TODO
-pub fn vec_small_frags_bound(fragments: &[BitSet], m: usize, mol: &Molecule) -> usize {
+fn vec_small_frags_bound(fragments: &[BitSet], m: usize, mol: &Molecule) -> usize {
     let mut size_two_fragments: Vec<BitSet> = Vec::new();
     let mut large_fragments: Vec<BitSet> = fragments.to_owned();
     let mut indices_to_remove: Vec<usize> = Vec::new();

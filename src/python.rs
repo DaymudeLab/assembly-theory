@@ -296,7 +296,8 @@ pub fn _index(mol_block: String) -> PyResult<u32> {
 /// `"depth-one"`, `"always"`]. See [`KernelMode`] for details.
 /// - `bound_strs`: A `set` of bounds containing zero or more of [`"log"`,
 /// `"int"`, `"vec-simple"`, `"vec-small-frags"`, `"cover-sort"`,
-/// `"cover-no-sort"`, `"clique-budget"`]. See [`Bound`] for details.
+/// `"cover-no-sort"`, `"clique-budget"`]. See [`crate::bounds::Bound`] for
+/// details.
 /// - `memoize`: `True` iff memoization should be used in search.
 ///
 /// # Python Returns
@@ -324,6 +325,7 @@ pub fn _index(mol_block: String) -> PyResult<u32> {
 ///     "none",
 ///     set(["int", "vec-simple", "vec-small-frags"]),
 ///     False)
+///
 /// print(f"Assembly Index: {index}")  # 6
 /// print(f"Non-Overlapping Isomorphic Subgraph Pairs: {num_matches}")  # 466
 /// print(f"Assembly States Searched: {states_searched}")  # 2562

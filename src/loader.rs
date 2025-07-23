@@ -1,4 +1,4 @@
-//! Parse molecule files in the `.mol` file format.
+//! Parse molecules in the `.mol` file format.
 //!
 //! # Example
 //! ```
@@ -26,19 +26,18 @@ pub enum ParserError {
     AtomCountNotInt(usize),
     /// In the counts line, bond count is not an integer value.
     BondCountNotInt(usize),
-    /// In the counts line, .mol file version is not `V2000`.
+    /// In the counts line, `.mol` file version is not `V2000`.
     FileVersionIsNotV2000(usize),
     /// In an atom line, element symbol is not one of those recognized by
-    /// [`crate::molecule::Atom`].
+    /// [`Atom`].
     BadElementSymbol(usize, String),
     /// In a bond line, bond number is not an integer value.
     BondNumberNotInt(usize),
     /// In a bond line, bond type is not an integer value.
     BondTypeNotInt(usize),
-    /// In a bond line, bond type is not one of those recognized by
-    /// [`crate::molecule::Bond`].
+    /// In a bond line, bond type is not one of those recognized by [`Bond`].
     BadBondType(usize),
-    /// The .mol file does not have all the lines to reconstruct the molecule.
+    /// The `.mol` file has insufficient lines to reconstruct the molecule.
     NotEnoughLines,
     /// An unknown error that should be reported to the crate maintainers.
     ThisShouldNotHappen,
@@ -80,9 +79,9 @@ impl Display for ParserError {
     }
 }
 
-/// Parse the contents of a `.mol` file as a [`crate::molecule::Molecule`].
+/// Parse the contents of a `.mol` file as a [`Molecule`].
 ///
-/// If the contents string is malformed, a [`ParserError`] is thrown.
+/// If the `.mol` file contents are malformed, a [`ParserError`] is thrown.
 ///
 /// # Example
 /// ```

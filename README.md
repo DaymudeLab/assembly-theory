@@ -71,7 +71,8 @@ See the [`criterion` command line options](https://bheisler.github.io/criterion.
 ### Building the Python Package Locally
 
 We use [`pyo3`](https://crates.io/crates/pyo3) to package functionality from our Rust crate as a Python package called `assembly_theory`.
-To build this package locally, first install [`maturin`](https://pypi.org/project/maturin/) using your virtual environment manager of choice:
+To build this package locally, first create a virtual environment for this project using a manager of your choice.
+Then install [`maturin`](https://pypi.org/project/maturin/):
 
 ```shell
 pip install maturin      # using pip
@@ -79,7 +80,7 @@ pipx install maturin     # using pipx
 uv tool install maturin  # using uv
 ```
 
-Then, within a virtual environment, build and install this project as a Python package:
+Within the virtual environment, build and install this project as a Python package:
 
 ```shell
 maturin develop --release
@@ -123,15 +124,15 @@ Want to contribute your own code?
 
 - Familiarize yourself with the [Rust API Guidelines](https://github.com/DaymudeLab/assembly-theory/compare) and overall architecture of `assembly-theory`.
 - Development team members should work in individual feature branches.
-External contributors work in repository forks.
-- Before opening a pull request onto `main`, make sure you (1) rebase onto `main` and (2) run `cargo fmt` and `cargo clippy`.
-- Open a [new pull request](https://github.com/DaymudeLab/assembly-theory/compare), provide a descriptive list of your changes (along with referencing any issues your PR resolves), and assign one of [@AgentElement](https://github.com/AgentElement), [@jdaymude](https://github.com/jdaymude), or [@colemathis](https://github.com/colemathis) as a reviewer. 
-Your PR will not be reviewed until it passes all GitHub Actions (compilation, formatting, tests, etc.).
+External contributors should work in repository forks.
+- Before opening a pull request onto `main`, make sure you rebase onto `main`, run `cargo fmt`, and resolve any issues raised by `cargo clippy`.
+- Open a [new pull request](https://github.com/DaymudeLab/assembly-theory/compare), provide a descriptive list of your changes (with references to any issues your PR resolves), and assign one of [@AgentElement](https://github.com/AgentElement), [@jdaymude](https://github.com/jdaymude), or [@colemathis](https://github.com/colemathis) as a reviewer. 
+Your PR will not be reviewed unless it passes all GitHub Actions (compilation, formatting, tests, etc.).
 
 
 ## Governance
 
-`assembly-theory` is maintained by Devansh Vimal ([@AgentElement](https://github.com/AgentElement)), Joshua J. Daymude ([@jdaymude](https://github.com/jdaymude)), and Cole Mathis ([@colemathis](https://github.com/colemathis)), with support from other members of the [Biodesign Center for Biocomputing, Security and Society](https://biodesign.asu.edu/biocomputing-security-and-society/) at Arizona State University including Garrett Parzych ([@Garrett-Pz](https://github.com/Garrett-Pz)), Olivia M. Smith ([@omsmith161](https://github.com/omsmith161)), Devendra Parkar ([@devrz45](https://github.com/devrz45)), and Sean Bergen ([@ARandomCl0wn](https://github.com/ARandomCl0wn)).
+`assembly-theory` is maintained by Devansh Vimal ([@AgentElement](https://github.com/AgentElement)), Joshua J. Daymude ([@jdaymude](https://github.com/jdaymude)), and Cole Mathis ([@colemathis](https://github.com/colemathis)) with support from other members of the [Biodesign Center for Biocomputing, Security and Society](https://biodesign.asu.edu/biocomputing-security-and-society/) at Arizona State University including Garrett Parzych ([@Garrett-Pz](https://github.com/Garrett-Pz)), Olivia M. Smith ([@omsmith161](https://github.com/omsmith161)), Devendra Parkar ([@devrz45](https://github.com/devrz45)), and Sean Bergen ([@ARandomCl0wn](https://github.com/ARandomCl0wn)).
 
 The maintainers govern the project using the committee model: high-level decisions about the project's direction require maintainer consensus, major code changes require majority approval, hotfixes and patches require just one maintainer approval, new maintainers can be added by unanimous decision of the existing maintainers, and existing maintainers can step down with advance notice.
 

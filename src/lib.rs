@@ -5,7 +5,7 @@
 //!
 //! This crate is specific to the Rust library; see the
 //! [GitHub repository](https://github.com/DaymudeLab/assembly-theory) for ways
-//! to use `assembly_theory` as a standalone executable or as a Python library.
+//! to use `assembly_theory` as a standalone executable or as a Python package.
 //!
 //! # Example
 //!

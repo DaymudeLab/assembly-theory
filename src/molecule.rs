@@ -1,8 +1,4 @@
 //! Graph-theoretic representation of a molecule.
-//!
-//! Load molecules from `.mol` files, fragment and join partial molecules, and
-//! perform various graph-theoretic tasks on molecules (e.g., enumerate all
-//! subgraphs, test for isomorphisms, etc.).
 
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
@@ -23,15 +19,15 @@ pub(crate) type MGraph = Graph<Atom, Bond, Undirected, Index>;
 type EdgeSet = BTreeSet<EdgeIndex<Index>>;
 type NodeSet = BTreeSet<NodeIndex<Index>>;
 
-/// Thrown by [`Element::from_str`] if the string does not represent a valid
-/// chemical element.
+/// Thrown by [`Element::from_str`] if the string is not a valid chemical
+/// element.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct ParseElementError;
 
 macro_rules! periodic_table {
     ( $(($element:ident, $name:literal),)* ) => {
         #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-        /// Represents a chemical element.
+        /// A chemical element on the periodic table.
         pub enum Element {
             $( $element, )*
         }
@@ -211,6 +207,7 @@ pub enum Bond {
     Triple,
 }
 
+/// Either an [`Atom`] or a [`Bond`].
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum AtomOrBond {
     Atom(Atom),
@@ -233,7 +230,7 @@ impl TryFrom<usize> for Bond {
     }
 }
 
-/// A simple, loopless graph with [`Element`]s as nodes and [`Bond`]s as edges.
+/// A simple, loopless graph with [`Atom`]s as nodes and [`Bond`]s as edges.
 ///
 /// Assembly theory literature ignores hydrogen atoms by default. Molecules can
 /// have hydrogen atoms inserted into them, but by default are constructed

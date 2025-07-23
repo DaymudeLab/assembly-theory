@@ -1,10 +1,11 @@
-//! Kernelize molecular graphs to improve top-down search efficiency.
+//! Kernelize match-compatibility graphs to improve top-down search efficiency.
 //!
-//! TODO: Longer explanation of what that means.
+//! TODO: Longer explanation of what that means from @Garrett-Pz.
 
 use clap::ValueEnum;
 
 /// Graph kernelization strategy when searching using the clique reduction.
+// TODO: Need @Garrett-Pz to write better descriptions of these methods.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum KernelMode {
     /// No kernelization.

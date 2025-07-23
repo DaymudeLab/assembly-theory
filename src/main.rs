@@ -2,7 +2,7 @@ use std::{fs, path::PathBuf};
 
 use anyhow::{bail, Context, Result};
 use assembly_theory::{
-    assembly::{assembly_depth, index_search, ParallelMode},
+    assembly::{depth, index_search, ParallelMode},
     bounds::Bound,
     canonize::CanonizeMode,
     enumerate::EnumerateMode,
@@ -87,7 +87,7 @@ fn main() -> Result<()> {
 
     // If --depth is set, calculate and print assembly depth and exit.
     if cli.depth {
-        println!("{}", assembly_depth(&mol));
+        println!("{}", depth(&mol));
         return Ok(());
     }
 

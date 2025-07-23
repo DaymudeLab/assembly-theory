@@ -19,7 +19,7 @@ uv add assembly-theory        # Using uv.
 
 ## Usage
 
-`assembly-theory` exposes a handful of functions, all of which expect as input a "mol block" (i.e., the contents of a `.mol` file as a string).
+`assembly-theory` exposes several functions, all of which expecta "mol block" (i.e., the contents of a `.mol` file as a string) as input.
 For example:
 
 ```python
@@ -33,7 +33,7 @@ with open('anthracene.mol') as f:
 at.index(mol_block)  # 6
 ```
 
-Combine `assembly-theory` with [RDKit](https://pypi.org/project/rdkit-pypi/) (installed separately) if you need to manipulate molecular representations or incorporate assembly index calculations in a broader cheminformatic pipeline.
+Combine `assembly-theory` with [RDKit](https://pypi.org/project/rdkit-pypi/) (installed separately) if you need to manipulate molecular representations or incorporate assembly index calculations in a broader cheminformatics pipeline.
 
 ```python
 import assembly_theory as at
