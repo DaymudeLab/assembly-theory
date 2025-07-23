@@ -238,6 +238,16 @@ impl TryFrom<usize> for Bond {
     }
 }
 
+impl Into<usize> for Bond {
+    fn into(self) -> usize {
+        match self {
+            Bond::Single => 1,
+            Bond::Double => 2,
+            Bond::Triple => 3,
+        }
+    }
+}
+
 /// A simple, loopless graph with [`Atom`]s as nodes and [`Bond`]s as edges.
 ///
 /// Assembly theory literature ignores hydrogen atoms by default. Molecules can
