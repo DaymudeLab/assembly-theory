@@ -14,11 +14,11 @@
 //!
 //! ```custom,{class=language-python}
 //! import assembly_theory as at
-//! 
+//!
 //! # Load a mol block from file.
 //! with open('data/checks/anthracene.mol') as f:
 //!     mol_block = f.read()
-//! 
+//!
 //! # Calculate the molecule's assembly index.
 //! at.index(mol_block)  # 6
 //! ```
@@ -104,8 +104,9 @@ impl FromStr for PyEnumerateMode {
             "extend" => Ok(PyEnumerateMode::Extend),
             "grow-erode" => Ok(PyEnumerateMode::GrowErode),
             _ => Err(PyValueError::new_err(format!(
-                        "Invalid enumeration mode \"{s}\", options are: \
-                        [\"extend\", \"grow-erode\"]"))),
+                "Invalid enumeration mode \"{s}\", options are: \
+                [\"extend\", \"grow-erode\"]"
+            ))),
         }
     }
 }
@@ -121,9 +122,9 @@ impl FromStr for PyCanonizeMode {
             "tree-nauty" => Ok(PyCanonizeMode::TreeNauty),
             "tree-faulon" => Ok(PyCanonizeMode::TreeFaulon),
             _ => Err(PyValueError::new_err(format!(
-                        "Invalid canonization mode \"{s}\", options are: \
-                        [\"nauty\", \"faulon\", \"tree-nauty\", \
-                        \"tree-faulon\"]"))),
+                "Invalid canonization mode \"{s}\", options are: \
+                [\"nauty\", \"faulon\", \"tree-nauty\", \"tree-faulon\"]"
+            ))),
         }
     }
 }
@@ -138,8 +139,9 @@ impl FromStr for PyParallelMode {
             "depth-one" => Ok(PyParallelMode::DepthOne),
             "always" => Ok(PyParallelMode::Always),
             _ => Err(PyValueError::new_err(format!(
-                        "Invalid parallelization mode \"{s}\", options are: \
-                        [\"none\", \"depth-one\", \"always\"]"))),
+                "Invalid parallelization mode \"{s}\", options are: \
+                [\"none\", \"depth-one\", \"always\"]"
+            ))),
         }
     }
 }
@@ -154,9 +156,10 @@ impl FromStr for PyKernelMode {
             "once" => Ok(PyKernelMode::Once),
             "depth-one" => Ok(PyKernelMode::DepthOne),
             "always" => Ok(PyKernelMode::Always),
-            _ => Err(PyValueError::new_err(format!("
-                        Invalid kernelization mode \"{s}\", options are: \
-                        [\"none\", \"once\", \"depth-one\", \"always\"]"))),
+            _ => Err(PyValueError::new_err(format!(
+                "Invalid kernelization mode \"{s}\", options are: \
+                [\"none\", \"once\", \"depth-one\", \"always\"]"
+            ))),
         }
     }
 }
@@ -174,11 +177,11 @@ impl FromStr for PyBound {
             "cover-sort" => Ok(PyBound::CoverSort),
             "cover-no-sort" => Ok(PyBound::CoverNoSort),
             "clique-budget" => Ok(PyBound::CliqueBudget),
-            _ => Err(PyValueError::new_err(format!("
-                        Invalid bound \"{s}\", options are: [\"log\", \
-                        \"int\", \"vec-simple\", \"vec-small-frags\", \
-                        \"cover-sort\", \"cover-no-sort\", \
-                        \"clique-budget\"]"))),
+            _ => Err(PyValueError::new_err(format!(
+                "Invalid bound \"{s}\", options are: \
+                [\"log\", \"int\", \"vec-simple\", \"vec-small-frags\", \
+                \"cover-sort\", \"cover-no-sort\", \"clique-budget\"]"
+            ))),
         }
     }
 }
@@ -224,11 +227,11 @@ fn make_boundlist(pybounds: &[PyBound]) -> Vec<OurBound> {
 ///
 /// ```custom,{class=language-python}
 /// import assembly_theory as at
-/// 
+///
 /// # Load a mol block from file.
 /// with open('data/checks/anthracene.mol') as f:
 ///     mol_block = f.read()
-/// 
+///
 /// # Print the molecule's graph structure.
 /// print(at.mol_info(mol_block))
 ///
@@ -271,11 +274,11 @@ pub fn _mol_info(mol_block: String) -> PyResult<String> {
 ///
 /// ```custom,{class=language-python}
 /// import assembly_theory as at
-/// 
+///
 /// # Load a mol block from file.
 /// with open('data/checks/benzene.mol') as f:
 ///     mol_block = f.read()
-/// 
+///
 /// # Calculate the molecule's assembly index.
 /// at.depth(mol_block)  # 3
 /// ```
@@ -306,11 +309,11 @@ pub fn _depth(mol_block: String) -> PyResult<u32> {
 ///
 /// ```custom,{class=language-python}
 /// import assembly_theory as at
-/// 
+///
 /// # Load a mol block from file.
 /// with open('data/checks/anthracene.mol') as f:
 ///     mol_block = f.read()
-/// 
+///
 /// # Calculate the molecule's assembly index.
 /// at.index(mol_block)  # 6
 /// ```
@@ -360,11 +363,11 @@ pub fn _index(mol_block: String) -> PyResult<u32> {
 ///
 /// ```custom,{class=language-python}
 /// import assembly_theory as at
-/// 
+///
 /// # Load a mol block from file.
 /// with open('data/checks/anthracene.mol') as f:
 ///     mol_block = f.read()
-/// 
+///
 /// # Calculate the molecule's assembly index using the specified options.
 /// (index, num_matches, states_searched) = at.index_search(
 ///     mol_block,
@@ -400,27 +403,27 @@ pub fn _index_search(
     let enumerate_mode = match PyEnumerateMode::from_str(&enumerate_str) {
         Ok(PyEnumerateMode::Extend) => EnumerateMode::Extend,
         Ok(PyEnumerateMode::GrowErode) => EnumerateMode::GrowErode,
-        Err(e) => return Err(e.into()),
+        Err(e) => return Err(e),
     };
     let canonize_mode = match PyCanonizeMode::from_str(&canonize_str) {
         Ok(PyCanonizeMode::Nauty) => CanonizeMode::Nauty,
         Ok(PyCanonizeMode::Faulon) => CanonizeMode::Faulon,
         Ok(PyCanonizeMode::TreeNauty) => CanonizeMode::TreeNauty,
         Ok(PyCanonizeMode::TreeFaulon) => CanonizeMode::TreeFaulon,
-        Err(e) => return Err(e.into()),
+        Err(e) => return Err(e),
     };
     let parallel_mode = match PyParallelMode::from_str(&parallel_str) {
         Ok(PyParallelMode::None) => ParallelMode::None,
         Ok(PyParallelMode::DepthOne) => ParallelMode::DepthOne,
         Ok(PyParallelMode::Always) => ParallelMode::Always,
-        Err(e) => return Err(e.into()),
+        Err(e) => return Err(e),
     };
     let kernel_mode = match PyKernelMode::from_str(&kernel_str) {
         Ok(PyKernelMode::None) => KernelMode::None,
         Ok(PyKernelMode::Once) => KernelMode::Once,
         Ok(PyKernelMode::DepthOne) => KernelMode::DepthOne,
         Ok(PyKernelMode::Always) => KernelMode::Always,
-        Err(e) => return Err(e.into()),
+        Err(e) => return Err(e),
     };
     let pybounds = process_bound_strs(bound_strs)?;
     let boundlist = make_boundlist(&pybounds);

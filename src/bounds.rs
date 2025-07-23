@@ -47,7 +47,7 @@ pub enum Bound {
     /// the definition of a cover. (Note that they solve the equivalent
     /// weighted independent set problem and thus use a clique cover instead.)
     CoverNoSort,
-    /// Like `CoverNoSort`, buts sorts the vertices of the compatibility 
+    /// Like `CoverNoSort`, buts sorts the vertices of the compatibility
     /// graph by degree before creating the greedy independent set cover.
     CoverSort,
     /// Uses the compatibility graph to determine the largest duplicatable

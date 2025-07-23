@@ -42,14 +42,14 @@
 mod utils;
 
 // Graph representations of molecules and associated parsing.
-pub mod molecule;
 pub mod loader;
+pub mod molecule;
 
 // Assembly index calculation and supporting functions.
 pub mod assembly;
-pub mod enumerate;
-pub mod canonize;
 pub mod bounds;
+pub mod canonize;
+pub mod enumerate;
 pub mod kernels;
 mod vf3;
 

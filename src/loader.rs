@@ -172,4 +172,3 @@ fn parse_bond_line(line_ix: usize, bond_line: &str) -> Result<(usize, usize, Bon
         .map_err(|_| ParserError::BadBondType(line_ix))?;
     Ok((first_atom, second_atom, bond))
 }
-

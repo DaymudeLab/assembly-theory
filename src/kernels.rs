@@ -7,7 +7,7 @@
 //! that *definitely will* or *definitely won't* be used in an optimal
 //! solution. We call the process of identifying these nodes *kernelization*.
 //! Uses the strategies of neighborhood removal, isolated vertex removal, and
-//! domination as described in Section 5.2 of [Lamm et al. 
+//! domination as described in Section 5.2 of [Lamm et al.
 //! (2019)](https://doi.org/10.1137/1.9781611975499.12). (Note that they solve
 //! the equivalent problem of weighted independent set.)
 
