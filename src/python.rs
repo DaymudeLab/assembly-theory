@@ -32,7 +32,7 @@ use pyo3::{
 };
 
 use crate::{
-    assembly::{index, index_search, ParallelMode},
+    assembly::{depth, index, index_search, ParallelMode},
     bounds::Bound as OurBound,
     canonize::CanonizeMode,
     enumerate::EnumerateMode,
@@ -243,6 +243,42 @@ pub fn _mol_info(mol_block: String) -> PyResult<String> {
     Ok(mol.info())
 }
 
+/// Compute assembly depth; see
+/// [Pagel et al. (2024)](https://arxiv.org/abs/2409.05993).
+///
+/// Python version of [`depth`].
+///
+/// # Python Parameters
+/// - `mol_block`: The contents of a `.mol` file as a `str`.
+///
+/// # Python Returns
+/// - The molecule's `int` assembly depth.
+///
+/// # Python Example
+///
+/// ```custom,{class=language-python}
+/// import assembly_theory as at
+/// 
+/// # Load a mol block from file.
+/// with open('data/checks/benzene.mol') as f:
+///     mol_block = f.read()
+/// 
+/// # Calculate the molecule's assembly index.
+/// at.depth(mol_block)  # 3
+/// ```
+#[pyfunction(name = "depth")]
+pub fn _depth(mol_block: String) -> PyResult<u32> {
+    // Parse the .mol file contents as a molecule::Molecule.
+    let mol_result = parse_molfile_str(&mol_block);
+    let mol = match mol_result {
+        Ok(mol) => mol,
+        Err(e) => return Err(e.into()), // Convert the error to PyErr
+    };
+
+    // Calculate assembly depth.
+    Ok(depth(&mol))
+}
+
 /// Computes a molecule's assembly index using an efficient default strategy.
 ///
 /// Python version of [`index`].
@@ -402,6 +438,7 @@ pub fn _index_search(
 #[pymodule(name = "assembly_theory")]
 fn _assembly_theory(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_mol_info, m)?)?;
+    m.add_function(wrap_pyfunction!(_depth, m)?)?;
     m.add_function(wrap_pyfunction!(_index, m)?)?;
     m.add_function(wrap_pyfunction!(_index_search, m)?)?;
     Ok(())
