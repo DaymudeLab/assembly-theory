@@ -77,7 +77,7 @@ where
         node_set.insert(src);
         node_set.insert(dst);
     }
-    node_set.into_iter().count()
+    node_set.len()
 }
 
 pub fn node_induced_subgraph<N, E, Ty, Ix>(
