@@ -11,8 +11,7 @@ use crate::{
 pub enum CacheMode {
     None,
     Index,
-    Savings,
-    SavingsCanon,
+    IndexCanon,
 }
 
 #[derive(Eq, Hash, PartialEq)]
@@ -41,8 +40,7 @@ impl Cache {
         match self.mode {
             CacheMode::None => None,
             CacheMode::Index => self.index_get(fragments, state_index),
-            CacheMode::Savings => self.savings_get(fragments, state_index),
-            CacheMode::SavingsCanon => self.savings_canon_get(mol, fragments, state_index),
+            CacheMode::IndexCanon => self.index_canon_get(mol, fragments, state_index),
         }
     }
 
@@ -63,20 +61,7 @@ impl Cache {
         }
     }
 
-    fn savings_get(&self, fragments: &[BitSet], state_index: usize) -> Option<usize> {
-        let mut frag_vec = fragments.to_vec();
-        frag_vec.sort_by(|a, b| a.iter().next().cmp(&b.iter().next()));
-
-        if let Some(res) = self.cache.get(&CacheType::Set(frag_vec)) {
-            Some(state_index - *res)
-        }
-        else {
-            None
-        }
-    }
-
-    fn savings_canon_get(&self, mol: &Molecule, fragments: &[BitSet], state_index: usize) -> Option<usize> {
-        // Use map
+    fn index_canon_get(&self, mol: &Molecule, fragments: &[BitSet], state_index: usize) -> Option<usize>{
         let mut labels: Vec<Labeling> = fragments
             .iter()
             .map(|f| {
@@ -93,7 +78,12 @@ impl Cache {
         labels.sort_by(|a, b| a.cmp(b));
 
         if let Some(res) = self.cache.get(&CacheType::Canon(labels)) {
-            Some(state_index - *res)
+            if *res <= state_index {
+                Some(state_index)
+            }
+            else {
+                None
+            }
         }
         else {
             None
@@ -108,12 +98,7 @@ impl Cache {
                 frag_vec.sort_by(|a, b| a.iter().next().cmp(&b.iter().next()));
                 self.cache.insert(CacheType::Set(frag_vec), state_index);
             },
-            CacheMode::Savings => {
-                let mut frag_vec = fragments.to_vec();
-                frag_vec.sort_by(|a, b| a.iter().next().cmp(&b.iter().next()));
-                self.cache.insert(CacheType::Set(frag_vec), savings);
-            },
-            CacheMode::SavingsCanon => {
+            CacheMode::IndexCanon => {
                 let mut labels: Vec<Labeling> = fragments
                     .iter()
                     .filter_map(|f| self.frags_to_labels.get(f))
@@ -121,7 +106,7 @@ impl Cache {
                     .collect();
                 labels.sort_by(|a, b| a.cmp(b));
 
-                self.cache.insert(CacheType::Canon(labels), savings);
+                self.cache.insert(CacheType::Canon(labels), state_index);
             },
         };
     }
