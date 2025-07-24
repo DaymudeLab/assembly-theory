@@ -93,11 +93,13 @@ pub fn depth(mol: &Molecule) -> u32 {
     ix
 }
 
+/// Helper function for [`index_search`]; only public for benchmarking.
+///
 /// Return (1) a map of the given molecule's connected, non-induced subgraphs
 /// with at most |E|/2 edges to their canonical labels and (2) all pairs of
 /// non-overlapping, isomorphic subgraphs in the molecule, sorted to guarantee
 /// deterministic iteration.
-fn labels_matches(
+pub fn labels_matches(
     mol: &Molecule,
     enumerate_mode: EnumerateMode,
     canonize_mode: CanonizeMode,
@@ -201,7 +203,7 @@ fn fractures(
     Some(fractures)
 }
 
-/// Recursive helper for [`index_search`].
+/// Recursive helper for [`index_search`], only public for benchmarking.
 ///
 /// Inputs:
 /// - `mol`: The molecule whose assembly index is being calculated.

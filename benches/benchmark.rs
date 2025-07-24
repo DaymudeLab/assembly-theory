@@ -3,6 +3,7 @@ use std::{
     ffi::OsStr,
     fs,
     path::Path,
+    sync::{atomic::AtomicUsize, Arc},
     time::{Duration, Instant},
 };
 
@@ -10,11 +11,10 @@ use bit_set::BitSet;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 
 use assembly_theory::{
-    assembly::{index_search, ParallelMode},
+    assembly::{labels_matches, recurse_index_search, ParallelMode},
     bounds::Bound,
     canonize::{canonize, CanonizeMode},
     enumerate::{enumerate_subgraphs, EnumerateMode},
-    kernels::KernelMode,
     loader::parse_molfile_str,
     molecule::Molecule,
 };
@@ -98,9 +98,12 @@ pub fn bench_canonize(c: &mut Criterion) {
                 |b, &canonize_mode| {
                     b.iter_custom(|iters| {
                         let mut total_time = Duration::new(0, 0);
-                        for _ in 0..iters {
-                            for mol in &mol_list {
-                                let subgraphs = enumerate_subgraphs(mol, EnumerateMode::GrowErode);
+                        for mol in &mol_list {
+                            // Precompute subgraph enumeration.
+                            let subgraphs = enumerate_subgraphs(mol, EnumerateMode::GrowErode);
+
+                            // Benchmark the isomorphism class creation.
+                            for _ in 0..iters {
                                 let start = Instant::now();
                                 let mut isomorphism_classes = HashMap::<_, Vec<BitSet>>::new();
                                 for subgraph in &subgraphs {
@@ -128,42 +131,60 @@ pub fn bench_canonize(c: &mut Criterion) {
 /// fastest options and times only the search step for different combinations
 /// of [`Bound`]s. This benchmark disables other search optimizations (e.g.,
 /// kernelization or memoization) to focus on the effects of bounds only.
-pub fn bench_bounds(c: &mut Criterion) {}
+pub fn bench_bounds(c: &mut Criterion) {
+    let mut bench_group = c.benchmark_group("bench_bounds");
 
-pub fn bench_index_search(c: &mut Criterion) {
-    let mut bench_group = c.benchmark_group("bench_index_search");
-
-    // Define datasets and algorithm modes.
+    // Define datasets and bound lists.
     let datasets = ["gdb13_1201", "gdb17_200", "checks", "coconut_55"];
     let bound_lists = [
-        (vec![], "naive"),
-        (vec![Bound::Log], "logbound"),
-        (vec![Bound::Int], "intbound"),
+        (vec![], "no-bounds"),
+        (vec![Bound::Log], "log"),
+        (vec![Bound::Int], "int"),
         (
             vec![Bound::Int, Bound::VecSimple, Bound::VecSmallFrags],
-            "allbounds",
+            "int-vec",
         ),
     ];
 
-    // Run the benchmark for each dataset and algorithm mode.
+    // Run the benchmark for each dataset and bound list.
     for dataset in &datasets {
         let mol_list = load_dataset_molecules(dataset);
         for (bounds, name) in &bound_lists {
-            bench_group.bench_with_input(BenchmarkId::new(*dataset, &name), bounds, |b, bounds| {
-                b.iter(|| {
-                    for mol in &mol_list {
-                        index_search(
-                            &mol,
-                            EnumerateMode::GrowErode,
-                            CanonizeMode::Nauty,
-                            ParallelMode::DepthOne,
-                            KernelMode::None,
-                            &bounds,
-                            false,
-                        );
-                    }
-                });
-            });
+            bench_group.bench_with_input(
+                BenchmarkId::new(*dataset, &name),
+                &bounds,
+                |b, &bounds| {
+                    b.iter_custom(|iters| {
+                        let mut total_time = Duration::new(0, 0);
+                        for mol in &mol_list {
+                            // Precompute the molecule's matches and setup.
+                            let (_, matches) =
+                                labels_matches(mol, EnumerateMode::GrowErode, CanonizeMode::Nauty);
+                            let mut init = BitSet::new();
+                            init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
+                            let edge_count = mol.graph().edge_count();
+
+                            // Benchmark the search phase.
+                            for _ in 0..iters {
+                                let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
+                                let start = Instant::now();
+                                recurse_index_search(
+                                    mol,
+                                    &matches,
+                                    &[init.clone()],
+                                    edge_count - 1,
+                                    best_index,
+                                    edge_count,
+                                    bounds,
+                                    ParallelMode::DepthOne,
+                                );
+                                total_time += start.elapsed();
+                            }
+                        }
+                        total_time
+                    });
+                },
+            );
         }
     }
 
@@ -173,6 +194,6 @@ pub fn bench_index_search(c: &mut Criterion) {
 criterion_group! {
     name = benchmark;
     config = Criterion::default().sample_size(20);
-    targets = bench_enumerate, bench_canonize, bench_index_search
+    targets = bench_enumerate, bench_canonize, bench_bounds
 }
 criterion_main!(benchmark);

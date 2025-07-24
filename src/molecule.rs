@@ -265,7 +265,9 @@ impl Molecule {
     }
 
     /// Return a representation of this molecule as an `MGraph`.
-    pub(crate) fn graph(&self) -> &MGraph {
+    ///
+    /// Only public for benchmarking purposes.
+    pub fn graph(&self) -> &MGraph {
         &self.graph
     }
 
