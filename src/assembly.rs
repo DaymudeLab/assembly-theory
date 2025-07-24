@@ -82,7 +82,6 @@ fn labels_matches(
     mol: &Molecule,
     enumerate_mode: EnumerateMode,
     canonize_mode: CanonizeMode,
-    memoize: CacheMode,
 ) -> (DashMap<BitSet, Labeling>, Vec<(BitSet, BitSet)>) {
     // Enumerate all connected, non-induced subgraphs with at most |E|/2 edges
     // and bin them into isomorphism classes using canonization. Store these
@@ -257,8 +256,7 @@ fn recurse_index_search_serial(
         }
     }
 
-    let savings = state_index - best_child_index;
-    cache.insert(mol, fragments, state_index, savings);
+    cache.insert(fragments, state_index);
 
     (best_child_index, states_searched)
 }
@@ -387,8 +385,7 @@ fn recurse_index_search_depthone_helper(
         }
     }
 
-    let savings = state_index - best_child_index;
-    cache.insert(mol, fragments, state_index, savings);
+    cache.insert(fragments, state_index);
 
     (best_child_index, states_searched)
 }
@@ -464,8 +461,7 @@ fn recurse_index_search_parallel(
         }
     });
 
-    let savings = state_index - best_child_index.load(Relaxed);
-    cache.insert(mol, fragments, state_index, savings);
+    cache.insert(fragments, state_index);
 
     (
         best_child_index.load(Relaxed),
@@ -547,7 +543,7 @@ pub fn index_search(
     }
 
     // Enumerate non-overlapping isomorphic subgraph pairs.
-    let (frags_to_labels, matches) = labels_matches(mol, enumerate_mode, canonize_mode, memoize);
+    let (frags_to_labels, matches) = labels_matches(mol, enumerate_mode, canonize_mode);
 
     // Create cache for dynamic programming
     let mut cache = Cache::new(memoize, frags_to_labels);
@@ -631,7 +627,7 @@ pub fn index(mol: &Molecule) -> u32 {
         ParallelMode::DepthOne,
         KernelMode::None,
         &[Bound::Int, Bound::VecSimple, Bound::VecSmallFrags],
-        CacheMode::Savings,
+        CacheMode::IndexCanon,
     )
     .0
 }

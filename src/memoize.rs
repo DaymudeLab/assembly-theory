@@ -90,7 +90,7 @@ impl Cache {
         }
     }
 
-    pub fn insert(&mut self, mol: &Molecule, fragments: &[BitSet], state_index: usize, savings: usize) {
+    pub fn insert(&mut self, fragments: &[BitSet], state_index: usize) {
         match self.mode {
             CacheMode::None => (),
             CacheMode::Index => {

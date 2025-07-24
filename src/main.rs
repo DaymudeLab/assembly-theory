@@ -45,7 +45,7 @@ struct Cli {
     parallel: ParallelMode,
 
     /// Use dynamic programming memoization in the search phase.
-    #[arg(long, value_enum, default_value_t = CacheMode::Savings)]
+    #[arg(long, value_enum, default_value_t = CacheMode::IndexCanon)]
     memoize: CacheMode,
 
     /// Bounding strategies to apply in the search phase.
