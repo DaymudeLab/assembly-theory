@@ -45,7 +45,7 @@ pub enum Labeling {
     // TODO: This should be a `Vec<u8>`
     Faulon(String),
 
-    Tree(Vec<usize>),
+    Tree(Vec<u8>),
 }
 
 /// Obtain a canonical labeling of the specified subgraph using the specified
@@ -99,11 +99,11 @@ fn subgraph_to_cgraph(mol: &Molecule, subgraph: &BitSet) -> CGraph {
     h
 }
 
-fn tree_canonize(mol: &Molecule, subgraph: &BitSet) -> Vec<usize> {
+fn tree_canonize(mol: &Molecule, subgraph: &BitSet) -> Vec<u8> {
     let graph = mol.graph();
     let order = subgraph.len() + 1;
     let mut adjacencies = vec![BitSet::with_capacity(order); order];
-    let mut partial_canonical_sets = vec![BTreeSet::<Vec<usize>>::new(); order];
+    let mut partial_canonical_sets = vec![BTreeSet::<Vec<u8>>::new(); order];
     let mut unlabeled_vertices = BitSet::with_capacity(order);
     for ix in subgraph.iter() {
         let (u, v) = graph
