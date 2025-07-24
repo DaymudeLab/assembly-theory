@@ -51,7 +51,7 @@ pub fn bench_enumerate(c: &mut Criterion) {
     let datasets = ["gdb13_1201", "gdb17_200", "checks", "coconut_55"];
     let enumerate_modes = [
         (EnumerateMode::Extend, "extend"),
-        (EnumerateMode::GrowErode, "growerode"),
+        (EnumerateMode::GrowErode, "grow-erode"),
     ];
 
     // Run a benchmark for each dataset and enumeration mode.

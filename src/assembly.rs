@@ -152,23 +152,19 @@ pub fn labels_matches(
     (subgraph_labels, matches)
 }
 
-/// Determine the fragments produced by removing the given pair of duplicatable
-/// subgraphs and then adding one back; return None if not possible.
-fn fractures(
-    mol: &Molecule,
-    fragments: &[BitSet],
-    h1: &BitSet,
-    h2: &BitSet,
-) -> Option<Vec<BitSet>> {
+/// Determine the fragments produced from the given assembly state by removing
+/// the given pair of non-overlapping, isomorphic subgraphs and then adding one
+/// back; return `None` if not possible.
+fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Option<Vec<BitSet>> {
     // Attempt to find fragments f1 and f2 containing h1 and h2, respectively;
     // if either do not exist, exit without further fragmentation.
-    let f1 = fragments.iter().enumerate().find(|(_, c)| h1.is_subset(c));
-    let f2 = fragments.iter().enumerate().find(|(_, c)| h2.is_subset(c));
+    let f1 = state.iter().enumerate().find(|(_, c)| h1.is_subset(c));
+    let f2 = state.iter().enumerate().find(|(_, c)| h2.is_subset(c));
     let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) else {
         return None;
     };
 
-    let mut fractures = fragments.to_owned();
+    let mut fragments = state.to_owned();
 
     // If the same fragment f1 (== f2) contains both h1 and h2, replace this
     // one fragment f1 with all connected components comprising f1 - (h1 U h2).
@@ -180,27 +176,27 @@ fn fractures(
         let mut difference = f1.clone();
         difference.difference_with(&union);
         let c = connected_components_under_edges(mol.graph(), &difference);
-        fractures.extend(c);
-        fractures.swap_remove(i1);
+        fragments.extend(c);
+        fragments.swap_remove(i1);
     } else {
         let mut diff1 = f1.clone();
         diff1.difference_with(h1);
         let c1 = connected_components_under_edges(mol.graph(), &diff1);
-        fractures.extend(c1);
+        fragments.extend(c1);
 
         let mut diff2 = f2.clone();
         diff2.difference_with(h2);
         let c2 = connected_components_under_edges(mol.graph(), &diff2);
-        fractures.extend(c2);
+        fragments.extend(c2);
 
-        fractures.swap_remove(i1.max(i2));
-        fractures.swap_remove(i1.min(i2));
+        fragments.swap_remove(i1.max(i2));
+        fragments.swap_remove(i1.min(i2));
     }
 
     // Drop any singleton fragments, add h1 as a fragment, and return.
-    fractures.retain(|i| i.len() > 1);
-    fractures.push(h1.clone());
-    Some(fractures)
+    fragments.retain(|i| i.len() > 1);
+    fragments.push(h1.clone());
+    Some(fragments)
 }
 
 /// Recursive helper for [`index_search`], only public for benchmarking.
@@ -208,13 +204,13 @@ fn fractures(
 /// Inputs:
 /// - `mol`: The molecule whose assembly index is being calculated.
 /// - `matches`: The remaining non-overlapping isomorphic subgraph pairs.
-/// - `fragments`: TODO
+/// - `state`: The current assembly state, i.e., a list of fragments.
 /// - `state_index`: The assembly index of this assembly state.
 /// - `best_index`: The smallest assembly index for all assembly states so far.
 /// - `largest_remove`: An upper bound on the size of fragments that can be
-///   removed from this or any descendant state.
+///   removed from this or any descendant assembly state.
 /// - `bounds`: The list of bounding strategies to apply.
-/// - `parallel_mode`: The parallelism mode to use for this state's children.
+/// - `parallel_mode`: The parallelism mode for this state's match iteration.
 ///
 /// Returns, from this assembly state and any of its descendents:
 /// - `usize`: The best assembly index found.
@@ -223,7 +219,7 @@ fn fractures(
 pub fn recurse_index_search(
     mol: &Molecule,
     matches: &[(BitSet, BitSet)],
-    fragments: &[BitSet],
+    state: &[BitSet],
     state_index: usize,
     best_index: Arc<AtomicUsize>,
     largest_remove: usize,
@@ -233,7 +229,7 @@ pub fn recurse_index_search(
     // If any bounds would prune this assembly state, halt.
     if bound_exceeded(
         mol,
-        fragments,
+        state,
         state_index,
         best_index.load(Relaxed),
         largest_remove,
@@ -250,7 +246,7 @@ pub fn recurse_index_search(
     // Define a closure that handles recursing to a new assembly state based on
     // the given (enumerated) pair of non-overlapping isomorphic subgraphs.
     let recurse_on_match = |i: usize, h1: &BitSet, h2: &BitSet| {
-        if let Some(fractures) = fractures(mol, fragments, h1, h2) {
+        if let Some(fragments) = fragments(mol, state, h1, h2) {
             // If using depth-one parallelism, all descendant states should be
             // computed serially.
             let new_parallel = if parallel_mode == ParallelMode::DepthOne {
@@ -263,7 +259,7 @@ pub fn recurse_index_search(
             let (child_index, child_states_searched) = recurse_index_search(
                 mol,
                 &matches[i + 1..],
-                &fractures,
+                &fragments,
                 state_index - h1.len() + 1,
                 best_index.clone(),
                 h1.len(),
@@ -272,7 +268,7 @@ pub fn recurse_index_search(
             );
 
             // Update the best assembly indices (across children states and
-            // the entire search).
+            // the entire search) and the number of descendant states searched.
             best_child_index.fetch_min(child_index, Relaxed);
             best_index.fetch_min(best_child_index.load(Relaxed), Relaxed);
             states_searched.fetch_add(child_states_searched, Relaxed);
