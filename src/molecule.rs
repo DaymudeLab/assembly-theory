@@ -50,8 +50,8 @@ macro_rules! periodic_table {
             }
         }
 
-        impl Into<u8> for Element {
-            fn into(self) -> u8 {
+        impl Element {
+            pub fn repr(self) -> u8 {
                 match &self {
                     $( Element::$element => $atomicweight, )*
                 }
@@ -238,8 +238,8 @@ impl TryFrom<usize> for Bond {
     }
 }
 
-impl Into<u8> for Bond {
-    fn into(self) -> u8 {
+impl Bond {
+    pub fn repr(self) -> u8 {
         match self {
             Bond::Single => 1,
             Bond::Double => 2,
