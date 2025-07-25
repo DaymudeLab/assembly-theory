@@ -72,7 +72,7 @@ fn test_reference_dataset(dataset: &str, bounds: &[Bound], serial: bool) {
         let (index, _, _) = index_search(
             &mol,
             EnumerateMode::GrowErode,
-            CanonizeMode::Nauty,
+            CanonizeMode::TreeNauty,
             pmode,
             KernelMode::None,
             bounds,

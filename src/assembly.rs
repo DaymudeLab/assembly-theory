@@ -498,7 +498,7 @@ fn recurse_index_search_parallel(
 /// let (slow_index, _, _) = index_search(
 ///     &anthracene,
 ///     EnumerateMode::GrowErode,
-///     CanonizeMode::Nauty,
+///     CanonizeMode::TreeNauty,
 ///     ParallelMode::None,
 ///     KernelMode::None,
 ///     &[],
@@ -508,7 +508,7 @@ fn recurse_index_search_parallel(
 /// let (fast_index, _, _) = index_search(
 ///     &anthracene,
 ///     EnumerateMode::GrowErode,
-///     CanonizeMode::Nauty,
+///     CanonizeMode::TreeNauty,
 ///     ParallelMode::DepthOne,
 ///     KernelMode::None,
 ///     &[Bound::Log, Bound::Int],
@@ -607,7 +607,7 @@ pub fn index(mol: &Molecule) -> u32 {
     index_search(
         mol,
         EnumerateMode::GrowErode,
-        CanonizeMode::Nauty,
+        CanonizeMode::TreeNauty,
         ParallelMode::DepthOne,
         KernelMode::None,
         &[Bound::Int, Bound::VecSimple, Bound::VecSmallFrags],
