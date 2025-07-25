@@ -67,7 +67,7 @@ def test_index_search():
     (index, num_matches, states_searched) = at.index_search(
             mol_block,
             "grow-erode",
-            "nauty",
+            "tree-nauty",
             "none",  # Disable parallelism for deterministic states_searched.
             "none",
             set(["int", "vec-simple", "vec-small-frags"]),
@@ -80,7 +80,7 @@ def test_index_search_bad_molblock():
     with pytest.raises(OSError) as e:
         at.index_search("This string is not the contents of a .mol file.",
                         "grow-erode",
-                        "nauty",
+                        "tree-nauty",
                         "none",
                         "none",
                         set(["int", "vec-simple", "vec-small-frags"]),
@@ -96,7 +96,7 @@ def test_index_search_bad_enumerate():
     with pytest.raises(ValueError) as e:
         at.index_search(mol_block,
                         "invalid-mode",
-                        "nauty",
+                        "tree-nauty",
                         "none",
                         "none",
                         set(["int", "vec-simple", "vec-small-frags"]),
@@ -128,7 +128,7 @@ def test_index_search_bad_parallel():
     with pytest.raises(ValueError) as e:
         at.index_search(mol_block,
                         "grow-erode",
-                        "nauty",
+                        "tree-nauty",
                         "invalid-mode",
                         "none",
                         set(["int", "vec-simple", "vec-small-frags"]),
@@ -144,7 +144,7 @@ def test_index_search_bad_kernel():
     with pytest.raises(ValueError) as e:
         at.index_search(mol_block,
                         "grow-erode",
-                        "nauty",
+                        "tree-nauty",
                         "none",
                         "invalid-mode",
                         set(["int", "vec-simple", "vec-small-frags"]),
@@ -160,7 +160,7 @@ def test_index_search_bad_bound():
     with pytest.raises(ValueError) as e:
         at.index_search(mol_block,
                         "grow-erode",
-                        "nauty",
+                        "tree-nauty",
                         "none",
                         "none",
                         set(["int", "invalid-bound"]),

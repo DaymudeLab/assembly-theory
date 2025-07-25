@@ -36,7 +36,7 @@ struct Cli {
     enumerate: EnumerateMode,
 
     /// Algorithm for graph canonization.
-    #[arg(long, value_enum, default_value_t = CanonizeMode::Nauty)]
+    #[arg(long, value_enum, default_value_t = CanonizeMode::TreeNauty)]
     canonize: CanonizeMode,
 
     /// Parallelization strategy for the search phase.

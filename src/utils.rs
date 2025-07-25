@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 
 use bit_set::BitSet;
 use petgraph::{
@@ -48,6 +48,36 @@ where
     g.retain_edges(|_, e| s.contains(&e));
     g.retain_nodes(|f, n| f.neighbors(n).count() != 0);
     g
+}
+
+pub fn subgraph_from_edge_mask<N, E, Ty, Ix>(
+    g: &Graph<N, E, Ty, Ix>,
+    s: &BitSet,
+) -> Graph<N, E, Ty, Ix>
+where
+    Ty: EdgeType,
+    Ix: IndexType,
+    N: Clone,
+    E: Clone,
+{
+    let mut g = g.clone();
+    g.retain_edges(|_, e| s.contains(e.index()));
+    g.retain_nodes(|f, n| f.neighbors(n).count() != 0);
+    g
+}
+
+pub fn node_count_under_edge_mask<N, E, Ty, Ix>(g: &Graph<N, E, Ty, Ix>, s: &BitSet) -> usize
+where
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    let mut node_set = HashSet::new();
+    for ix in s.into_iter().map(|ix| EdgeIndex::new(ix)) {
+        let (src, dst) = g.edge_endpoints(ix).expect("malformed bitset!");
+        node_set.insert(src);
+        node_set.insert(dst);
+    }
+    node_set.len()
 }
 
 pub fn node_induced_subgraph<N, E, Ty, Ix>(
