@@ -2,7 +2,7 @@ use std::{fs, path::PathBuf};
 
 use anyhow::{bail, Context, Result};
 use assembly_theory::{
-    assembly::{assembly_depth, index_search, ParallelMode},
+    assembly::{depth, index_search, ParallelMode},
     bounds::Bound,
     canonize::CanonizeMode,
     enumerate::EnumerateMode,
@@ -37,7 +37,7 @@ struct Cli {
     enumerate: EnumerateMode,
 
     /// Algorithm for graph canonization.
-    #[arg(long, value_enum, default_value_t = CanonizeMode::Nauty)]
+    #[arg(long, value_enum, default_value_t = CanonizeMode::TreeNauty)]
     canonize: CanonizeMode,
 
     /// Parallelization strategy for the search phase.
@@ -88,7 +88,7 @@ fn main() -> Result<()> {
 
     // If --depth is set, calculate and print assembly depth and exit.
     if cli.depth {
-        println!("{}", assembly_depth(&mol));
+        println!("{}", depth(&mol));
         return Ok(());
     }
 

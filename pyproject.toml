@@ -1,15 +1,13 @@
-# pyproject.toml
 [build-system]
 requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
 name = "assembly-theory"
-version = "0.1.0"
-description = "Open, Reproducible Assembly index Calculations"
-readme = "assembly_theory/README.md"
+dynamic = ["version", "license"]  # Read from Cargo.toml.
+description = "Open, reproducible calculation of assembly indices"
+readme = "python/README.md"
 requires-python = ">=3.10"
-license = {file = "LICENSE-MIT"}
 authors = [
   {name = "Devansh Vimal", email = "dvpatel5@asu.edu"},
   {name = "Cole Mathis", email = "cole.mathis@asu.edu"},
@@ -21,13 +19,14 @@ maintainers = [
   {name = "Joshua Daymude", email = "jdaymude@asu.edu"},
 ]
 
-dependencies = ["rdkit~=2024.9"]
-
 [project.urls]
-repository = "https://github.com/DaymudeLab/assembly-theory"
+Repository = "https://github.com/DaymudeLab/assembly-theory"
+Documentation = "https://docs.rs/assembly-theory/latest/assembly_theory/python"
 
 [tool.maturin]
-module-name = "_pyat"
 features = ["pyo3/extension-module"]
-python-source   = "."                # ← project root
-python-packages = ["assembly_theory"]  # ← now will pick up ./assembly_theory
+python-source   = "python"
+python-packages = ["assembly_theory"]
+
+[pytest]
+testpaths = "python/tests"
