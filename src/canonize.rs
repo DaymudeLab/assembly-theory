@@ -1,10 +1,6 @@
 //! Create canonical labelings for molecular graphs.
 
-use std::{
-    collections::{BTreeSet, HashMap},
-    hash::Hash,
-    iter,
-};
+use std::{collections::HashMap, hash::Hash, iter, mem};
 
 use bit_set::BitSet;
 use clap::ValueEnum;
@@ -99,6 +95,23 @@ fn subgraph_to_cgraph(mol: &Molecule, subgraph: &BitSet) -> CGraph {
     h
 }
 
+/// Assuming subgraph represents a connected graph, check if it induces a tree
+fn is_tree(mol: &Molecule, subgraph: &BitSet) -> bool {
+    node_count_under_edge_mask(mol.graph(), subgraph) == subgraph.len() + 1
+}
+
+/// Wrap a bytevec with 0..vec..255
+fn wrap_with_delimiters(data: Vec<u8>) -> impl Iterator<Item = u8> {
+    iter::once(u8::MIN).chain(data).chain(iter::once(u8::MAX))
+}
+
+/// Sort subvectors and collapse into delimited sequence. For small n, vec+sort is faster than
+/// delimiters. TODO: swap with a radix sort.
+fn collapse_set(mut set: Vec<Vec<u8>>) -> Vec<u8> {
+    set.sort_unstable();
+    set.into_iter().flat_map(wrap_with_delimiters).collect()
+}
+
 /// Obtain a canonical byte array of a tree. Two isomorphic trees have the same canonical
 /// representation. It is assumed that subgraph induces a tree on the underlying graph of molecule,
 /// and no checking is done to verify this. To check, use `is_tree`. Underlying algorithm is
@@ -112,8 +125,9 @@ fn tree_canonize(mol: &Molecule, subgraph: &BitSet) -> Vec<u8> {
     let mut adjacencies = vec![BitSet::with_capacity(order); order];
 
     // Sets containing canonical strings of all children of current node, plus own canonical
-    // string. A canonical set is collected and moved to parent set when
-    let mut partial_canonical_sets = vec![BTreeSet::<Vec<u8>>::new(); order];
+    // string. A canonical set is collected and moved to parent set when its corresponding vertex
+    // is refined into a leaf.
+    let mut partial_canonical_sets = vec![Vec::<Vec<u8>>::new(); order];
 
     // Vertices not yet given a complete label and pruned.
     let mut unlabeled_vertices = BitSet::with_capacity(order);
@@ -131,7 +145,7 @@ fn tree_canonize(mol: &Molecule, subgraph: &BitSet) -> Vec<u8> {
             }
             unlabeled_vertices.insert(index);
             let weight = graph.node_weight(node).unwrap();
-            partial_canonical_sets[index].insert(vec![weight.element().repr()]);
+            partial_canonical_sets[index].push(vec![weight.element().repr()]);
         }
 
         let (u, v) = (u.index(), v.index());
@@ -156,8 +170,8 @@ fn tree_canonize(mol: &Molecule, subgraph: &BitSet) -> Vec<u8> {
             // Collapse parent-leaf edge + partial canonical set into canonical label vector. Then
             // move canonical label into parent's partial canonical set.
             let mut canonical_label = vec![(*edge.weight()).repr()];
-            canonical_label.extend(partial_canonical_sets[leaf].iter().flatten());
-            partial_canonical_sets[parent].insert(canonical_label);
+            canonical_label.extend(collapse_set(mem::take(&mut partial_canonical_sets[leaf])));
+            partial_canonical_sets[parent].push(canonical_label);
 
             // Pretend as though leaf no longer exists.
             adjacencies[leaf].clear();
@@ -167,42 +181,31 @@ fn tree_canonize(mol: &Molecule, subgraph: &BitSet) -> Vec<u8> {
     }
 
     if unlabeled_vertices.len() == 2 {
-        // Tree collapses into isolated edge. Obtain labels of vertices, lexicographically sort,
-        // then glue together into canonical label alongside edge weight.
+        // Case 1: Tree collapses into isolated edge. Obtain labels of vertices, lexicographically
+        // sort, then glue together into canonical label alongside edge weight.
         let mut iter = unlabeled_vertices.iter();
         let (u, v) = (iter.next().unwrap(), iter.next().unwrap());
         let edge = graph
             .edges_connecting(NodeIndex::new(u), NodeIndex::new(v))
             .next()
             .unwrap();
-        let u_label = std::mem::take(&mut partial_canonical_sets[u])
+
+        let u = collapse_set(mem::take(&mut partial_canonical_sets[u]));
+        let v = collapse_set(mem::take(&mut partial_canonical_sets[v]));
+
+        let (first, second) = if u < v { (u, v) } else { (v, u) };
+
+        [(*edge.weight()).repr()]
             .into_iter()
-            .flatten()
-            .collect::<Vec<_>>();
-        let v_label = std::mem::take(&mut partial_canonical_sets[v])
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>();
-        let (first, second) = if u_label < v_label {
-            (u_label, v_label)
-        } else {
-            (v_label, u_label)
-        };
-        iter::once((*edge.weight()).repr())
-            .chain(first)
-            .chain(second)
+            .chain(wrap_with_delimiters(first))
+            .chain(wrap_with_delimiters(second))
             .collect()
     } else {
-        // Tree collapses into isolated vertex. Yield label attached to vertex.
+        // Case 2: Tree collapses into isolated vertex. Yield label attached to vertex.
         let canonical_root = unlabeled_vertices.iter().next().unwrap();
-        let canonical_set = std::mem::take(&mut partial_canonical_sets[canonical_root]);
-        canonical_set.into_iter().flatten().collect()
+        let canonical_set = mem::take(&mut partial_canonical_sets[canonical_root]);
+        collapse_set(canonical_set)
     }
-}
-
-// Assuming subgraph represents a connected graph, check if it induces a tree
-fn is_tree(mol: &Molecule, subgraph: &BitSet) -> bool {
-    node_count_under_edge_mask(mol.graph(), subgraph) == subgraph.len() + 1
 }
 
 mod tests {
