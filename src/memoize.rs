@@ -23,7 +23,7 @@ enum CacheType {
 #[derive(Clone)]
 pub struct Cache {
     mode: CacheMode,
-    cache: Arc<DashMap<CacheType, usize>>,
+    cache: Arc<DashMap<CacheType, (usize, Vec<usize>)>>,
     frags_to_labels: Arc<DashMap<BitSet, Labeling>>,
 }
 
@@ -31,25 +31,26 @@ impl Cache {
     pub fn new(mode: CacheMode, frags_to_labels: DashMap<BitSet, Labeling>) -> Self {
         Self {
             mode,
-            cache: Arc::new(DashMap::<CacheType, usize>::new()),
+            cache: Arc::new(DashMap::<CacheType, (usize, Vec<usize>)>::new()),
             frags_to_labels: Arc::new(frags_to_labels),
         }
     }
 
-    pub fn get(&self, mol: &Molecule, fragments: &[BitSet], state_index: usize) -> Option<usize> {
+    pub fn get(&self, mol: &Molecule, fragments: &[BitSet], state_index: usize, order: &Vec<usize>) -> Option<usize> {
         match self.mode {
             CacheMode::None => None,
-            CacheMode::Index => self.index_get(fragments, state_index),
-            CacheMode::IndexCanon => self.index_canon_get(mol, fragments, state_index),
+            CacheMode::Index => self.index_get(fragments, state_index, order),
+            CacheMode::IndexCanon => self.index_canon_get(mol, fragments, state_index, order),
         }
     }
 
-    fn index_get(&self, fragments: &[BitSet], state_index: usize) -> Option<usize> {
+    fn index_get(&self, fragments: &[BitSet], state_index: usize, order: &Vec<usize>) -> Option<usize> {
         let mut frag_vec = fragments.to_vec();
         frag_vec.sort_by(|a, b| a.iter().next().cmp(&b.iter().next()));
 
         if let Some(res) = self.cache.get(&CacheType::Set(frag_vec)) {
-            if *res <= state_index {
+            let (other_index, other_order) = (*res).clone();
+            if other_index <= state_index && other_order <= *order {
                 Some(state_index)
             }
             else {
@@ -61,7 +62,7 @@ impl Cache {
         }
     }
 
-    fn index_canon_get(&self, mol: &Molecule, fragments: &[BitSet], state_index: usize) -> Option<usize>{
+    fn index_canon_get(&self, mol: &Molecule, fragments: &[BitSet], state_index: usize, order: &Vec<usize>) -> Option<usize>{
         let mut labels: Vec<Labeling> = fragments
             .iter()
             .map(|f| {
@@ -78,7 +79,8 @@ impl Cache {
         labels.sort_by(|a, b| a.cmp(b));
 
         if let Some(res) = self.cache.get(&CacheType::Canon(labels)) {
-            if *res <= state_index {
+            let (other_index, other_order) = (*res).clone();
+            if other_index <= state_index && other_order <= *order {
                 Some(state_index)
             }
             else {
@@ -90,13 +92,13 @@ impl Cache {
         }
     }
 
-    pub fn insert(&mut self, fragments: &[BitSet], state_index: usize) {
+    pub fn insert(&mut self, fragments: &[BitSet], state_index: usize, order: &Vec<usize>) {
         match self.mode {
             CacheMode::None => (),
             CacheMode::Index => {
                 let mut frag_vec = fragments.to_vec();
                 frag_vec.sort_by(|a, b| a.iter().next().cmp(&b.iter().next()));
-                self.cache.insert(CacheType::Set(frag_vec), state_index);
+                self.cache.insert(CacheType::Set(frag_vec), (state_index, order.clone()));
             },
             CacheMode::IndexCanon => {
                 let mut labels: Vec<Labeling> = fragments
@@ -106,7 +108,7 @@ impl Cache {
                     .collect();
                 labels.sort_by(|a, b| a.cmp(b));
 
-                self.cache.insert(CacheType::Canon(labels), state_index);
+                self.cache.insert(CacheType::Canon(labels), (state_index, order.clone()));
             },
         };
     }

@@ -203,6 +203,7 @@ fn fractures(
 fn recurse_index_search_serial(
     mol: &Molecule,
     matches: &[(BitSet, BitSet)],
+    removal_order: Vec<usize>,
     fragments: &[BitSet],
     state_index: usize,
     mut best_index: usize,
@@ -222,7 +223,7 @@ fn recurse_index_search_serial(
         return (state_index, 1);
     }
 
-    if let Some(res) = cache.get(mol, fragments, state_index) {
+    if let Some(res) = cache.get(mol, fragments, state_index, &removal_order) {
         return (res, 1);
     }
 
@@ -240,6 +241,7 @@ fn recurse_index_search_serial(
             let (child_index, child_states_searched) = recurse_index_search_serial(
                 mol,
                 &matches[i + 1..],
+                {let mut clone = removal_order.clone(); clone.push(i); clone},
                 &fractures,
                 state_index - h1.len() + 1,
                 best_index,
@@ -256,7 +258,7 @@ fn recurse_index_search_serial(
         }
     }
 
-    cache.insert(fragments, state_index);
+    cache.insert(fragments, state_index, &removal_order);
 
     (best_child_index, states_searched)
 }
@@ -277,6 +279,7 @@ fn recurse_index_search_serial(
 fn recurse_index_search_depthone(
     mol: &Molecule,
     matches: &[(BitSet, BitSet)],
+    removal_order: Vec<usize>,
     fragments: &[BitSet],
     state_index: usize,
     best_index: Arc<AtomicUsize>,
@@ -295,6 +298,7 @@ fn recurse_index_search_depthone(
             let (child_index, child_states_searched) = recurse_index_search_depthone_helper(
                 mol,
                 &matches[i + 1..],
+                {let mut clone = removal_order.clone(); clone.push(i); clone},
                 &fractures,
                 state_index - h1.len() + 1,
                 best_index.clone(),
@@ -332,6 +336,7 @@ fn recurse_index_search_depthone(
 fn recurse_index_search_depthone_helper(
     mol: &Molecule,
     matches: &[(BitSet, BitSet)],
+    removal_order: Vec<usize>,
     fragments: &[BitSet],
     state_index: usize,
     best_index: Arc<AtomicUsize>,
@@ -351,7 +356,7 @@ fn recurse_index_search_depthone_helper(
         return (state_index, 1);
     }
 
-    if let Some(res) = cache.get(mol, fragments, state_index) {
+    if let Some(res) = cache.get(mol, fragments, state_index, &removal_order) {
         return (res, 1);
     }
 
@@ -369,6 +374,7 @@ fn recurse_index_search_depthone_helper(
             let (child_index, child_states_searched) = recurse_index_search_depthone_helper(
                 mol,
                 &matches[i + 1..],
+                {let mut clone = removal_order.clone(); clone.push(i); clone},
                 &fractures,
                 state_index - h1.len() + 1,
                 best_index.clone(),
@@ -385,7 +391,7 @@ fn recurse_index_search_depthone_helper(
         }
     }
 
-    cache.insert(fragments, state_index);
+    cache.insert(fragments, state_index, &removal_order);
 
     (best_child_index, states_searched)
 }
@@ -408,6 +414,7 @@ fn recurse_index_search_depthone_helper(
 fn recurse_index_search_parallel(
     mol: &Molecule,
     matches: &[(BitSet, BitSet)],
+    removal_order: Vec<usize>,
     fragments: &[BitSet],
     state_index: usize,
     best_index: Arc<AtomicUsize>,
@@ -427,7 +434,7 @@ fn recurse_index_search_parallel(
         return (state_index, 1);
     }
 
-    if let Some(res) = cache.get(mol, fragments, state_index) {
+    if let Some(res) = cache.get(mol, fragments, state_index, &removal_order) {
         return (res, 1);
     }
 
@@ -445,6 +452,7 @@ fn recurse_index_search_parallel(
             let (child_index, child_states_searched) = recurse_index_search_parallel(
                 mol,
                 &matches[i + 1..],
+                {let mut clone = removal_order.clone(); clone.push(i); clone},
                 &fractures,
                 state_index - h1.len() + 1,
                 best_index.clone(),
@@ -461,7 +469,7 @@ fn recurse_index_search_parallel(
         }
     });
 
-    cache.insert(fragments, state_index);
+    cache.insert(fragments, state_index, &removal_order);
 
     (
         best_child_index.load(Relaxed),
@@ -560,6 +568,7 @@ pub fn index_search(
             recurse_index_search_serial(
                 mol,
                 &matches,
+                Vec::new(),
                 &[init],
                 edge_count - 1,
                 edge_count - 1,
@@ -574,6 +583,7 @@ pub fn index_search(
             recurse_index_search_depthone(
                 mol,
                 &matches,
+                Vec::new(),
                 &[init],
                 edge_count - 1,
                 best_index,
@@ -587,6 +597,7 @@ pub fn index_search(
             recurse_index_search_parallel(
                 mol,
                 &matches,
+                Vec::new(),
                 &[init],
                 edge_count - 1,
                 best_index,
