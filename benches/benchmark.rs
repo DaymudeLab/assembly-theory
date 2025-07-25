@@ -11,11 +11,12 @@ use bit_set::BitSet;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 
 use assembly_theory::{
-    assembly::{labels_matches, recurse_index_search, ParallelMode},
+    assembly::{matches, recurse_index_search, ParallelMode},
     bounds::Bound,
     canonize::{canonize, CanonizeMode},
     enumerate::{enumerate_subgraphs, EnumerateMode},
     loader::parse_molfile_str,
+    memoize::{Cache, CacheMode},
     molecule::Molecule,
 };
 
@@ -161,8 +162,8 @@ pub fn bench_bounds(c: &mut Criterion) {
                         let mut total_time = Duration::new(0, 0);
                         for mol in &mol_list {
                             // Precompute the molecule's matches and setup.
-                            let (_, matches) =
-                                labels_matches(mol, EnumerateMode::GrowErode, CanonizeMode::Nauty);
+                            let matches = matches(mol, EnumerateMode::GrowErode, CanonizeMode::Nauty);
+                            let mut cache = Cache::new(CacheMode::IndexCanon);
                             let mut init = BitSet::new();
                             init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
                             let edge_count = mol.graph().edge_count();
@@ -174,11 +175,13 @@ pub fn bench_bounds(c: &mut Criterion) {
                                 recurse_index_search(
                                     mol,
                                     &matches,
+                                    Vec::new(),
                                     &[init.clone()],
                                     edge_count - 1,
                                     best_index,
                                     edge_count,
                                     bounds,
+                                    &mut cache,
                                     ParallelMode::DepthOne,
                                 );
                                 total_time += start.elapsed();

@@ -31,7 +31,7 @@ pub enum CanonizeMode {
 }
 
 /// Canonical labeling returned by our graph canonization functions.
-#[derive(Clone, Hash, PartialEq, Eq, Debug)]
+#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum Labeling {
     /// Labeling returned by the `graph_canon` crate.
     Nauty(CanonLabeling<AtomOrBond>),

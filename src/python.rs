@@ -38,6 +38,7 @@ use crate::{
     enumerate::EnumerateMode,
     kernels::KernelMode,
     loader::{parse_molfile_str, ParserError},
+    memoize::CacheMode,
 };
 
 /// Implement a Python version of [`crate::loader::ParserError`].
@@ -436,7 +437,7 @@ pub fn _index_search(
         parallel_mode,
         kernel_mode,
         &boundlist,
-        memoize,
+        CacheMode::None,
     ))
 }
 
