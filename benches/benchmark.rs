@@ -86,7 +86,10 @@ pub fn bench_canonize(c: &mut Criterion) {
 
     // Define datasets and canonization modes.
     let datasets = ["gdb13_1201", "gdb17_200", "checks", "coconut_55"];
-    let canonize_modes = [(CanonizeMode::Nauty, "nauty")];
+    let canonize_modes = [
+        (CanonizeMode::Nauty, "nauty"),
+        (CanonizeMode::TreeNauty, "tree-nauty"),
+    ];
 
     // Run a benchmark for each dataset and canonization mode.
     for dataset in &datasets {
