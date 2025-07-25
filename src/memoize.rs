@@ -28,11 +28,11 @@ pub struct Cache {
 }
 
 impl Cache {
-    pub fn new(mode: CacheMode, frags_to_labels: DashMap<BitSet, Labeling>) -> Self {
+    pub fn new(mode: CacheMode) -> Self {
         Self {
             mode,
             cache: Arc::new(DashMap::<CacheType, (usize, Vec<usize>)>::new()),
-            frags_to_labels: Arc::new(frags_to_labels),
+            frags_to_labels: Arc::new(DashMap::<BitSet, Labeling>::new()),
         }
     }
 

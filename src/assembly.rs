@@ -29,16 +29,15 @@ use std::{
 use bit_set::BitSet;
 use clap::ValueEnum;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
-use::dashmap::DashMap;
 
 use crate::{
     bounds::{bound_exceeded, Bound},
     canonize::{canonize, CanonizeMode, Labeling},
     enumerate::{enumerate_subgraphs, EnumerateMode},
     kernels::KernelMode,
+    memoize::{Cache, CacheMode},
     molecule::Molecule,
     utils::connected_components_under_edges,
-    memoize::{Cache, CacheMode},
 };
 
 /// Parallelization strategy for the recursive search phase.
@@ -97,30 +96,21 @@ pub fn depth(mol: &Molecule) -> u32 {
 
 /// Helper function for [`index_search`]; only public for benchmarking.
 ///
-/// Return (1) a map of the given molecule's connected, non-induced subgraphs
-/// with at most |E|/2 edges to their canonical labels and (2) all pairs of
-/// non-overlapping, isomorphic subgraphs in the molecule, sorted to guarantee
-/// deterministic iteration.
-pub fn labels_matches(
+/// Return all pairs of non-overlapping, isomorphic subgraphs in the molecule,
+/// sorted to guarantee deterministic iteration.
+pub fn matches(
     mol: &Molecule,
     enumerate_mode: EnumerateMode,
     canonize_mode: CanonizeMode,
-) -> (DashMap<BitSet, Labeling>, Vec<(BitSet, BitSet)>) {
+) -> Vec<(BitSet, BitSet)> {
     // Enumerate all connected, non-induced subgraphs with at most |E|/2 edges
-    // and bin them into isomorphism classes using canonization. Store these
-    // subgraphs' canonical labels for later use in memoization (this way, we
-    // only have to compute them once).
+    // and bin them into isomorphism classes using canonization.
     let mut isomorphism_classes = HashMap::<Labeling, Vec<BitSet>>::new();
-    let subgraph_labels = DashMap::<BitSet, Labeling>::new();
     for subgraph in enumerate_subgraphs(mol, enumerate_mode) {
-        let label = canonize(mol, &subgraph, canonize_mode);
         isomorphism_classes
-            .entry(label.clone())
+            .entry(canonize(mol, &subgraph, canonize_mode))
             .and_modify(|bucket| bucket.push(subgraph.clone()))
             .or_insert(vec![subgraph.clone()]);
-        /*if memoize == CacheMode::SavingsCanon {
-            subgraph_labels.insert(subgraph, label);
-        }*/
     }
 
     // In each isomorphism class, collect non-overlapping pairs of subgraphs.
@@ -153,7 +143,7 @@ pub fn labels_matches(
         ord[i]
     });
 
-    (subgraph_labels, matches)
+    matches
 }
 
 /// Determine the fragments produced from the given assembly state by removing
@@ -208,12 +198,14 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Opti
 /// Inputs:
 /// - `mol`: The molecule whose assembly index is being calculated.
 /// - `matches`: The remaining non-overlapping isomorphic subgraph pairs.
+/// - `removal_order`: TODO
 /// - `state`: The current assembly state, i.e., a list of fragments.
 /// - `state_index`: The assembly index of this assembly state.
 /// - `best_index`: The smallest assembly index for all assembly states so far.
 /// - `largest_remove`: An upper bound on the size of fragments that can be
 ///   removed from this or any descendant assembly state.
 /// - `bounds`: The list of bounding strategies to apply.
+/// - `cache`: TODO
 /// - `parallel_mode`: The parallelism mode for this state's match iteration.
 ///
 /// Returns, from this assembly state and any of its descendents:
@@ -244,7 +236,8 @@ pub fn recurse_index_search(
         return (state_index, 1);
     }
 
-    if let Some(res) = cache.get(mol, fragments, state_index, &removal_order) {
+    // If this assembly state was already searched, return its cached result.
+    if let Some(res) = cache.get(mol, state, state_index, &removal_order) {
         return (res, 1);
     }
 
@@ -300,7 +293,8 @@ pub fn recurse_index_search(
             .for_each(|(i, (h1, h2))| recurse_on_match(i, h1, h2));
     }
 
-    cache.insert(fragments, state_index, &removal_order);
+    // Store this assembly state in the memoization cache.
+    cache.insert(state, state_index, &removal_order);
 
     (
         best_child_index.load(Relaxed),
@@ -333,6 +327,7 @@ pub fn recurse_index_search(
 ///     enumerate::EnumerateMode,
 ///     kernels::KernelMode,
 ///     loader::parse_molfile_str,
+///     memoize::CacheMode,
 /// };
 ///
 /// # fn main() -> Result<(), std::io::Error> {
@@ -350,9 +345,11 @@ pub fn recurse_index_search(
 ///     ParallelMode::None,
 ///     KernelMode::None,
 ///     &[],
-///     false);
+///     CacheMode::None,
+/// );
 ///
-/// // Compute the molecule's assembly index with parallelism and some bounds.
+/// // Compute the molecule's assembly index with parallelism, some bounds, and
+/// // memoization.
 /// let (fast_index, _, _) = index_search(
 ///     &anthracene,
 ///     EnumerateMode::GrowErode,
@@ -360,7 +357,8 @@ pub fn recurse_index_search(
 ///     ParallelMode::DepthOne,
 ///     KernelMode::None,
 ///     &[Bound::Log, Bound::Int],
-///     false);
+///     CacheMode::IndexCanon,
+/// );
 ///
 /// assert_eq!(slow_index, 6);
 /// assert_eq!(fast_index, 6);
@@ -382,10 +380,10 @@ pub fn index_search(
     }
 
     // Enumerate non-overlapping isomorphic subgraph pairs.
-    let (frags_to_labels, matches) = labels_matches(mol, enumerate_mode, canonize_mode);
+    let matches = matches(mol, enumerate_mode, canonize_mode);
 
     // Create cache for dynamic programming
-    let mut cache = Cache::new(memoize, frags_to_labels);
+    let mut cache = Cache::new(memoize);
 
     // Initialize the first fragment as the entire graph.
     let mut init = BitSet::new();
