@@ -28,7 +28,7 @@ use std::{
 
 use bit_set::BitSet;
 use clap::ValueEnum;
-use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
     bounds::{bound_exceeded, Bound},
@@ -219,7 +219,7 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Opti
 pub fn recurse_index_search(
     mol: &Molecule,
     matches: &Vec<(BitSet, BitSet)>,
-    graph: &CompatGraph,
+    graph: &Option<CompatGraph>,
     subgraph: BitSet,
     removal_order: Vec<usize>,
     state: &[BitSet],
@@ -262,13 +262,16 @@ pub fn recurse_index_search(
                 parallel_mode
             };
 
-            // TODO: should create a method for updating subgraph
+            // Update subgraph
             let mut sub_clone = BitSet::with_capacity(matches.len());
-            /*let mut node = subgraph.iter().next().unwrap();
-            for j in (i+1)..matches.len() {
-                sub_clone.insert(j);
-            }*/
-            sub_clone.intersect_with(&graph.forward_neighbors(v, &subgraph));
+            if let Some(g) = graph {
+                sub_clone.intersect_with(&g.forward_neighbors(v, &subgraph));
+            }
+            else {
+                for j in (v+1)..matches.len() {
+                    sub_clone.insert(j);
+                }
+            }
 
             // Recurse using the remaining matches and updated fragments.
             let (child_index, child_states_searched) = recurse_index_search(
@@ -388,6 +391,7 @@ pub fn index_search(
     memoize_mode: MemoizeMode,
     kernel_mode: KernelMode,
     bounds: &[Bound],
+    clique: bool,
 ) -> (u32, u32, usize) {
     // Catch not-yet-implemented modes.
     if kernel_mode != KernelMode::None {
@@ -399,6 +403,15 @@ pub fn index_search(
 
     // Create memoization cache.
     let mut cache = Cache::new(memoize_mode, canonize_mode);
+
+    let graph = {
+        if clique {
+            Some(CompatGraph::new(&matches))
+        }
+        else {
+            None
+        }
+    };
 
     // Initialize the first fragment as the entire graph.
     let mut init = BitSet::new();
@@ -415,7 +428,7 @@ pub fn index_search(
     let (index, states_searched) = recurse_index_search(
         mol,
         &matches,
-        &CompatGraph::new(&matches),
+        &graph,
         subgraph,
         Vec::new(),
         &[init],
@@ -458,6 +471,7 @@ pub fn index(mol: &Molecule) -> u32 {
         MemoizeMode::CanonIndex,
         KernelMode::None,
         &[Bound::Int, Bound::VecSimple, Bound::VecSmallFrags],
+        false,
     )
     .0
 }

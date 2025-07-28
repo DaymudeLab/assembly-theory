@@ -10,7 +10,7 @@ impl CompatGraph {
 
         // Initialize weights and empty graph
         let mut init_graph: Vec<BitSet> = Vec::with_capacity(size);
-        for m in init_matches.iter() {
+        for _ in 0..init_matches.len() {
             init_graph.push(BitSet::with_capacity(size));
         }
 
