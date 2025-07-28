@@ -232,7 +232,9 @@ pub fn recurse_index_search(
     // If any bounds would prune this assembly state, halt.
     if bound_exceeded(
         mol,
+        matches,
         state,
+        &subgraph,
         state_index,
         best_index.load(Relaxed),
         largest_remove,
