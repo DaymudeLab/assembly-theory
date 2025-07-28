@@ -38,14 +38,6 @@ impl CompatGraph {
         }
     }
 
-    /*pub fn weight(&self, v: usize) -> usize {
-        self.weights[v]
-    }
-
-    pub fn matches(&self, v: usize) -> &(BitSet, BitSet) {
-        &self.matches[v]
-    }*/
-
     pub fn len(&self) -> usize {
         self.graph.len()
     }

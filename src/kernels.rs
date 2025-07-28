@@ -12,6 +12,8 @@
 //! the equivalent problem of weighted independent set.)
 
 use clap::ValueEnum;
+use bit_set::BitSet;
+use crate::reductions::CompatGraph;
 
 /// Graph kernelization strategy when searching using the clique reduction.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
@@ -26,4 +28,42 @@ pub enum KernelMode {
     DepthOne,
     /// Apply kernels after every fragmentation step.
     Always,
+}
+
+pub fn deletion_kernel(matches: &Vec<(BitSet, BitSet)>, g: &CompatGraph, mut subgraph: BitSet) -> BitSet{
+    let subgraph_copy = subgraph.clone();
+
+    for v in subgraph_copy.iter() {
+        let v_val = matches[v].0.len();
+        let neighbors_v = g.neighbors(v, &subgraph);
+
+        let Some(w1) = neighbors_v.iter().next() else {
+            continue;
+        };
+        let Some(w2) = neighbors_v.iter().last() else {
+            continue;
+        };
+
+        let mut s = subgraph.clone();
+        s.intersect_with(&g.compatible_with(w1));
+        for u in s.intersection(&&g.compatible_with(w2)) {
+            if g.are_adjacent(v, u) || v == u {
+                continue;
+            }
+
+            let u_val = matches[u].0.len();
+            if v_val > u_val {
+                continue;
+            }
+
+            let neighbors_u = g.neighbors(u, &subgraph);
+
+            if neighbors_v.is_subset(&neighbors_u) {
+                subgraph.remove(v);
+                break;
+            }
+        }
+    }
+
+    subgraph
 }
