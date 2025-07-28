@@ -233,6 +233,7 @@ pub fn recurse_index_search(
     if bound_exceeded(
         mol,
         matches,
+        graph,
         state,
         &subgraph,
         state_index,
