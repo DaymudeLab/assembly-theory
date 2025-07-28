@@ -117,6 +117,9 @@ fn main() -> Result<()> {
         if !cli.clique && boundlist.contains(&bound) {
             panic!("Bound {:?} can not be used without clique enabled", bound);
         }
+        if !cli.clique && cli.kernel != KernelMode::None {
+            panic!("Cannot use kernels without clique enabled");
+        }
     }
 
     // Call index calculation with all the various options.

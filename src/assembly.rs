@@ -34,7 +34,7 @@ use crate::{
     bounds::{bound_exceeded, Bound},
     canonize::{canonize, CanonizeMode, Labeling},
     enumerate::{enumerate_subgraphs, EnumerateMode},
-    kernels::KernelMode,
+    kernels::{KernelMode, deletion_kernel},
     memoize::{Cache, MemoizeMode},
     molecule::Molecule,
     utils::connected_components_under_edges,
@@ -220,7 +220,7 @@ pub fn recurse_index_search(
     mol: &Molecule,
     matches: &Vec<(BitSet, BitSet)>,
     graph: &Option<CompatGraph>,
-    subgraph: BitSet,
+    mut subgraph: BitSet,
     removal_order: Vec<usize>,
     state: &[BitSet],
     state_index: usize,
@@ -229,6 +229,7 @@ pub fn recurse_index_search(
     bounds: &[Bound],
     cache: &mut Cache,
     parallel_mode: ParallelMode,
+    kernel_mode: KernelMode,
 ) -> (usize, usize) {
     // If any bounds would prune this assembly state or if memoization is
     // enabled and this assembly state is preempted by the cached state, halt.
@@ -247,6 +248,12 @@ pub fn recurse_index_search(
         return (state_index, 1);
     }
 
+    // Apply kernels
+    if kernel_mode != KernelMode::None {
+        let g = graph.as_ref().unwrap();
+        subgraph = deletion_kernel(matches, g, subgraph);
+    }
+
     // Keep track of the best assembly index found in any of this assembly
     // state's children and the number of states searched, including this one.
     let best_child_index = AtomicUsize::from(state_index);
@@ -263,6 +270,16 @@ pub fn recurse_index_search(
                 ParallelMode::None
             } else {
                 parallel_mode
+            };
+
+            // If kernelizing once, do not kernelize again. If kernelizing at depth-one,
+            // kernelize once more at the beginning of each descendent.
+            let new_kernel = if kernel_mode == KernelMode::Once {
+                KernelMode::None
+            } else if kernel_mode == KernelMode::DepthOne {
+                KernelMode::Once
+            } else {
+                kernel_mode
             };
 
             // Update subgraph
@@ -296,6 +313,7 @@ pub fn recurse_index_search(
                 bounds,
                 &mut cache.clone(),
                 new_parallel,
+                new_kernel,
             );
 
             // Update the best assembly indices (across children states and
@@ -399,9 +417,6 @@ pub fn index_search(
     clique: bool,
 ) -> (u32, u32, usize) {
     // Catch not-yet-implemented modes.
-    if kernel_mode != KernelMode::None {
-        panic!("The chosen --kernel mode is not implemented yet!")
-    }
 
     // Enumerate non-overlapping isomorphic subgraph pairs.
     let matches = matches(mol, enumerate_mode, canonize_mode);
@@ -443,6 +458,7 @@ pub fn index_search(
         bounds,
         &mut cache,
         parallel_mode,
+        kernel_mode,
     );
 
     (index as u32, matches.len() as u32, states_searched)
