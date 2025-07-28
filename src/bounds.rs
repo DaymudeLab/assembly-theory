@@ -14,7 +14,10 @@
 use bit_set::BitSet;
 use clap::ValueEnum;
 
-use crate::molecule::{Bond, Element, Molecule};
+use crate::{
+    molecule::{Bond, Element, Molecule},
+    reductions::CompatGraph,
+};
 
 /// Type of upper bound on the "savings" possible from an assembly state.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
@@ -66,7 +69,9 @@ struct EdgeType {
 /// Returns `true` iff any of the given bounds would prune this assembly state.
 pub fn bound_exceeded(
     mol: &Molecule,
+    matches: &Vec<(BitSet, BitSet)>,
     fragments: &[BitSet],
+    subgraph: &BitSet,
     state_index: usize,
     best_index: usize,
     largest_remove: usize,
@@ -82,6 +87,7 @@ pub fn bound_exceeded(
             Bound::VecSmallFrags => {
                 state_index - vec_small_frags_bound(fragments, largest_remove, mol) >= best_index
             }
+            Bound::CliqueBudget => best_index + clique_budget_bound(matches, subgraph, fragments) <= state_index,
             _ => {
                 panic!("One of the chosen bounds is not implemented yet!")
             }
@@ -238,4 +244,69 @@ fn vec_small_frags_bound(fragments: &[BitSet], m: usize, mol: &Molecule) -> usiz
 
     s - (z + size_two_types.len() + size_two_fragments.len())
         - ((sl - z) as f32 / m as f32).ceil() as usize
+}
+
+pub fn clique_budget_bound(matches: &Vec<(BitSet, BitSet)>, subgraph: &BitSet, fragments: &[BitSet]) -> usize {
+    let total_bonds = fragments.iter().map(|x| x.len()).sum::<usize>();
+    let mut bound = 0;
+    let sizes = {
+        let mut vec = vec![];
+        let mut prev = 0;
+        for s in subgraph.iter().map(|v| matches[v].0.len()) {
+            if s != prev {
+                vec.push(s);
+                prev = s;
+            }
+        }
+
+        vec
+    };
+    
+    for i in sizes {
+        let mut bound_temp = 0;
+        let mut has_bonds = fragments.len();
+        let mut num_bonds: Vec<usize> = fragments.iter().map(|x| x.len()).collect();
+        let mut smallest_remove = i;
+
+        for v in subgraph.iter() {
+            if has_bonds == 0 {
+                break;
+            }
+            if matches[v].0.len() > i {
+                continue;
+            }
+
+
+            let dup = &matches[v];
+            let bond = dup.1.iter().next().unwrap();
+            let mut j = 0;
+            while !fragments[j].contains(bond) {
+                j += 1;
+            }
+
+            if num_bonds[j] > 0 {
+                let remove = std::cmp::min(dup.0.len(), num_bonds[j]);
+                bound_temp += 1;
+                num_bonds[j] -= remove;
+                smallest_remove = std::cmp::min(smallest_remove, remove);
+
+                if num_bonds[j] == 0 {
+                    has_bonds -= 1;
+                }
+            }
+        }
+
+        let leftover = num_bonds.iter().sum::<usize>();
+        let log = {
+            if leftover > 0 {
+                0
+            }
+            else {
+                (smallest_remove as f32).log2().ceil() as usize
+            }
+        };
+        bound = std::cmp::max(bound, total_bonds - bound_temp - leftover - log);
+    }
+
+    bound
 }

@@ -234,7 +234,9 @@ pub fn recurse_index_search(
     // enabled and this assembly state is preempted by the cached state, halt.
     if bound_exceeded(
         mol,
+        matches,
         state,
+        &subgraph,
         state_index,
         best_index.load(Relaxed),
         largest_remove,
