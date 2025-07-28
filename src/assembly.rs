@@ -251,8 +251,8 @@ pub fn recurse_index_search(
 
     // Define a closure that handles recursing to a new assembly state based on
     // the given (enumerated) pair of non-overlapping isomorphic subgraphs.
-    let recurse_on_match = |i: usize| {
-        let (h1, h2) = &matches[i];
+    let recurse_on_match = |v: usize| {
+        let (h1, h2) = &matches[v];
         if let Some(fragments) = fragments(mol, state, h1, h2) {
             // If using depth-one parallelism, all descendant states should be
             // computed serially.
@@ -263,12 +263,12 @@ pub fn recurse_index_search(
             };
 
             // TODO: should create a method for updating subgraph
-            let mut sub_clone = subgraph.clone();
-            let mut node = subgraph.iter().next().unwrap();
-            while node <= i {
-                sub_clone.remove(node);
-                node += 1;
-            }
+            let mut sub_clone = BitSet::with_capacity(matches.len());
+            /*let mut node = subgraph.iter().next().unwrap();
+            for j in (i+1)..matches.len() {
+                sub_clone.insert(j);
+            }*/
+            sub_clone.intersect_with(&graph.forward_neighbors(v, &subgraph));
 
             // Recurse using the remaining matches and updated fragments.
             let (child_index, child_states_searched) = recurse_index_search(
@@ -302,13 +302,13 @@ pub fn recurse_index_search(
     if parallel_mode == ParallelMode::None {
         subgraph
             .iter()
-            .for_each(|i| recurse_on_match(i));
+            .for_each(|v| recurse_on_match(v));
     } else {
         subgraph
             .iter()
             .collect::<Vec<usize>>()
             .par_iter()
-            .for_each(|i | recurse_on_match(*i));
+            .for_each(|v | recurse_on_match(*v));
     }
 
     (
@@ -415,7 +415,7 @@ pub fn index_search(
     let (index, states_searched) = recurse_index_search(
         mol,
         &matches,
-        &CompatGraph::new(),
+        &CompatGraph::new(&matches),
         subgraph,
         Vec::new(),
         &[init],
