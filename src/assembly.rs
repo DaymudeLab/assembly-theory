@@ -37,6 +37,7 @@ use crate::{
     kernels::KernelMode,
     molecule::Molecule,
     utils::connected_components_under_edges,
+    reductions::CompatGraph,
 };
 
 /// Parallelization strategy for the recursive search phase.
@@ -218,7 +219,9 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Opti
 #[allow(clippy::too_many_arguments)]
 pub fn recurse_index_search(
     mol: &Molecule,
-    matches: &[(BitSet, BitSet)],
+    matches: &Vec<(BitSet, BitSet)>,
+    graph: &CompatGraph,
+    subgraph: BitSet,
     state: &[BitSet],
     state_index: usize,
     best_index: Arc<AtomicUsize>,
@@ -245,7 +248,8 @@ pub fn recurse_index_search(
 
     // Define a closure that handles recursing to a new assembly state based on
     // the given (enumerated) pair of non-overlapping isomorphic subgraphs.
-    let recurse_on_match = |i: usize, h1: &BitSet, h2: &BitSet| {
+    let recurse_on_match = |i: usize| {
+        let (h1, h2) = &matches[i];
         if let Some(fragments) = fragments(mol, state, h1, h2) {
             // If using depth-one parallelism, all descendant states should be
             // computed serially.
@@ -255,10 +259,20 @@ pub fn recurse_index_search(
                 parallel_mode
             };
 
+            // TODO: should create a method for updating subgraph
+            let mut sub_clone = subgraph.clone();
+            let mut node = subgraph.iter().next().unwrap();
+            while node <= i {
+                sub_clone.remove(node);
+                node += 1;
+            }
+
             // Recurse using the remaining matches and updated fragments.
             let (child_index, child_states_searched) = recurse_index_search(
                 mol,
-                &matches[i + 1..],
+                matches,
+                graph,
+                sub_clone,
                 &fragments,
                 state_index - h1.len() + 1,
                 best_index.clone(),
@@ -277,15 +291,15 @@ pub fn recurse_index_search(
 
     // Use the iterator type corresponding to the specified parallelism mode.
     if parallel_mode == ParallelMode::None {
-        matches
+        subgraph
             .iter()
-            .enumerate()
-            .for_each(|(i, (h1, h2))| recurse_on_match(i, h1, h2));
+            .for_each(|i| recurse_on_match(i));
     } else {
-        matches
+        subgraph
+            .iter()
+            .collect::<Vec<usize>>()
             .par_iter()
-            .enumerate()
-            .for_each(|(i, (h1, h2))| recurse_on_match(i, h1, h2));
+            .for_each(|i | recurse_on_match(*i));
     }
 
     (
@@ -377,12 +391,19 @@ pub fn index_search(
     let mut init = BitSet::new();
     init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
 
+    let mut subgraph = BitSet::with_capacity(matches.len());
+    for i in 0..matches.len() {
+        subgraph.insert(i);
+    }
+
     // Search for the shortest assembly pathway recursively.
     let edge_count = mol.graph().edge_count();
     let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
     let (index, states_searched) = recurse_index_search(
         mol,
         &matches,
+        &CompatGraph::new(),
+        subgraph,
         &[init],
         edge_count - 1,
         best_index,

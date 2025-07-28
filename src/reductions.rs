@@ -2,12 +2,18 @@ use bit_set::BitSet;
 
 pub struct CompatGraph {
     graph: Vec<BitSet>,
-    weights: Vec<usize>,
-    matches: Vec<(BitSet, BitSet)>
+    nodes: Vec<usize>,
 }
 
 impl CompatGraph {
-    pub fn new(init_matches: Vec<(BitSet, BitSet)>) -> Self {
+    pub fn new () -> Self {
+        Self {
+            graph: Vec::new(),
+            nodes: Vec::new(),
+        }
+    }
+
+    /*pub fn new(init_matches: Vec<(BitSet, BitSet)>) -> Self {
         let size = init_matches.len();
 
         // Initialize weights and empty graph
@@ -92,5 +98,5 @@ impl CompatGraph {
 
     pub fn are_adjacent(&self, v: usize, u: usize) -> bool {
         self.graph[v].contains(u)
-    }
+    }*/
 }
