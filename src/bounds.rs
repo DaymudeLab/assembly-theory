@@ -70,6 +70,7 @@ struct EdgeType {
 pub fn bound_exceeded(
     mol: &Molecule,
     matches: &Vec<(BitSet, BitSet)>,
+    graph: &Option<CompatGraph>,
     fragments: &[BitSet],
     subgraph: &BitSet,
     state_index: usize,
@@ -88,8 +89,21 @@ pub fn bound_exceeded(
                 state_index - vec_small_frags_bound(fragments, largest_remove, mol) >= best_index
             }
             Bound::CliqueBudget => best_index + clique_budget_bound(matches, subgraph, fragments) <= state_index,
-            _ => {
-                panic!("One of the chosen bounds is not implemented yet!")
+            Bound::CoverNoSort => {
+                if let Some(g) = graph {
+                    best_index + cover_bound(matches, g, subgraph, false) <= state_index
+                }
+                else {
+                    false
+                }
+            }
+            Bound::CoverSort => {
+                if let Some(g) = graph {
+                    best_index + cover_bound(matches, g, subgraph, true) <= state_index
+                }
+                else {
+                    false
+                }
             }
         };
         if exceeds {
@@ -309,4 +323,75 @@ pub fn clique_budget_bound(matches: &Vec<(BitSet, BitSet)>, subgraph: &BitSet, f
     }
 
     bound
+}
+
+pub fn cover_bound(matches: &Vec<(BitSet, BitSet)>, graph: &CompatGraph, subgraph: &BitSet, sort: bool) -> usize {
+    // Sort vertices
+    if sort {
+        let mut vertices: Vec<(usize, usize)> = Vec::with_capacity(subgraph.len());
+        for v in subgraph {
+            vertices.push((v, graph.degree(v, subgraph)));
+        }   
+        vertices.sort_by(|a, b| b.1.cmp(&a.1));
+        cover_bound_helper(matches, graph, subgraph, vertices.iter().map(|(v, _)| *v))
+    }
+    else {
+        let vertices = (0..graph.len()).rev().filter(|v| subgraph.contains(*v));
+        cover_bound_helper(matches, graph, subgraph, vertices)
+    }
+}
+
+fn cover_bound_helper(matches: &Vec<(BitSet, BitSet)>, graph: &CompatGraph, subgraph: &BitSet, iter: impl Iterator<Item = usize>) -> usize {
+    let mut colors: Vec<Option<Vec<usize>>> = vec![None; graph.len()];
+    let mut col_weights = vec![];
+    let mut num_col = 0;
+
+    for v in iter {
+        let mut v_col = Vec::new();
+        let mut used = vec![0; num_col];
+
+        // Find colors used in neighborhood of v
+        for u in subgraph.intersection(graph.compatible_with(v)) {
+            let Some(u_col) = &colors[u] else {
+                continue;
+            };
+
+            for c in u_col {
+                used[*c] = 1;
+            }
+        }
+
+        let mut total_weight = 0;
+        let v_val = matches[v].0.len() - 1;
+        // Find colors to give to v
+        for c in 0..num_col {
+            if used[c] == 1 {
+                continue;
+            }
+
+            v_col.push(c);
+            total_weight += col_weights[c];
+
+            if total_weight >= v_val {
+                break;
+            }
+        }
+
+        if total_weight == 0 {
+            v_col.push(num_col);
+            col_weights.push(v_val);
+            num_col += 1
+        }
+        else if total_weight < v_val {
+            let mut k = num_col - 1;
+            while used[k] == 1 {
+                k -= 1
+            }
+            col_weights[k] += v_val - total_weight
+        }
+
+        colors[v] = Some(v_col);
+    };
+
+    col_weights.iter().sum()
 }
