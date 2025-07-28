@@ -34,7 +34,7 @@ use crate::{
     bounds::{bound_exceeded, Bound},
     canonize::{canonize, CanonizeMode, Labeling},
     enumerate::{enumerate_subgraphs, EnumerateMode},
-    kernels::KernelMode,
+    kernels::{KernelMode, deletion_kernel},
     molecule::Molecule,
     utils::connected_components_under_edges,
     reductions::CompatGraph,
@@ -221,13 +221,14 @@ pub fn recurse_index_search(
     mol: &Molecule,
     matches: &Vec<(BitSet, BitSet)>,
     graph: &Option<CompatGraph>,
-    subgraph: BitSet,
+    mut subgraph: BitSet,
     state: &[BitSet],
     state_index: usize,
     best_index: Arc<AtomicUsize>,
     largest_remove: usize,
     bounds: &[Bound],
     parallel_mode: ParallelMode,
+    kernel_mode: KernelMode,
 ) -> (usize, usize) {
     // If any bounds would prune this assembly state, halt.
     if bound_exceeded(
@@ -242,6 +243,12 @@ pub fn recurse_index_search(
         bounds,
     ) {
         return (state_index, 1);
+    }
+
+    // Apply kernels
+    if kernel_mode != KernelMode::None {
+        let g = graph.as_ref().unwrap();
+        subgraph = deletion_kernel(matches, g, subgraph);
     }
 
     // Keep track of the best assembly index found in any of this assembly
@@ -260,6 +267,16 @@ pub fn recurse_index_search(
                 ParallelMode::None
             } else {
                 parallel_mode
+            };
+
+            // If kernelizing once, do not kernelize again. If kernelizing at depth-one,
+            // kernelize once more at the beginning of each descendent.
+            let new_kernel = if kernel_mode == KernelMode::Once {
+                KernelMode::None
+            } else if kernel_mode == KernelMode::DepthOne {
+                KernelMode::Once
+            } else {
+                kernel_mode
             };
 
             // Update subgraph
@@ -287,6 +304,7 @@ pub fn recurse_index_search(
                 h1.len(),
                 bounds,
                 new_parallel,
+                new_kernel,
             );
 
             // Update the best assembly indices (across children states and
@@ -386,9 +404,6 @@ pub fn index_search(
     clique: bool,
 ) -> (u32, u32, usize) {
     // Catch not-yet-implemented modes.
-    if kernel_mode != KernelMode::None {
-        panic!("The chosen --kernel mode is not implemented yet!")
-    }
     if memoize {
         panic!("--memoize is not implemented yet!")
     }
@@ -428,6 +443,7 @@ pub fn index_search(
         edge_count,
         bounds,
         parallel_mode,
+        kernel_mode,
     );
 
     (index as u32, matches.len() as u32, states_searched)
