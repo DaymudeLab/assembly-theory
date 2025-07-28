@@ -263,11 +263,13 @@ pub fn recurse_index_search(
             };
 
             // Update subgraph
-            let mut sub_clone = BitSet::with_capacity(matches.len());
+            let mut sub_clone;
             if let Some(g) = graph {
+                sub_clone = subgraph.clone();
                 sub_clone.intersect_with(&g.forward_neighbors(v, &subgraph));
             }
             else {
+                sub_clone = BitSet::with_capacity(matches.len());
                 for j in (v+1)..matches.len() {
                     sub_clone.insert(j);
                 }
