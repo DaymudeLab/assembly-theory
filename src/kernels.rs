@@ -30,6 +30,8 @@ pub enum KernelMode {
     Always,
 }
 
+/// Takes a subgraph as input and removes all nodes that will not be part of any maximum weight clique.
+/// Uses the strategy of domination as described in Lamm et al.
 pub fn deletion_kernel(matches: &Vec<(BitSet, BitSet)>, g: &CompatGraph, mut subgraph: BitSet) -> BitSet{
     let subgraph_copy = subgraph.clone();
 
@@ -68,20 +70,26 @@ pub fn deletion_kernel(matches: &Vec<(BitSet, BitSet)>, g: &CompatGraph, mut sub
     subgraph
 }
 
+/// Takes a subgraph as input and returns the first vertex that will be included in some maximum weight clique.
+/// Uses the strategies of neighborhood removal and isolated vertex removal from Lamm et al.
 pub fn inclusion_kernel(matches: &Vec<(BitSet, BitSet)>, g: &CompatGraph, subgraph: &BitSet) -> usize {
     let mut kernel = Vec::new();
     let tot = subgraph.iter().map(|v| matches[v].0.len() - 1).sum::<usize>();
 
     'outer: for v in subgraph {
         let v_val = matches[v].0.len() - 1;
+
+        // Neighborhood removal
         let neighbors_val = g.neighbors(v, subgraph).iter().map(|u| matches[u].0.len() - 1).sum::<usize>();
         if v_val >= tot - neighbors_val - v_val { 
             kernel.push(v);
             continue;
         }
 
+        // Isolated vertex removal.
+        // Only makes it through this loop if the non-neighborhood of v is independent and
+        // contains vertices with weight no higher than v.
         let mut neighbors: Vec<usize> = vec![];
-
         for u in subgraph.difference(&g.compatible_with(v)) {
             if u == v {
                 continue;
