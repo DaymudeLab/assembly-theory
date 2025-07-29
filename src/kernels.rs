@@ -67,3 +67,40 @@ pub fn deletion_kernel(matches: &Vec<(BitSet, BitSet)>, g: &CompatGraph, mut sub
 
     subgraph
 }
+
+pub fn inclusion_kernel(matches: &Vec<(BitSet, BitSet)>, g: &CompatGraph, subgraph: &BitSet) -> Vec<usize> {
+    let mut kernel = Vec::new();
+    let tot = subgraph.iter().map(|v| matches[v].0.len() - 1).sum::<usize>();
+
+    'outer: for v in subgraph {
+        let v_val = matches[v].0.len() - 1;
+        let neighbors_val = g.neighbors(v, subgraph).iter().map(|u| matches[u].0.len() - 1).sum::<usize>();
+        if v_val >= tot - neighbors_val - v_val { 
+            kernel.push(v);
+            continue;
+        }
+
+        let mut neighbors: Vec<usize> = vec![];
+
+        for u in subgraph.difference(&g.compatible_with(v)) {
+            if u == v {
+                continue;
+            }
+            if matches[u].0.len() - 1 > v_val {
+                continue 'outer;
+            }
+
+            for w in neighbors.iter() {
+                if g.are_adjacent(u, *w) {
+                    continue 'outer;
+                }   
+            }
+
+            neighbors.push(u);
+        }
+
+        kernel.push(v);
+    }
+
+    kernel
+}
