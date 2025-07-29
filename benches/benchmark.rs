@@ -133,8 +133,7 @@ pub fn bench_canonize(c: &mut Criterion) {
 ///
 /// This benchmark precomputes the enumeration and isomorphism steps using the
 /// fastest options and times only the search step for different combinations
-/// of [`Bound`]s. This benchmark disables other search optimizations (e.g.,
-/// kernelization or memoization) to focus on the effects of bounds only.
+/// of [`Bound`]s. This benchmark otherwise uses the default search options.
 pub fn bench_bounds(c: &mut Criterion) {
     let mut bench_group = c.benchmark_group("bench_bounds");
 
@@ -164,14 +163,14 @@ pub fn bench_bounds(c: &mut Criterion) {
                             // Precompute the molecule's matches and setup.
                             let matches =
                                 matches(mol, EnumerateMode::GrowErode, CanonizeMode::TreeNauty);
-                            let mut cache =
-                                Cache::new(MemoizeMode::IndexCanon, CanonizeMode::TreeNauty);
                             let mut init = BitSet::new();
                             init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
                             let edge_count = mol.graph().edge_count();
 
                             // Benchmark the search phase.
                             for _ in 0..iters {
+                                let mut cache =
+                                    Cache::new(MemoizeMode::CanonIndex, CanonizeMode::TreeNauty);
                                 let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
                                 let start = Instant::now();
                                 recurse_index_search(
@@ -199,9 +198,79 @@ pub fn bench_bounds(c: &mut Criterion) {
     bench_group.finish();
 }
 
+/// Benchmark the search step of [`index_search`] using different\
+/// [`MemoizeMode`]s.
+///
+/// This benchmark precomputes the enumeration and isomorphism steps using the
+/// fastest options and times only the search step for different
+/// [`MemoizeMode`]s. This benchmark otherwise uses the default search options.
+pub fn bench_memoize(c: &mut Criterion) {
+    let mut bench_group = c.benchmark_group("bench_memoize");
+
+    // Define datasets and bound lists.
+    let datasets = ["gdb13_1201", "gdb17_200", "checks", "coconut_55"];
+    let memoize_modes = [
+        (MemoizeMode::None, CanonizeMode::Nauty, "no-memoize"),
+        (MemoizeMode::FragsIndex, CanonizeMode::Nauty, "frags-index"),
+        (MemoizeMode::CanonIndex, CanonizeMode::Nauty, "nauty-index"),
+        (
+            MemoizeMode::CanonIndex,
+            CanonizeMode::TreeNauty,
+            "tree-nauty-index",
+        ),
+    ];
+
+    // Run the benchmark for each dataset and bound list.
+    for dataset in &datasets {
+        let mol_list = load_dataset_molecules(dataset);
+        for (memoize_mode, canonize_mode, name) in &memoize_modes {
+            bench_group.bench_with_input(
+                BenchmarkId::new(*dataset, &name),
+                &(memoize_mode, canonize_mode),
+                |b, (&memoize_mode, &canonize_mode)| {
+                    b.iter_custom(|iters| {
+                        let mut total_time = Duration::new(0, 0);
+                        for mol in &mol_list {
+                            // Precompute the molecule's matches and setup.
+                            let matches =
+                                matches(mol, EnumerateMode::GrowErode, CanonizeMode::TreeNauty);
+                            let mut init = BitSet::new();
+                            init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
+                            let edge_count = mol.graph().edge_count();
+
+                            // Benchmark the search phase.
+                            for _ in 0..iters {
+                                let mut cache = Cache::new(memoize_mode, canonize_mode);
+                                let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
+                                let start = Instant::now();
+                                recurse_index_search(
+                                    mol,
+                                    &matches,
+                                    Vec::new(),
+                                    &[init.clone()],
+                                    edge_count - 1,
+                                    best_index,
+                                    edge_count,
+                                    &[Bound::Int, Bound::VecSimple, Bound::VecSmallFrags],
+                                    &mut cache,
+                                    ParallelMode::DepthOne,
+                                );
+                                total_time += start.elapsed();
+                            }
+                        }
+                        total_time
+                    });
+                },
+            );
+        }
+    }
+
+    bench_group.finish();
+}
+
 criterion_group! {
     name = benchmark;
     config = Criterion::default().sample_size(20);
-    targets = bench_enumerate, bench_canonize, bench_bounds
+    targets = bench_enumerate, bench_canonize, bench_bounds, bench_memoize
 }
 criterion_main!(benchmark);
