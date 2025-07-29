@@ -437,6 +437,8 @@ pub fn _index_search(
         kernel_mode,
         &boundlist,
         memoize,
+        // TODO: implement clique CLI param for python interface
+        false,
     ))
 }
 
