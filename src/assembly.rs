@@ -224,11 +224,19 @@ pub fn recurse_index_search(
     state: &[BitSet],
     state_index: usize,
     best_index: Arc<AtomicUsize>,
-    largest_remove: usize,
     bounds: &[Bound],
     parallel_mode: ParallelMode,
     kernel_mode: KernelMode,
 ) -> (usize, usize) {
+    let largest_remove = {
+        if let Some(v) = subgraph.iter().next() {
+            matches[v].0.len()
+        }
+        else {
+            return (state_index, 1);
+        }
+    };
+
     // If any bounds would prune this assembly state, halt.
     if bound_exceeded(
         mol,
@@ -306,7 +314,6 @@ pub fn recurse_index_search(
                 &fragments,
                 state_index - h1.len() + 1,
                 best_index.clone(),
-                h1.len(),
                 bounds,
                 new_parallel,
                 new_kernel,
@@ -447,7 +454,6 @@ pub fn index_search(
         &[init],
         edge_count - 1,
         best_index,
-        edge_count,
         bounds,
         parallel_mode,
         kernel_mode,
