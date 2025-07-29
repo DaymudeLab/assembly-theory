@@ -8,7 +8,7 @@ use assembly_theory::{
     enumerate::EnumerateMode,
     kernels::KernelMode,
     loader::parse_molfile_str,
-    memoize::CacheMode,
+    memoize::MemoizeMode,
 };
 use clap::{Args, Parser};
 
@@ -44,9 +44,9 @@ struct Cli {
     #[arg(long, value_enum, default_value_t = ParallelMode::DepthOne)]
     parallel: ParallelMode,
 
-    /// Use dynamic programming memoization in the search phase.
-    #[arg(long, value_enum, default_value_t = CacheMode::IndexCanon)]
-    memoize: CacheMode,
+    /// Strategy for memoizing assembly states in the search phase.
+    #[arg(long, value_enum, default_value_t = MemoizeMode::CanonIndex)]
+    memoize: MemoizeMode,
 
     /// Bounding strategies to apply in the search phase.
     #[command(flatten)]
@@ -113,9 +113,9 @@ fn main() -> Result<()> {
         cli.enumerate,
         cli.canonize,
         cli.parallel,
+        cli.memoize,
         cli.kernel,
         boundlist,
-        cli.memoize,
     );
 
     // Print final output, depending on --verbose.

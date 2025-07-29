@@ -11,7 +11,7 @@ use assembly_theory::{
     enumerate::EnumerateMode,
     kernels::KernelMode,
     loader::parse_molfile_str,
-    memoize::CacheMode,
+    memoize::MemoizeMode,
 };
 
 fn load_ma_index(dataset: &str) -> HashMap<String, u32> {
@@ -75,9 +75,9 @@ fn test_reference_dataset(dataset: &str, bounds: &[Bound], serial: bool) {
             EnumerateMode::GrowErode,
             CanonizeMode::TreeNauty,
             pmode,
+            MemoizeMode::IndexCanon,
             KernelMode::None,
             bounds,
-            CacheMode::IndexCanon,
         );
 
         // Compare calculated assembly index to ground truth.

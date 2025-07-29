@@ -19,11 +19,11 @@
 //! ```
 
 use std::{
-    collections::HashMap, 
+    collections::HashMap,
     sync::{
         atomic::{AtomicUsize, Ordering::Relaxed},
         Arc,
-    }
+    },
 };
 
 use bit_set::BitSet;
@@ -35,7 +35,7 @@ use crate::{
     canonize::{canonize, CanonizeMode, Labeling},
     enumerate::{enumerate_subgraphs, EnumerateMode},
     kernels::KernelMode,
-    memoize::{Cache, CacheMode},
+    memoize::{Cache, MemoizeMode},
     molecule::Molecule,
     utils::connected_components_under_edges,
 };
@@ -200,7 +200,8 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Opti
 /// - `matches`: The remaining non-overlapping isomorphic subgraph pairs.
 /// - `removal_order`: TODO
 /// - `state`: The current assembly state, i.e., a list of fragments.
-/// - `state_index`: The assembly index of this assembly state.
+/// - `state_index`: This assembly state's upper bound on the assembly index,
+///   i.e., edges(mol) - 1 - [edges(subgraphs removed) - #(subgraphs removed)].
 /// - `best_index`: The smallest assembly index for all assembly states so far.
 /// - `largest_remove`: An upper bound on the size of fragments that can be
 ///   removed from this or any descendant assembly state.
@@ -209,7 +210,9 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Opti
 /// - `parallel_mode`: The parallelism mode for this state's match iteration.
 ///
 /// Returns, from this assembly state and any of its descendents:
-/// - `usize`: The best assembly index found.
+/// - `usize`: An updated upper bound on the assembly index. (Note: If this
+///   state is pruned by bounds or deemed redundant by memoization, then the
+///   upper bound returned is unchanged.)
 /// - `usize`: The number of assembly states searched.
 #[allow(clippy::too_many_arguments)]
 pub fn recurse_index_search(
@@ -224,7 +227,8 @@ pub fn recurse_index_search(
     cache: &mut Cache,
     parallel_mode: ParallelMode,
 ) -> (usize, usize) {
-    // If any bounds would prune this assembly state, halt.
+    // If any bounds would prune this assembly state or if memoization is
+    // enabled and this assembly state is preempted by the cached state, halt.
     if bound_exceeded(
         mol,
         state,
@@ -232,13 +236,9 @@ pub fn recurse_index_search(
         best_index.load(Relaxed),
         largest_remove,
         bounds,
-    ) {
+    ) || cache.memoize_state(mol, state, state_index, &removal_order)
+    {
         return (state_index, 1);
-    }
-
-    // If this assembly state was already searched, return its cached result.
-    if let Some(res) = cache.get(mol, state, state_index, &removal_order) {
-        return (res, 1);
     }
 
     // Keep track of the best assembly index found in any of this assembly
@@ -262,7 +262,11 @@ pub fn recurse_index_search(
             let (child_index, child_states_searched) = recurse_index_search(
                 mol,
                 &matches[i + 1..],
-                {let mut clone = removal_order.clone(); clone.push(i); clone},
+                {
+                    let mut clone = removal_order.clone();
+                    clone.push(i);
+                    clone
+                },
                 &fragments,
                 state_index - h1.len() + 1,
                 best_index.clone(),
@@ -292,9 +296,6 @@ pub fn recurse_index_search(
             .enumerate()
             .for_each(|(i, (h1, h2))| recurse_on_match(i, h1, h2));
     }
-
-    // Store this assembly state in the memoization cache.
-    cache.insert(state, state_index, &removal_order);
 
     (
         best_child_index.load(Relaxed),
@@ -327,7 +328,7 @@ pub fn recurse_index_search(
 ///     enumerate::EnumerateMode,
 ///     kernels::KernelMode,
 ///     loader::parse_molfile_str,
-///     memoize::CacheMode,
+///     memoize::MemoizeMode,
 /// };
 ///
 /// # fn main() -> Result<(), std::io::Error> {
@@ -336,28 +337,28 @@ pub fn recurse_index_search(
 /// let molfile = fs::read_to_string(path)?;
 /// let anthracene = parse_molfile_str(&molfile).expect("Parsing failure.");
 ///
-/// // Compute the molecule's assembly index without parallelism,
-/// // kernelization, bounds, or memoization.
+/// // Compute the molecule's assembly index without parallelism, memoization,
+/// // kernelization, or bounds.
 /// let (slow_index, _, _) = index_search(
 ///     &anthracene,
 ///     EnumerateMode::GrowErode,
 ///     CanonizeMode::TreeNauty,
 ///     ParallelMode::None,
+///     MemoizeMode::None,
 ///     KernelMode::None,
 ///     &[],
-///     CacheMode::None,
 /// );
 ///
-/// // Compute the molecule's assembly index with parallelism, some bounds, and
-/// // memoization.
+/// // Compute the molecule's assembly index with parallelism, memoization, and
+/// // some bounds.
 /// let (fast_index, _, _) = index_search(
 ///     &anthracene,
 ///     EnumerateMode::GrowErode,
 ///     CanonizeMode::TreeNauty,
 ///     ParallelMode::DepthOne,
+///     MemoizeMode::CanonIndex,
 ///     KernelMode::None,
 ///     &[Bound::Log, Bound::Int],
-///     CacheMode::IndexCanon,
 /// );
 ///
 /// assert_eq!(slow_index, 6);
@@ -370,9 +371,9 @@ pub fn index_search(
     enumerate_mode: EnumerateMode,
     canonize_mode: CanonizeMode,
     parallel_mode: ParallelMode,
+    memoize_mode: MemoizeMode,
     kernel_mode: KernelMode,
     bounds: &[Bound],
-    memoize: CacheMode,
 ) -> (u32, u32, usize) {
     // Catch not-yet-implemented modes.
     if kernel_mode != KernelMode::None {
@@ -382,8 +383,8 @@ pub fn index_search(
     // Enumerate non-overlapping isomorphic subgraph pairs.
     let matches = matches(mol, enumerate_mode, canonize_mode);
 
-    // Create cache for dynamic programming
-    let mut cache = Cache::new(memoize);
+    // Create memoization cache.
+    let mut cache = Cache::new(memoize_mode, canonize_mode);
 
     // Initialize the first fragment as the entire graph.
     let mut init = BitSet::new();
@@ -433,9 +434,9 @@ pub fn index(mol: &Molecule) -> u32 {
         EnumerateMode::GrowErode,
         CanonizeMode::TreeNauty,
         ParallelMode::DepthOne,
+        MemoizeMode::CanonIndex,
         KernelMode::None,
         &[Bound::Int, Bound::VecSimple, Bound::VecSmallFrags],
-        CacheMode::IndexCanon,
     )
     .0
 }

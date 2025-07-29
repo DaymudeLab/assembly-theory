@@ -38,7 +38,7 @@ use crate::{
     enumerate::EnumerateMode,
     kernels::KernelMode,
     loader::{parse_molfile_str, ParserError},
-    memoize::CacheMode,
+    memoize::MemoizeMode,
 };
 
 /// Implement a Python version of [`crate::loader::ParserError`].
@@ -51,15 +51,15 @@ impl From<ParserError> for PyErr {
 // TODO: Is there a clean way of avoiding the duplication of all our various
 // algorithm variant enums?
 
-/// Mirrors the `enumerate::EnumerateMode` enum.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+/// Mirrors the [`EnumerateMode`] enum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum PyEnumerateMode {
     Extend,
     GrowErode,
 }
 
-/// Mirrors the `canonize::CanonizeMode` enum.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+/// Mirrors the [`CanonizeMode`] enum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum PyCanonizeMode {
     Nauty,
     Faulon,
@@ -67,12 +67,20 @@ enum PyCanonizeMode {
     TreeFaulon,
 }
 
-/// Mirrors the `assembly::ParallelMode` enum.
+/// Mirrors the [`ParallelMode`] enum.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum PyParallelMode {
     None,
     DepthOne,
     Always,
+}
+
+/// Mirrors the [`MemoizeMode`] enum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum PyMemoizeMode {
+    None,
+    FragsIndex,
+    CanonIndex,
 }
 
 /// Mirrors the `kernels::KernelMode` enum.
@@ -142,6 +150,23 @@ impl FromStr for PyParallelMode {
             _ => Err(PyValueError::new_err(format!(
                 "Invalid parallelization mode \"{s}\", options are: \
                 [\"none\", \"depth-one\", \"always\"]"
+            ))),
+        }
+    }
+}
+
+/// Converts bound options in `&str` format to `PyMemoizeMode`.
+impl FromStr for PyMemoizeMode {
+    type Err = PyErr;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "none" => Ok(PyMemoizeMode::None),
+            "frags-index" => Ok(PyMemoizeMode::FragsIndex),
+            "canon-index" => Ok(PyMemoizeMode::CanonIndex),
+            _ => Err(PyValueError::new_err(format!(
+                "Invalid memoization mode \"{s}\", options are: \
+                [\"none\", \"frags-index\", \"canon-index\"]"
             ))),
         }
     }
@@ -345,13 +370,14 @@ pub fn _index(mol_block: String) -> PyResult<u32> {
 /// `"tree-nauty"`, `"tree-faulon"`]. See [`CanonizeMode`] for details.
 /// - `parallel_str`: A parallelization mode from [`"none"`, `"depth-one"`,
 /// `"always"`]. See [`ParallelMode`] for details.
+/// - `memoize_str`: A memoization mode from [`none`, `frags-index`,
+/// `canon-index`]. See [`MemoizeMode`] for details.
 /// - `kernel_str`: A kernelization mode from [`"none"`, `"once"`,
 /// `"depth-one"`, `"always"`]. See [`KernelMode`] for details.
 /// - `bound_strs`: A `set` of bounds containing zero or more of [`"log"`,
 /// `"int"`, `"vec-simple"`, `"vec-small-frags"`, `"cover-sort"`,
 /// `"cover-no-sort"`, `"clique-budget"`]. See [`crate::bounds::Bound`] for
 /// details.
-/// - `memoize`: `True` iff memoization should be used in search.
 ///
 /// # Python Returns
 ///
@@ -373,11 +399,11 @@ pub fn _index(mol_block: String) -> PyResult<u32> {
 /// (index, num_matches, states_searched) = at.index_search(
 ///     mol_block,
 ///     "grow-erode",
-///     "nauty",
+///     "tree-nauty",
 ///     "none",
 ///     "none",
-///     set(["int", "vec-simple", "vec-small-frags"]),
-///     False)
+///     "none",
+///     set(["int", "vec-simple", "vec-small-frags"]))
 ///
 /// print(f"Assembly Index: {index}")  # 6
 /// print(f"Non-Overlapping Isomorphic Subgraph Pairs: {num_matches}")  # 466
@@ -389,9 +415,9 @@ pub fn _index_search(
     enumerate_str: String,
     canonize_str: String,
     parallel_str: String,
+    memoize_str: String,
     kernel_str: String,
     bound_strs: HashSet<String>,
-    memoize: bool,
 ) -> PyResult<(u32, u32, usize)> {
     // Parse the .mol file contents as a molecule::Molecule.
     let mol_result = parse_molfile_str(&mol_block);
@@ -419,6 +445,12 @@ pub fn _index_search(
         Ok(PyParallelMode::Always) => ParallelMode::Always,
         Err(e) => return Err(e),
     };
+    let memoize_mode = match PyMemoizeMode::from_str(&memoize_str) {
+        Ok(PyMemoizeMode::None) => MemoizeMode::None,
+        Ok(PyMemoizeMode::FragsIndex) => MemoizeMode::FragsIndex,
+        Ok(PyMemoizeMode::CanonIndex) => MemoizeMode::CanonIndex,
+        Err(e) => return Err(e),
+    };
     let kernel_mode = match PyKernelMode::from_str(&kernel_str) {
         Ok(PyKernelMode::None) => KernelMode::None,
         Ok(PyKernelMode::Once) => KernelMode::Once,
@@ -435,9 +467,9 @@ pub fn _index_search(
         enumerate_mode,
         canonize_mode,
         parallel_mode,
+        memoize_mode,
         kernel_mode,
         &boundlist,
-        CacheMode::None,
     ))
 }
 

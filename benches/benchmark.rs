@@ -16,7 +16,7 @@ use assembly_theory::{
     canonize::{canonize, CanonizeMode},
     enumerate::{enumerate_subgraphs, EnumerateMode},
     loader::parse_molfile_str,
-    memoize::{Cache, CacheMode},
+    memoize::{Cache, MemoizeMode},
     molecule::Molecule,
 };
 
@@ -162,8 +162,10 @@ pub fn bench_bounds(c: &mut Criterion) {
                         let mut total_time = Duration::new(0, 0);
                         for mol in &mol_list {
                             // Precompute the molecule's matches and setup.
-                            let matches = matches(mol, EnumerateMode::GrowErode, CanonizeMode::Nauty);
-                            let mut cache = Cache::new(CacheMode::IndexCanon);
+                            let matches =
+                                matches(mol, EnumerateMode::GrowErode, CanonizeMode::TreeNauty);
+                            let mut cache =
+                                Cache::new(MemoizeMode::IndexCanon, CanonizeMode::TreeNauty);
                             let mut init = BitSet::new();
                             init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
                             let edge_count = mol.graph().edge_count();

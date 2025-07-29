@@ -1,115 +1,129 @@
+//! Memoize assembly states to avoid redundant recursive search.
+
+use std::sync::Arc;
+
 use bit_set::BitSet;
 use clap::ValueEnum;
 use dashmap::DashMap;
-use std::sync::Arc;
+
 use crate::{
-    canonize::{CanonizeMode, Labeling, canonize},
+    canonize::{canonize, CanonizeMode, Labeling},
     molecule::Molecule,
 };
 
+/// Strategy for memoizing assembly states in the search phase.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
-pub enum CacheMode {
+pub enum MemoizeMode {
+    /// Do not use memoization.
     None,
-    Index,
-    IndexCanon,
+    /// Cache states by fragments and store their assembly index upper bounds.
+    FragsIndex,
+    /// Like `FragsIndex`, but cache states by fragments' canonical labelings,
+    /// allowing isomorphic assembly states to hash to the same value.
+    CanonIndex,
 }
 
-#[derive(Eq, Hash, PartialEq)]
-enum CacheType {
-    Set(Vec<BitSet>),
+/// Key type for the memoization cache.
+#[derive(Clone, PartialEq, Eq, Hash)]
+enum CacheKey {
+    /// Use fragments as keys, as in [`MemoizeMode::FragsIndex`].
+    Frags(Vec<BitSet>),
+    /// Use fragments' canonical labelings as keys, as in
+    /// [`MemoizeMode::CanonIndex`].
     Canon(Vec<Labeling>),
 }
 
+/// Struct for the memoization cache.
 #[derive(Clone)]
 pub struct Cache {
-    mode: CacheMode,
-    cache: Arc<DashMap<CacheType, (usize, Vec<usize>)>>,
-    frags_to_labels: Arc<DashMap<BitSet, Labeling>>,
+    /// Memoization mode.
+    memoize_mode: MemoizeMode,
+    /// Canonization mode; only used with [`MemoizeMode::CanonIndex`].
+    canonize_mode: CanonizeMode,
+    /// A parallel-aware cache mapping keys (either fragments or canonical
+    /// labelings, depending on the memoization mode) to their assembly index
+    /// upper bounds and match removal order.
+    cache: Arc<DashMap<CacheKey, (usize, Vec<usize>)>>,
+    /// A parallel-aware map from fragments to their canonical labelings; only
+    /// used with [`MemoizeMode::CanonIndex`].
+    fragment_labels: Arc<DashMap<BitSet, Labeling>>,
 }
 
 impl Cache {
-    pub fn new(mode: CacheMode) -> Self {
+    /// Construct a new [`Cache`] with the specified modes.
+    pub fn new(memoize_mode: MemoizeMode, canonize_mode: CanonizeMode) -> Self {
         Self {
-            mode,
-            cache: Arc::new(DashMap::<CacheType, (usize, Vec<usize>)>::new()),
-            frags_to_labels: Arc::new(DashMap::<BitSet, Labeling>::new()),
+            memoize_mode,
+            canonize_mode,
+            cache: Arc::new(DashMap::<CacheKey, (usize, Vec<usize>)>::new()),
+            fragment_labels: Arc::new(DashMap::<BitSet, Labeling>::new()),
         }
     }
 
-    pub fn get(&self, mol: &Molecule, fragments: &[BitSet], state_index: usize, order: &Vec<usize>) -> Option<usize> {
-        match self.mode {
-            CacheMode::None => None,
-            CacheMode::Index => self.index_get(fragments, state_index, order),
-            CacheMode::IndexCanon => self.index_canon_get(mol, fragments, state_index, order),
-        }
-    }
-
-    fn index_get(&self, fragments: &[BitSet], state_index: usize, order: &Vec<usize>) -> Option<usize> {
-        let mut frag_vec = fragments.to_vec();
-        frag_vec.sort_by(|a, b| a.iter().next().cmp(&b.iter().next()));
-
-        if let Some(res) = self.cache.get(&CacheType::Set(frag_vec)) {
-            let (other_index, other_order) = (*res).clone();
-            if other_index <= state_index && other_order <= *order {
-                Some(state_index)
+    /// Create a [`CacheKey`] for the given assembly state.
+    ///
+    /// If using [`MemoizeMode::FragsIndex`], keys are the lexicographically
+    /// sorted fragment [`BitSet`]s. If using [`MemoizeMode::CanonIndex`], keys
+    /// are lexicographically sorted fragment canonical labelings created using
+    /// the specified [`CanonizeMode`]. These labelings are stored for reuse.
+    fn key(&self, mol: &Molecule, state: &[BitSet]) -> Option<CacheKey> {
+        match self.memoize_mode {
+            MemoizeMode::None => None,
+            MemoizeMode::FragsIndex => {
+                let mut fragments = state.to_vec();
+                fragments.sort_by_key(|a| a.iter().next());
+                Some(CacheKey::Frags(fragments))
             }
-            else {
-                None
-            }
-        }
-        else {
-            None
-        }
-    }
-
-    fn index_canon_get(&self, mol: &Molecule, fragments: &[BitSet], state_index: usize, order: &Vec<usize>) -> Option<usize>{
-        let mut labels: Vec<Labeling> = fragments
-            .iter()
-            .map(|f| {
-                if let Some(res) = self.frags_to_labels.get(f) {
-                    (*res).clone()
-                }
-                else {
-                    let label = canonize(mol, f, CanonizeMode::Nauty);
-                    self.frags_to_labels.insert(f.clone(), label.clone());
-                    label
-                }
-            })
-            .collect();
-        labels.sort_by(|a, b| a.cmp(b));
-
-        if let Some(res) = self.cache.get(&CacheType::Canon(labels)) {
-            let (other_index, other_order) = (*res).clone();
-            if other_index <= state_index && other_order <= *order {
-                Some(state_index)
-            }
-            else {
-                None
-            }
-        }
-        else {
-            None
-        }
-    }
-
-    pub fn insert(&mut self, fragments: &[BitSet], state_index: usize, order: &Vec<usize>) {
-        match self.mode {
-            CacheMode::None => (),
-            CacheMode::Index => {
-                let mut frag_vec = fragments.to_vec();
-                frag_vec.sort_by(|a, b| a.iter().next().cmp(&b.iter().next()));
-                self.cache.insert(CacheType::Set(frag_vec), (state_index, order.clone()));
-            },
-            CacheMode::IndexCanon => {
-                let mut labels: Vec<Labeling> = fragments
+            MemoizeMode::CanonIndex => {
+                let mut labelings: Vec<Labeling> = state
                     .iter()
-                    .filter_map(|f| self.frags_to_labels.get(f))
-                    .map(|res| (*res).clone())
+                    .map(|fragment| {
+                        self.fragment_labels
+                            .entry(fragment.clone())
+                            .or_insert(canonize(mol, fragment, self.canonize_mode))
+                            .value()
+                            .clone()
+                    })
                     .collect();
-                labels.sort_by(|a, b| a.cmp(b));
+                labelings.sort();
+                Some(CacheKey::Canon(labelings))
+            }
+        }
+    }
 
-                self.cache.insert(CacheType::Canon(labels), (state_index, order.clone()));
-            },
-        };
+    /// Return `true` iff memoization is enabled and this assembly state is
+    /// preempted by the cached assembly state.
+    /// See https://github.com/DaymudeLab/assembly-theory/pull/95 for details.
+    pub fn memoize_state(
+        &self,
+        mol: &Molecule,
+        state: &[BitSet],
+        state_index: usize,
+        removal_order: &Vec<usize>,
+    ) -> bool {
+        // If memoization is enabled, get this assembly state's cache key.
+        if let Some(cache_key) = self.key(mol, state) {
+            // Do all of the following atomically: Access the cache entry. If
+            // the cached entry has a worse index upper bound or later removal
+            // order than this state, or if it does not exist, then cache this
+            // state's values and return `false`. Otherwise, the cached entry
+            // preempts this assembly state, so return `true`.
+            let (cached_index, cached_order) = self
+                .cache
+                .entry(cache_key)
+                .and_modify(|val| {
+                    if val.0 > state_index || val.1 > *removal_order {
+                        val.0 = state_index;
+                        val.1 = removal_order.clone();
+                    }
+                })
+                .or_insert((state_index, removal_order.clone()))
+                .value()
+                .clone();
+            if cached_index <= state_index && cached_order < *removal_order {
+                return true;
+            }
+        }
+        false
     }
 }
