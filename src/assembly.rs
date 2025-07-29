@@ -224,12 +224,20 @@ pub fn recurse_index_search(
     state: &[BitSet],
     state_index: usize,
     best_index: Arc<AtomicUsize>,
-    largest_remove: usize,
     bounds: &[Bound],
     cache: &mut Cache,
     parallel_mode: ParallelMode,
     kernel_mode: KernelMode,
 ) -> (usize, usize) {
+    let largest_remove = {
+        if let Some(v) = subgraph.iter().next() {
+            matches[v].0.len()
+        }
+        else {
+            return (state_index, 1);
+        }
+    };
+
     // If any bounds would prune this assembly state or if memoization is
     // enabled and this assembly state is preempted by the cached state, halt.
     if bound_exceeded(
@@ -314,7 +322,6 @@ pub fn recurse_index_search(
                 &fragments,
                 state_index - h1.len() + 1,
                 best_index.clone(),
-                h1.len(),
                 bounds,
                 &mut cache.clone(),
                 new_parallel,
@@ -461,7 +468,6 @@ pub fn index_search(
         &[init],
         edge_count - 1,
         best_index,
-        edge_count,
         bounds,
         &mut cache,
         parallel_mode,
