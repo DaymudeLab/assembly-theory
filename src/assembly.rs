@@ -338,6 +338,7 @@ pub fn recurse_index_search(
     } else {
         let _ = subgraph
             .iter()
+            .filter(|v| *v <= must_include)
             .collect::<Vec<usize>>()
             .par_iter()
             .for_each(|v| recurse_on_match(*v));
