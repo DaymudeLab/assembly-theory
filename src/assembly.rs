@@ -198,16 +198,17 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Opti
 /// Inputs:
 /// - `mol`: The molecule whose assembly index is being calculated.
 /// - `matches`: The remaining non-overlapping isomorphic subgraph pairs.
+/// - `graph`: If clique is enabled, the graph of compatible isomorphic subgraph paris.
+/// - `subgraph`: A bitset with length of matches. Has a 1 for every match to be searched in this state.
 /// - `removal_order`: TODO
 /// - `state`: The current assembly state, i.e., a list of fragments.
 /// - `state_index`: This assembly state's upper bound on the assembly index,
 ///   i.e., edges(mol) - 1 - [edges(subgraphs removed) - #(subgraphs removed)].
 /// - `best_index`: The smallest assembly index for all assembly states so far.
-/// - `largest_remove`: An upper bound on the size of fragments that can be
-///   removed from this or any descendant assembly state.
 /// - `bounds`: The list of bounding strategies to apply.
 /// - `cache`: TODO
 /// - `parallel_mode`: The parallelism mode for this state's match iteration.
+/// - `kernel_mode`: The kernelization mode for this state.
 ///
 /// Returns, from this assembly state and any of its descendents:
 /// - `usize`: An updated upper bound on the assembly index. (Note: If this
@@ -229,6 +230,8 @@ pub fn recurse_index_search(
     parallel_mode: ParallelMode,
     kernel_mode: KernelMode,
 ) -> (usize, usize) {
+    // An upper bound on the size of fragments that can be
+    // removed from this or any descendant assembly state.
     let largest_remove = {
         if let Some(v) = subgraph.iter().next() {
             matches[v].0.len()
@@ -261,9 +264,11 @@ pub fn recurse_index_search(
         let g = graph.as_ref().unwrap();
 
         // Deletion kernel
+        // Returns a subgraph without nodes that never occur in an optimal solution.
         subgraph = deletion_kernel(matches, g, subgraph);
         
-        //Inclusion kernel
+        // Inclusion kernel.
+        // must_include is the first match in the matches list that will be included in an optimal solution.
         must_include = inclusion_kernel(matches, g, &subgraph);
     }
 
@@ -296,6 +301,8 @@ pub fn recurse_index_search(
             };
 
             // Update subgraph
+            // If using CompatGraph, only consider the neighborhood of the node removed.
+            // Otherwise, only consider the matches that occur after the removed match in the list.
             let mut sub_clone;
             if let Some(g) = graph {
                 sub_clone = subgraph.clone();
@@ -337,6 +344,8 @@ pub fn recurse_index_search(
     };
 
     // Use the iterator type corresponding to the specified parallelism mode.
+    // Only search on nodes with v <= must_include since any searches after that would
+    // not use must_include.
     if parallel_mode == ParallelMode::None {
         subgraph
             .iter()
