@@ -73,7 +73,6 @@ pub fn deletion_kernel(matches: &Vec<(BitSet, BitSet)>, g: &CompatGraph, mut sub
 /// Takes a subgraph as input and returns the first vertex that will be included in some maximum weight clique.
 /// Uses the strategies of neighborhood removal and isolated vertex removal from Lamm et al.
 pub fn inclusion_kernel(matches: &Vec<(BitSet, BitSet)>, g: &CompatGraph, subgraph: &BitSet) -> usize {
-    let mut kernel = Vec::new();
     let tot = subgraph.iter().map(|v| matches[v].0.len() - 1).sum::<usize>();
 
     'outer: for v in subgraph {
@@ -82,8 +81,7 @@ pub fn inclusion_kernel(matches: &Vec<(BitSet, BitSet)>, g: &CompatGraph, subgra
         // Neighborhood removal
         let neighbors_val = g.neighbors(v, subgraph).iter().map(|u| matches[u].0.len() - 1).sum::<usize>();
         if v_val >= tot - neighbors_val - v_val { 
-            kernel.push(v);
-            continue;
+            return v;
         }
 
         // Isolated vertex removal.
@@ -107,13 +105,9 @@ pub fn inclusion_kernel(matches: &Vec<(BitSet, BitSet)>, g: &CompatGraph, subgra
             neighbors.push(u);
         }
 
-        kernel.push(v);
+        return v;
     }
 
-    if let Some(x) = kernel.iter().min() {
-        *x
-    }
-    else {
-        matches.len()
-    }
+    matches.len()
+
 }
