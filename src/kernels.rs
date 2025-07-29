@@ -68,7 +68,7 @@ pub fn deletion_kernel(matches: &Vec<(BitSet, BitSet)>, g: &CompatGraph, mut sub
     subgraph
 }
 
-pub fn inclusion_kernel(matches: &Vec<(BitSet, BitSet)>, g: &CompatGraph, subgraph: &BitSet) -> Vec<usize> {
+pub fn inclusion_kernel(matches: &Vec<(BitSet, BitSet)>, g: &CompatGraph, subgraph: &BitSet) -> usize {
     let mut kernel = Vec::new();
     let tot = subgraph.iter().map(|v| matches[v].0.len() - 1).sum::<usize>();
 
@@ -102,5 +102,10 @@ pub fn inclusion_kernel(matches: &Vec<(BitSet, BitSet)>, g: &CompatGraph, subgra
         kernel.push(v);
     }
 
-    kernel
+    if let Some(x) = kernel.iter().min() {
+        *x
+    }
+    else {
+        matches.len()
+    }
 }

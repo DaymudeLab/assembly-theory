@@ -19,7 +19,7 @@
 //! ```
 
 use std::{
-    collections::HashMap, ops::ControlFlow, sync::{
+    collections::HashMap, sync::{
         atomic::{AtomicUsize, Ordering::Relaxed},
         Arc,
     }
@@ -220,7 +220,6 @@ pub fn recurse_index_search(
     matches: &Vec<(BitSet, BitSet)>,
     graph: &Option<CompatGraph>,
     mut subgraph: BitSet,
-    must_include: &Option<Vec<usize>>,
     removal_order: Vec<usize>,
     state: &[BitSet],
     state_index: usize,
@@ -249,7 +248,7 @@ pub fn recurse_index_search(
     }
 
     // Apply kernels
-    let mut must_include_clone = None;
+    let mut must_include = matches.len();
     if kernel_mode != KernelMode::None {
         let g = graph.as_ref().unwrap();
 
@@ -257,9 +256,7 @@ pub fn recurse_index_search(
         subgraph = deletion_kernel(matches, g, subgraph);
         
         //Inclusion kernel
-        let mut include_temp = must_include.as_ref().unwrap().clone();
-        include_temp.append(&mut inclusion_kernel(matches, g, &subgraph));
-        must_include_clone = Some(include_temp);
+        must_include = inclusion_kernel(matches, g, &subgraph);
     }
 
     // Keep track of the best assembly index found in any of this assembly
@@ -309,7 +306,6 @@ pub fn recurse_index_search(
                 matches,
                 graph,
                 sub_clone,
-                &must_include_clone,
                 {
                     let mut clone = removal_order.clone();
                     clone.push(i);
@@ -335,17 +331,10 @@ pub fn recurse_index_search(
 
     // Use the iterator type corresponding to the specified parallelism mode.
     if parallel_mode == ParallelMode::None {
-        let _ = subgraph
+        subgraph
             .iter()
-            .try_for_each(|v| {
-                recurse_on_match(v);
-                if let Some(vec) = &must_include_clone {
-                    if vec.contains(&v) {
-                        return ControlFlow::Break(());
-                    }
-                }
-                ControlFlow::Continue(())
-            });
+            .filter(|v| *v <= must_include)
+            .for_each(|v| recurse_on_match(v));
     } else {
         let _ = subgraph
             .iter()
@@ -459,15 +448,6 @@ pub fn index_search(
         subgraph.insert(i);
     }
 
-    let must_include = {
-        if kernel_mode != KernelMode::None {
-            Some(Vec::new())
-        }
-        else {
-            None
-        }
-    };
-
     // Search for the shortest assembly pathway recursively.
     let edge_count = mol.graph().edge_count();
     let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
@@ -476,7 +456,6 @@ pub fn index_search(
         &matches,
         &graph,
         subgraph,
-        &must_include,
         Vec::new(),
         &[init],
         edge_count - 1,
