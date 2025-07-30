@@ -4,8 +4,7 @@ use std::collections::{BTreeSet, HashSet};
 
 use bit_set::BitSet;
 use petgraph::{
-    graph::{EdgeIndex, Graph, IndexType, NodeIndex},
-    EdgeType,
+    graph::{EdgeIndex, Graph, IndexType, NodeIndex}, visit::NodeCount, EdgeType
 };
 
 pub fn is_subset_connected<N, E, Ty, Ix>(
@@ -71,11 +70,11 @@ where
     Ty: EdgeType,
     Ix: IndexType,
 {
-    let mut node_set = HashSet::new();
+    let mut node_set = BitSet::with_capacity(g.node_count());
     for ix in s.into_iter().map(|ix| EdgeIndex::new(ix)) {
         let (src, dst) = g.edge_endpoints(ix).expect("malformed bitset!");
-        node_set.insert(src);
-        node_set.insert(dst);
+        node_set.insert(src.index());
+        node_set.insert(dst.index());
     }
     node_set.len()
 }
