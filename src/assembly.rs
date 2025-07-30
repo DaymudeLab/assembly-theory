@@ -18,16 +18,14 @@
 //! # }
 //! ```
 
-use std::{
-    collections::HashMap,
-    sync::{
-        atomic::{AtomicUsize, Ordering::Relaxed},
-        Arc,
-    },
+use std::sync::{
+    atomic::{AtomicUsize, Ordering::Relaxed},
+    Arc,
 };
 
 use bit_set::BitSet;
 use clap::ValueEnum;
+use dashmap::DashMap;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
@@ -104,18 +102,25 @@ pub fn matches(
     canonize_mode: CanonizeMode,
 ) -> Vec<(BitSet, BitSet)> {
     // Enumerate all connected, non-induced subgraphs with at most |E|/2 edges
-    // and bin them into isomorphism classes using canonization.
-    let mut isomorphism_classes = HashMap::<Labeling, Vec<BitSet>>::new();
-    for subgraph in enumerate_subgraphs(mol, enumerate_mode) {
-        isomorphism_classes
-            .entry(canonize(mol, &subgraph, canonize_mode))
-            .and_modify(|bucket| bucket.push(subgraph.clone()))
-            .or_insert(vec![subgraph.clone()]);
-    }
+    // and bin them into isomorphism classes using canonization. Store these
+    // subgraphs' canonical labels for later use in memoization (this way, we
+    // only have to compute them once).
+    let isomorphism_classes = DashMap::<Labeling, Vec<BitSet>>::new();
+    let subgraph_labels = DashMap::<BitSet, Labeling>::new();
+    enumerate_subgraphs(mol, enumerate_mode)
+        .par_iter()
+        .for_each(|subgraph| {
+            let label = canonize(mol, &subgraph, canonize_mode);
+            isomorphism_classes
+                .entry(label.clone())
+                .and_modify(|bucket| bucket.push(subgraph.clone()))
+                .or_insert(vec![subgraph.clone()]);
+            subgraph_labels.insert(subgraph.clone(), label);
+        });
 
     // In each isomorphism class, collect non-overlapping pairs of subgraphs.
     let mut matches = Vec::new();
-    for bucket in isomorphism_classes.values() {
+    for bucket in isomorphism_classes.iter() {
         for (i, first) in bucket.iter().enumerate() {
             for second in &bucket[i..] {
                 if first.is_disjoint(second) {
