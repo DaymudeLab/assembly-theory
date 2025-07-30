@@ -1,6 +1,6 @@
 //! Create canonical labelings for molecular graphs.
 
-use std::{collections::HashMap, hash::Hash, iter, mem};
+use std::{collections::HashMap, hash::Hash, iter, mem, u8};
 
 use bit_set::BitSet;
 use clap::ValueEnum;
@@ -111,7 +111,13 @@ fn wrap_with_delimiters(data: Vec<u8>) -> impl Iterator<Item = u8> {
 // TODO: Swap with a radix sort.
 fn collapse_set(mut set: Vec<Vec<u8>>) -> Vec<u8> {
     set.sort_unstable();
-    set.into_iter().flat_map(wrap_with_delimiters).collect()
+    iter::once(u8::MIN)
+        .chain(set.into_iter().flat_map(|mut v| {
+            v.push(u8::MAX - 1);
+            v
+        }))
+        .chain(iter::once(u8::MAX))
+        .collect()
 }
 
 /// Obtain a canonical labeling of a `subgraph` inducing a tree using an
