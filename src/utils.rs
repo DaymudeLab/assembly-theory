@@ -1,10 +1,11 @@
 #![allow(dead_code)]
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 
 use bit_set::BitSet;
 use petgraph::{
-    graph::{EdgeIndex, Graph, IndexType, NodeIndex}, visit::NodeCount, EdgeType
+    graph::{EdgeIndex, Graph, IndexType, NodeIndex},
+    EdgeType,
 };
 
 pub fn is_subset_connected<N, E, Ty, Ix>(

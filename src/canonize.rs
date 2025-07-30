@@ -1,6 +1,6 @@
 //! Create canonical labelings for molecular graphs.
 
-use std::{collections::HashMap, hash::Hash, iter, mem, u8};
+use std::{collections::HashMap, hash::Hash, iter, mem};
 
 use bit_set::BitSet;
 use clap::ValueEnum;

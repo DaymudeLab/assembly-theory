@@ -110,7 +110,7 @@ pub fn matches(
     enumerate_subgraphs(mol, enumerate_mode)
         .par_iter()
         .for_each(|subgraph| {
-            let label = canonize(mol, &subgraph, canonize_mode);
+            let label = canonize(mol, subgraph, canonize_mode);
             isomorphism_classes
                 .entry(label.clone())
                 .and_modify(|bucket| bucket.push(subgraph.clone()))
