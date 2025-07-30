@@ -70,8 +70,8 @@ def test_index_search():
             "tree-nauty",
             "none",  # Disable parallelism for deterministic states_searched.
             "none",
-            set(["int", "vec-simple", "vec-small-frags"]),
-            False)
+            "none",
+            set(["int", "vec-simple", "vec-small-frags"]))
 
     assert (index, num_matches, states_searched) == (6, 466, 2562)
 
@@ -83,8 +83,8 @@ def test_index_search_bad_molblock():
                         "tree-nauty",
                         "none",
                         "none",
-                        set(["int", "vec-simple", "vec-small-frags"]),
-                        False)
+                        "none",
+                        set(["int", "vec-simple", "vec-small-frags"]))
 
     assert e.type is OSError
 
@@ -99,8 +99,8 @@ def test_index_search_bad_enumerate():
                         "tree-nauty",
                         "none",
                         "none",
-                        set(["int", "vec-simple", "vec-small-frags"]),
-                        False)
+                        "none",
+                        set(["int", "vec-simple", "vec-small-frags"]))
 
     assert e.type is ValueError and "Invalid enumeration" in str(e.value)
 
@@ -115,8 +115,8 @@ def test_index_search_bad_canonize():
                         "invalid-mode",
                         "none",
                         "none",
-                        set(["int", "vec-simple", "vec-small-frags"]),
-                        False)
+                        "none",
+                        set(["int", "vec-simple", "vec-small-frags"]))
 
     assert e.type is ValueError and "Invalid canonization" in str(e.value)
 
@@ -131,10 +131,26 @@ def test_index_search_bad_parallel():
                         "tree-nauty",
                         "invalid-mode",
                         "none",
-                        set(["int", "vec-simple", "vec-small-frags"]),
-                        False)
+                        "none",
+                        set(["int", "vec-simple", "vec-small-frags"]))
 
     assert e.type is ValueError and "Invalid parallelization" in str(e.value)
+
+
+def test_index_search_bad_memoize():
+    with open(osp.join('data', 'checks', 'anthracene.mol')) as f:
+        mol_block = f.read()
+
+    with pytest.raises(ValueError) as e:
+        at.index_search(mol_block,
+                        "grow-erode",
+                        "tree-nauty",
+                        "none",
+                        "invalid-mode",
+                        "none",
+                        set(["int", "vec-simple", "vec-small-frags"]))
+
+    assert e.type is ValueError and "Invalid memoization" in str(e.value)
 
 
 def test_index_search_bad_kernel():
@@ -146,9 +162,9 @@ def test_index_search_bad_kernel():
                         "grow-erode",
                         "tree-nauty",
                         "none",
+                        "none",
                         "invalid-mode",
-                        set(["int", "vec-simple", "vec-small-frags"]),
-                        False)
+                        set(["int", "vec-simple", "vec-small-frags"]))
 
     assert e.type is ValueError and "Invalid kernelization" in str(e.value)
 
@@ -163,7 +179,7 @@ def test_index_search_bad_bound():
                         "tree-nauty",
                         "none",
                         "none",
-                        set(["int", "invalid-bound"]),
-                        False)
+                        "none",
+                        set(["int", "invalid-bound"]))
 
     assert e.type is ValueError and "Invalid bound" in str(e.value)
