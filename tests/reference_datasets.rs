@@ -38,7 +38,15 @@ fn load_ma_index(dataset: &str) -> HashMap<String, u32> {
     ma_index
 }
 
-fn test_reference_dataset(dataset: &str, bounds: &[Bound], serial: bool) {
+fn test_reference_dataset(
+    dataset: &str,
+    enumerate_mode: EnumerateMode,
+    canonize_mode: CanonizeMode,
+    parallel_mode: ParallelMode,
+    memoize_mode: MemoizeMode,
+    kernel_mode: KernelMode,
+    bounds: &[Bound],
+) {
     // Load ground truth.
     let ma_index = load_ma_index(dataset);
 
@@ -65,18 +73,13 @@ fn test_reference_dataset(dataset: &str, bounds: &[Bound], serial: bool) {
         .expect(&format!("Failed to parse {name:?}"));
 
         // Calculate the molecule's assembly index.
-        let pmode = if serial {
-            ParallelMode::None
-        } else {
-            ParallelMode::Always
-        };
         let (index, _, _) = index_search(
             &mol,
-            EnumerateMode::GrowErode,
-            CanonizeMode::TreeNauty,
-            pmode,
-            MemoizeMode::IndexCanon,
-            KernelMode::None,
+            enumerate_mode,
+            canonize_mode,
+            parallel_mode,
+            memoize_mode,
+            kernel_mode,
             bounds,
         );
 
@@ -98,113 +101,131 @@ fn test_reference_dataset(dataset: &str, bounds: &[Bound], serial: bool) {
     assert!(incorrect_mols.is_empty(), "{}", error_details);
 }
 
+/// Test enumeration modes individually without any search options.
+///
+/// This is very slow, so use gdb13_1201, the smallest dataset.
 #[test]
-fn gdb13_1201_naive() {
-    test_reference_dataset("gdb13_1201", &[], false);
+fn enumeration() {
+    for enumerate_mode in [EnumerateMode::Extend, EnumerateMode::GrowErode] {
+        test_reference_dataset(
+            "gdb13_1201",
+            enumerate_mode,
+            CanonizeMode::TreeNauty,
+            ParallelMode::None,
+            MemoizeMode::None,
+            KernelMode::None,
+            &[],
+        );
+    }
 }
 
+/// Test canonization modes individually without any search options.
+///
+/// This is very slow, so use gdb13_1201, the smallest dataset.
 #[test]
-fn gdb13_1201_logbound() {
-    test_reference_dataset("gdb13_1201", &[Bound::Log], false);
+fn canonization() {
+    for canonize_mode in [CanonizeMode::Nauty, CanonizeMode::TreeNauty] {
+        test_reference_dataset(
+            "gdb13_1201",
+            EnumerateMode::GrowErode,
+            canonize_mode,
+            ParallelMode::None,
+            MemoizeMode::None,
+            KernelMode::None,
+            &[],
+        );
+    }
 }
 
+/// Test memoization modes individually.
+///
+/// Note that memoization with canonized keys can use any canonization mode.
+/// Memoization does have some nontrivial interactions with parallelism, so we
+/// test with parallelism. It does not use bounds, so use gdb13_1201 for speed.
+///
+/// TODO: It's possible that gdb13_1201 is a bad test for memoization since the
+/// molecules may be so small that cached assembly states are never used again.
+/// But coconut_55 molecules, which would be large enough for memoization to be
+/// useful, are prohibitively slow without bounds.
 #[test]
-fn gdb13_1201_intbound() {
-    test_reference_dataset("gdb13_1201", &[Bound::Int], false);
+fn memoization() {
+    for (memoize_mode, canonize_mode) in [
+        (MemoizeMode::None, CanonizeMode::TreeNauty),
+        (MemoizeMode::FragsIndex, CanonizeMode::TreeNauty),
+        (MemoizeMode::CanonIndex, CanonizeMode::Nauty),
+        (MemoizeMode::CanonIndex, CanonizeMode::TreeNauty),
+    ] {
+        test_reference_dataset(
+            "gdb13_1201",
+            EnumerateMode::GrowErode,
+            canonize_mode,
+            ParallelMode::DepthOne,
+            memoize_mode,
+            KernelMode::None,
+            &[],
+        );
+    }
 }
 
+/// Test bounds individually.
+///
+/// The enumeration/canonization tests did not use bounds, so this tests one
+/// actual bound at a time. Bounds don't have any race conditions, so this test
+/// uses parallelism, but avoids any other search options.
 #[test]
-fn gdb13_1201_allbounds() {
-    let bounds = vec![Bound::Int, Bound::VecSimple, Bound::VecSmallFrags];
-    test_reference_dataset("gdb13_1201", &bounds, false);
+fn individual_bounds() {
+    for bound in [
+        Bound::Log,
+        Bound::Int,
+        Bound::VecSimple,
+        Bound::VecSmallFrags,
+    ] {
+        test_reference_dataset(
+            "checks",
+            EnumerateMode::GrowErode,
+            CanonizeMode::TreeNauty,
+            ParallelMode::DepthOne,
+            MemoizeMode::None,
+            KernelMode::None,
+            &[bound],
+        );
+    }
 }
 
+/// Test the application of all bounds simultaneously.
 #[test]
-fn gdb13_1201_naive_serial() {
-    test_reference_dataset("gdb13_1201", &[], true);
+fn all_bounds() {
+    test_reference_dataset(
+        "coconut_55",
+        EnumerateMode::GrowErode,
+        CanonizeMode::TreeNauty,
+        ParallelMode::DepthOne,
+        MemoizeMode::None,
+        KernelMode::None,
+        &[
+            Bound::Log,
+            Bound::Int,
+            Bound::VecSimple,
+            Bound::VecSmallFrags,
+        ],
+    );
 }
 
+/// Test the application of all bounds simultaneously with memoization.
 #[test]
-fn gdb13_1201_logbound_serial() {
-    test_reference_dataset("gdb13_1201", &[Bound::Log], true);
-}
-
-#[test]
-fn gdb13_1201_intbound_serial() {
-    test_reference_dataset("gdb13_1201", &[Bound::Int], true);
-}
-
-#[test]
-fn gdb13_1201_allbounds_serial() {
-    let bounds = [Bound::Int, Bound::VecSimple, Bound::VecSmallFrags];
-    test_reference_dataset("gdb13_1201", &bounds, true);
-}
-
-#[test]
-#[ignore = "expensive test"]
-fn gdb17_200_naive() {
-    test_reference_dataset("gdb17_200", &[], false);
-}
-
-#[test]
-fn gdb17_200_logbound() {
-    test_reference_dataset("gdb17_200", &[Bound::Log], false);
-}
-
-#[test]
-fn gdb17_200_intbound() {
-    test_reference_dataset("gdb17_200", &[Bound::Int], false);
-}
-
-#[test]
-fn gdb17_200_allbounds() {
-    let bounds = [Bound::Int, Bound::VecSimple, Bound::VecSmallFrags];
-    test_reference_dataset("gdb17_200", &bounds, false);
-}
-
-// #[test]
-// #[ignore = "really expensive test"]
-// fn checks_naive() {
-//     test_reference_dataset("checks", &vec![], false);
-// }
-
-#[test]
-fn checks_logbound() {
-    test_reference_dataset("checks", &[Bound::Log], false);
-}
-
-#[test]
-fn checks_intbound() {
-    test_reference_dataset("checks", &[Bound::Int], false);
-}
-
-#[test]
-fn checks_allbounds() {
-    let bounds = [Bound::Int, Bound::VecSimple, Bound::VecSmallFrags];
-    test_reference_dataset("checks", &bounds, false);
-}
-
-// #[test]
-// #[ignore = "really expensive test"]
-// fn coconut_55_naive() {
-//     test_reference_dataset("coconut_55", &vec![], false);
-// }
-//
-// #[test]
-// #[ignore = "really expensive test"]
-// fn coconut_55_logbound() {
-//     test_reference_dataset("coconut_55", &vec![Bound::Log], false);
-// }
-
-#[test]
-#[ignore = "expensive test"]
-fn coconut_55_intbound() {
-    test_reference_dataset("coconut_55", &[Bound::Int], false);
-}
-
-#[test]
-#[ignore = "expensive test"]
-fn coconut_55_allbounds() {
-    let bounds = [Bound::Int, Bound::VecSimple, Bound::VecSmallFrags];
-    test_reference_dataset("coconut_55", &bounds, false);
+fn memoize_bounds() {
+    test_reference_dataset(
+        "coconut_55",
+        EnumerateMode::GrowErode,
+        CanonizeMode::TreeNauty,
+        ParallelMode::DepthOne,
+        MemoizeMode::CanonIndex,
+        KernelMode::None,
+        &[
+            Bound::Log,
+            Bound::Int,
+            Bound::VecSimple,
+            Bound::VecSmallFrags,
+        ],
+    );
 }
