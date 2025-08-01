@@ -29,6 +29,7 @@
             glibc
             llvmPackages.libcxxStdenv
             rustPlatform.bindgenHook
+            perf-tools
           ];
           RUST_SRC_PATH=rustPlatform.rustLibSrc;
           LIBCLANG_PATH="${llvmPackages.libclang.lib}/lib";
