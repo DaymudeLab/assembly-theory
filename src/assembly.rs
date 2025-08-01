@@ -102,20 +102,15 @@ pub fn matches(
     canonize_mode: CanonizeMode,
 ) -> Vec<(BitSet, BitSet)> {
     // Enumerate all connected, non-induced subgraphs with at most |E|/2 edges
-    // and bin them into isomorphism classes using canonization. Store these
-    // subgraphs' canonical labels for later use in memoization (this way, we
-    // only have to compute them once).
+    // and bin them into isomorphism classes using canonization.
     let isomorphism_classes = DashMap::<Labeling, Vec<BitSet>>::new();
-    let subgraph_labels = DashMap::<BitSet, Labeling>::new();
     enumerate_subgraphs(mol, enumerate_mode)
         .par_iter()
         .for_each(|subgraph| {
-            let label = canonize(mol, subgraph, canonize_mode);
             isomorphism_classes
-                .entry(label.clone())
+                .entry(canonize(mol, subgraph, canonize_mode))
                 .and_modify(|bucket| bucket.push(subgraph.clone()))
                 .or_insert(vec![subgraph.clone()]);
-            subgraph_labels.insert(subgraph.clone(), label);
         });
 
     // In each isomorphism class, collect non-overlapping pairs of subgraphs.
