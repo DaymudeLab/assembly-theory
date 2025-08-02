@@ -100,18 +100,22 @@ pub fn matches(
     mol: &Molecule,
     enumerate_mode: EnumerateMode,
     canonize_mode: CanonizeMode,
+    parallel_mode: ParallelMode,
 ) -> Vec<(BitSet, BitSet)> {
     // Enumerate all connected, non-induced subgraphs with at most |E|/2 edges
     // and bin them into isomorphism classes using canonization.
     let isomorphism_classes = DashMap::<Labeling, Vec<BitSet>>::new();
-    enumerate_subgraphs(mol, enumerate_mode)
-        .par_iter()
-        .for_each(|subgraph| {
-            isomorphism_classes
-                .entry(canonize(mol, subgraph, canonize_mode))
-                .and_modify(|bucket| bucket.push(subgraph.clone()))
-                .or_insert(vec![subgraph.clone()]);
-        });
+    let bin_subgraph = |subgraph: &BitSet| {
+        isomorphism_classes
+            .entry(canonize(mol, subgraph, canonize_mode))
+            .and_modify(|bucket| bucket.push(subgraph.clone()))
+            .or_insert(vec![subgraph.clone()]);
+    };
+    if parallel_mode == ParallelMode::None {
+        enumerate_subgraphs(mol, enumerate_mode).iter().for_each(bin_subgraph);
+    } else {
+        enumerate_subgraphs(mol, enumerate_mode).par_iter().for_each(bin_subgraph);
+    }
 
     // In each isomorphism class, collect non-overlapping pairs of subgraphs.
     let mut matches = Vec::new();
@@ -381,7 +385,7 @@ pub fn index_search(
     }
 
     // Enumerate non-overlapping isomorphic subgraph pairs.
-    let matches = matches(mol, enumerate_mode, canonize_mode);
+    let matches = matches(mol, enumerate_mode, canonize_mode, parallel_mode);
 
     // Create memoization cache.
     let mut cache = Cache::new(memoize_mode, canonize_mode);

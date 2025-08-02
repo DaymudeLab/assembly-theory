@@ -110,12 +110,12 @@ pub fn bench_canonize(c: &mut Criterion) {
                             for _ in 0..iters {
                                 let start = Instant::now();
                                 let mut isomorphism_classes = HashMap::<_, Vec<BitSet>>::new();
-                                for subgraph in &subgraphs {
+                                subgraphs.iter().for_each(|subgraph| {
                                     isomorphism_classes
-                                        .entry(canonize(mol, &subgraph, *canonize_mode))
+                                        .entry(canonize(mol, subgraph, *canonize_mode))
                                         .and_modify(|bucket| bucket.push(subgraph.clone()))
                                         .or_insert(vec![subgraph.clone()]);
-                                }
+                                });
                                 total_time += start.elapsed();
                             }
                         }
@@ -162,7 +162,7 @@ pub fn bench_bounds(c: &mut Criterion) {
                         for mol in &mol_list {
                             // Precompute the molecule's matches and setup.
                             let matches =
-                                matches(mol, EnumerateMode::GrowErode, CanonizeMode::TreeNauty);
+                                matches(mol, EnumerateMode::GrowErode, CanonizeMode::TreeNauty, ParallelMode::DepthOne);
                             let mut init = BitSet::new();
                             init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
                             let edge_count = mol.graph().edge_count();
@@ -198,7 +198,7 @@ pub fn bench_bounds(c: &mut Criterion) {
     bench_group.finish();
 }
 
-/// Benchmark the search step of [`index_search`] using different\
+/// Benchmark the search step of [`index_search`] using different
 /// [`MemoizeMode`]s.
 ///
 /// This benchmark precomputes the enumeration and isomorphism steps using the
@@ -233,7 +233,7 @@ pub fn bench_memoize(c: &mut Criterion) {
                         for mol in &mol_list {
                             // Precompute the molecule's matches and setup.
                             let matches =
-                                matches(mol, EnumerateMode::GrowErode, CanonizeMode::TreeNauty);
+                                matches(mol, EnumerateMode::GrowErode, CanonizeMode::TreeNauty, ParallelMode::DepthOne);
                             let mut init = BitSet::new();
                             init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
                             let edge_count = mol.graph().edge_count();
