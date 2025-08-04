@@ -323,7 +323,7 @@ pub fn recurse_index_search(
                 sub_clone,
                 {
                     let mut clone = removal_order.clone();
-                    clone.push(i);
+                    clone.push(v);
                     clone
                 },
                 &fragments,
