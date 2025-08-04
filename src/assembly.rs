@@ -19,25 +19,25 @@
 //! ```
 
 use std::{
-    collections::HashMap,
-    sync::{
+    collections::HashMap, sync::{
         atomic::{AtomicUsize, Ordering::Relaxed},
         Arc,
-    },
+    }
 };
 
 use bit_set::BitSet;
 use clap::ValueEnum;
-use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
     bounds::{bound_exceeded, Bound},
     canonize::{canonize, CanonizeMode, Labeling},
     enumerate::{enumerate_subgraphs, EnumerateMode},
-    kernels::KernelMode,
+    kernels::{KernelMode, deletion_kernel, inclusion_kernel},
     memoize::{Cache, MemoizeMode},
     molecule::Molecule,
     utils::connected_components_under_edges,
+    reductions::CompatGraph,
 };
 
 /// Parallelization strategy for the recursive search phase.
@@ -198,16 +198,17 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Opti
 /// Inputs:
 /// - `mol`: The molecule whose assembly index is being calculated.
 /// - `matches`: The remaining non-overlapping isomorphic subgraph pairs.
+/// - `graph`: If clique is enabled, the graph of compatible isomorphic subgraph paris.
+/// - `subgraph`: A bitset with length of matches. Has a 1 for every match to be searched in this state.
 /// - `removal_order`: TODO
 /// - `state`: The current assembly state, i.e., a list of fragments.
 /// - `state_index`: This assembly state's upper bound on the assembly index,
 ///   i.e., edges(mol) - 1 - [edges(subgraphs removed) - #(subgraphs removed)].
 /// - `best_index`: The smallest assembly index for all assembly states so far.
-/// - `largest_remove`: An upper bound on the size of fragments that can be
-///   removed from this or any descendant assembly state.
 /// - `bounds`: The list of bounding strategies to apply.
 /// - `cache`: TODO
 /// - `parallel_mode`: The parallelism mode for this state's match iteration.
+/// - `kernel_mode`: The kernelization mode for this state.
 ///
 /// Returns, from this assembly state and any of its descendents:
 /// - `usize`: An updated upper bound on the assembly index. (Note: If this
@@ -217,21 +218,37 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Opti
 #[allow(clippy::too_many_arguments)]
 pub fn recurse_index_search(
     mol: &Molecule,
-    matches: &[(BitSet, BitSet)],
+    matches: &Vec<(BitSet, BitSet)>,
+    graph: &Option<CompatGraph>,
+    mut subgraph: BitSet,
     removal_order: Vec<usize>,
     state: &[BitSet],
     state_index: usize,
     best_index: Arc<AtomicUsize>,
-    largest_remove: usize,
     bounds: &[Bound],
     cache: &mut Cache,
     parallel_mode: ParallelMode,
+    kernel_mode: KernelMode,
 ) -> (usize, usize) {
+    // An upper bound on the size of fragments that can be
+    // removed from this or any descendant assembly state.
+    let largest_remove = {
+        if let Some(v) = subgraph.iter().next() {
+            matches[v].0.len()
+        }
+        else {
+            return (state_index, 1);
+        }
+    };
+
     // If any bounds would prune this assembly state or if memoization is
     // enabled and this assembly state is preempted by the cached state, halt.
     if bound_exceeded(
         mol,
+        matches,
+        graph,
         state,
+        &subgraph,
         state_index,
         best_index.load(Relaxed),
         largest_remove,
@@ -241,6 +258,20 @@ pub fn recurse_index_search(
         return (state_index, 1);
     }
 
+    // Apply kernels
+    let mut must_include = matches.len();
+    if kernel_mode != KernelMode::None {
+        let g = graph.as_ref().unwrap();
+
+        // Deletion kernel
+        // Returns a subgraph without nodes that never occur in an optimal solution.
+        subgraph = deletion_kernel(matches, g, subgraph);
+        
+        // Inclusion kernel.
+        // must_include is the first match in the matches list that will be included in an optimal solution.
+        must_include = inclusion_kernel(matches, g, &subgraph);
+    }
+
     // Keep track of the best assembly index found in any of this assembly
     // state's children and the number of states searched, including this one.
     let best_child_index = AtomicUsize::from(state_index);
@@ -248,7 +279,8 @@ pub fn recurse_index_search(
 
     // Define a closure that handles recursing to a new assembly state based on
     // the given (enumerated) pair of non-overlapping isomorphic subgraphs.
-    let recurse_on_match = |i: usize, h1: &BitSet, h2: &BitSet| {
+    let recurse_on_match = |v: usize| {
+        let (h1, h2) = &matches[v];
         if let Some(fragments) = fragments(mol, state, h1, h2) {
             // If using depth-one parallelism, all descendant states should be
             // computed serially.
@@ -258,22 +290,49 @@ pub fn recurse_index_search(
                 parallel_mode
             };
 
+            // If kernelizing once, do not kernelize again. If kernelizing at depth-one,
+            // kernelize once more at the beginning of each descendent.
+            let new_kernel = if kernel_mode == KernelMode::Once {
+                KernelMode::None
+            } else if kernel_mode == KernelMode::DepthOne {
+                KernelMode::Once
+            } else {
+                kernel_mode
+            };
+
+            // Update subgraph
+            // If using CompatGraph, only consider the neighborhood of the node removed.
+            // Otherwise, only consider the matches that occur after the removed match in the list.
+            let mut sub_clone;
+            if let Some(g) = graph {
+                sub_clone = subgraph.clone();
+                sub_clone.intersect_with(&g.forward_neighbors(v, &subgraph));
+            }
+            else {
+                sub_clone = BitSet::with_capacity(matches.len());
+                for j in (v+1)..matches.len() {
+                    sub_clone.insert(j);
+                }
+            }
+
             // Recurse using the remaining matches and updated fragments.
             let (child_index, child_states_searched) = recurse_index_search(
                 mol,
-                &matches[i + 1..],
+                matches,
+                graph,
+                sub_clone,
                 {
                     let mut clone = removal_order.clone();
-                    clone.push(i);
+                    clone.push(v);
                     clone
                 },
                 &fragments,
                 state_index - h1.len() + 1,
                 best_index.clone(),
-                h1.len(),
                 bounds,
                 &mut cache.clone(),
                 new_parallel,
+                new_kernel,
             );
 
             // Update the best assembly indices (across children states and
@@ -285,16 +344,20 @@ pub fn recurse_index_search(
     };
 
     // Use the iterator type corresponding to the specified parallelism mode.
+    // Only search on nodes with v <= must_include since any searches after that would
+    // not use must_include.
     if parallel_mode == ParallelMode::None {
-        matches
+        subgraph
             .iter()
-            .enumerate()
-            .for_each(|(i, (h1, h2))| recurse_on_match(i, h1, h2));
+            .filter(|v| *v <= must_include)
+            .for_each(|v| recurse_on_match(v));
     } else {
-        matches
+        let _ = subgraph
+            .iter()
+            .filter(|v| *v <= must_include)
+            .collect::<Vec<usize>>()
             .par_iter()
-            .enumerate()
-            .for_each(|(i, (h1, h2))| recurse_on_match(i, h1, h2));
+            .for_each(|v| recurse_on_match(*v));
     }
 
     (
@@ -374,11 +437,9 @@ pub fn index_search(
     memoize_mode: MemoizeMode,
     kernel_mode: KernelMode,
     bounds: &[Bound],
+    clique: bool,
 ) -> (u32, u32, usize) {
     // Catch not-yet-implemented modes.
-    if kernel_mode != KernelMode::None {
-        panic!("The chosen --kernel mode is not implemented yet!")
-    }
 
     // Enumerate non-overlapping isomorphic subgraph pairs.
     let matches = matches(mol, enumerate_mode, canonize_mode);
@@ -386,9 +447,23 @@ pub fn index_search(
     // Create memoization cache.
     let mut cache = Cache::new(memoize_mode, canonize_mode);
 
+    let graph = {
+        if clique {
+            Some(CompatGraph::new(&matches))
+        }
+        else {
+            None
+        }
+    };
+
     // Initialize the first fragment as the entire graph.
     let mut init = BitSet::new();
     init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
+
+    let mut subgraph = BitSet::with_capacity(matches.len());
+    for i in 0..matches.len() {
+        subgraph.insert(i);
+    }
 
     // Search for the shortest assembly pathway recursively.
     let edge_count = mol.graph().edge_count();
@@ -396,14 +471,16 @@ pub fn index_search(
     let (index, states_searched) = recurse_index_search(
         mol,
         &matches,
+        &graph,
+        subgraph,
         Vec::new(),
         &[init],
         edge_count - 1,
         best_index,
-        edge_count,
         bounds,
         &mut cache,
         parallel_mode,
+        kernel_mode,
     );
 
     (index as u32, matches.len() as u32, states_searched)
@@ -437,6 +514,7 @@ pub fn index(mol: &Molecule) -> u32 {
         MemoizeMode::CanonIndex,
         KernelMode::None,
         &[Bound::Int, Bound::VecSimple, Bound::VecSmallFrags],
+        false,
     )
     .0
 }

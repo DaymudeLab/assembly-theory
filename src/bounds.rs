@@ -14,7 +14,10 @@
 use bit_set::BitSet;
 use clap::ValueEnum;
 
-use crate::molecule::{Bond, Element, Molecule};
+use crate::{
+    molecule::{Bond, Element, Molecule},
+    reductions::CompatGraph,
+};
 
 /// Type of upper bound on the "savings" possible from an assembly state.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
@@ -66,7 +69,10 @@ struct EdgeType {
 /// Returns `true` iff any of the given bounds would prune this assembly state.
 pub fn bound_exceeded(
     mol: &Molecule,
+    matches: &Vec<(BitSet, BitSet)>,
+    graph: &Option<CompatGraph>,
     fragments: &[BitSet],
+    subgraph: &BitSet,
     state_index: usize,
     best_index: usize,
     largest_remove: usize,
@@ -82,8 +88,22 @@ pub fn bound_exceeded(
             Bound::VecSmallFrags => {
                 state_index - vec_small_frags_bound(fragments, largest_remove, mol) >= best_index
             }
-            _ => {
-                panic!("One of the chosen bounds is not implemented yet!")
+            Bound::CliqueBudget => best_index + clique_budget_bound(matches, subgraph, fragments) <= state_index,
+            Bound::CoverNoSort => {
+                if let Some(g) = graph {
+                    best_index + cover_bound(matches, g, subgraph, false) <= state_index
+                }
+                else {
+                    false
+                }
+            }
+            Bound::CoverSort => {
+                if let Some(g) = graph {
+                    best_index + cover_bound(matches, g, subgraph, true) <= state_index
+                }
+                else {
+                    false
+                }
             }
         };
         if exceeds {
@@ -238,4 +258,140 @@ fn vec_small_frags_bound(fragments: &[BitSet], m: usize, mol: &Molecule) -> usiz
 
     s - (z + size_two_types.len() + size_two_fragments.len())
         - ((sl - z) as f32 / m as f32).ceil() as usize
+}
+
+pub fn clique_budget_bound(matches: &Vec<(BitSet, BitSet)>, subgraph: &BitSet, fragments: &[BitSet]) -> usize {
+    let total_bonds = fragments.iter().map(|x| x.len()).sum::<usize>();
+    let mut bound = 0;
+    let sizes = {
+        let mut vec = vec![];
+        let mut prev = 0;
+        for s in subgraph.iter().map(|v| matches[v].0.len()) {
+            if s != prev {
+                vec.push(s);
+                prev = s;
+            }
+        }
+
+        vec
+    };
+    
+    for i in sizes {
+        let mut bound_temp = 0;
+        let mut has_bonds = fragments.len();
+        let mut num_bonds: Vec<usize> = fragments.iter().map(|x| x.len()).collect();
+        let mut smallest_remove = i;
+
+        for v in subgraph.iter() {
+            if has_bonds == 0 {
+                break;
+            }
+            if matches[v].0.len() > i {
+                continue;
+            }
+
+
+            let dup = &matches[v];
+            let bond = dup.1.iter().next().unwrap();
+            let mut j = 0;
+            while !fragments[j].contains(bond) {
+                j += 1;
+            }
+
+            if num_bonds[j] > 0 {
+                let remove = std::cmp::min(dup.0.len(), num_bonds[j]);
+                bound_temp += 1;
+                num_bonds[j] -= remove;
+                smallest_remove = std::cmp::min(smallest_remove, remove);
+
+                if num_bonds[j] == 0 {
+                    has_bonds -= 1;
+                }
+            }
+        }
+
+        let leftover = num_bonds.iter().sum::<usize>();
+        let log = {
+            if leftover > 0 {
+                0
+            }
+            else {
+                (smallest_remove as f32).log2().ceil() as usize
+            }
+        };
+        bound = std::cmp::max(bound, total_bonds - bound_temp - leftover - log);
+    }
+
+    bound
+}
+
+pub fn cover_bound(matches: &Vec<(BitSet, BitSet)>, graph: &CompatGraph, subgraph: &BitSet, sort: bool) -> usize {
+    // Sort vertices
+    if sort {
+        let mut vertices: Vec<(usize, usize)> = Vec::with_capacity(subgraph.len());
+        for v in subgraph {
+            vertices.push((v, graph.degree(v, subgraph)));
+        }   
+        vertices.sort_by(|a, b| b.1.cmp(&a.1));
+        cover_bound_helper(matches, graph, subgraph, vertices.iter().map(|(v, _)| *v))
+    }
+    else {
+        let vertices = (0..graph.len()).rev().filter(|v| subgraph.contains(*v));
+        cover_bound_helper(matches, graph, subgraph, vertices)
+    }
+}
+
+fn cover_bound_helper(matches: &Vec<(BitSet, BitSet)>, graph: &CompatGraph, subgraph: &BitSet, iter: impl Iterator<Item = usize>) -> usize {
+    let mut colors: Vec<Option<Vec<usize>>> = vec![None; graph.len()];
+    let mut col_weights = vec![];
+    let mut num_col = 0;
+
+    for v in iter {
+        let mut v_col = Vec::new();
+        let mut used = vec![0; num_col];
+
+        // Find colors used in neighborhood of v
+        for u in subgraph.intersection(graph.compatible_with(v)) {
+            let Some(u_col) = &colors[u] else {
+                continue;
+            };
+
+            for c in u_col {
+                used[*c] = 1;
+            }
+        }
+
+        let mut total_weight = 0;
+        let v_val = matches[v].0.len() - 1;
+        // Find colors to give to v
+        for c in 0..num_col {
+            if used[c] == 1 {
+                continue;
+            }
+
+            v_col.push(c);
+            total_weight += col_weights[c];
+
+            if total_weight >= v_val {
+                break;
+            }
+        }
+
+        if total_weight == 0 {
+            v_col.push(num_col);
+            col_weights.push(v_val);
+            num_col += 1
+        }
+        else if total_weight < v_val {
+            let mut k = num_col - 1;
+            while used[k] == 1 {
+                k -= 1
+            }
+            col_weights[k] += v_val - total_weight
+        }
+
+        colors[v] = Some(v_col);
+    };
+
+    col_weights.iter().sum()
 }
