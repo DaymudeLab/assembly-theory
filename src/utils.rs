@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 
 use bit_set::BitSet;
 use petgraph::{
@@ -71,11 +71,11 @@ where
     Ty: EdgeType,
     Ix: IndexType,
 {
-    let mut node_set = HashSet::new();
+    let mut node_set = BitSet::with_capacity(g.node_count());
     for ix in s.into_iter().map(|ix| EdgeIndex::new(ix)) {
         let (src, dst) = g.edge_endpoints(ix).expect("malformed bitset!");
-        node_set.insert(src);
-        node_set.insert(dst);
+        node_set.insert(src.index());
+        node_set.insert(dst.index());
     }
     node_set.len()
 }
