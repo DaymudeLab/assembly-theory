@@ -161,8 +161,12 @@ pub fn bench_bounds(c: &mut Criterion) {
                         let mut total_time = Duration::new(0, 0);
                         for mol in &mol_list {
                             // Precompute the molecule's matches and setup.
-                            let matches =
-                                matches(mol, EnumerateMode::GrowErode, CanonizeMode::TreeNauty, ParallelMode::DepthOne);
+                            let matches = matches(
+                                mol,
+                                EnumerateMode::GrowErode,
+                                CanonizeMode::TreeNauty,
+                                ParallelMode::DepthOne,
+                            );
                             let mut init = BitSet::new();
                             init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
                             let edge_count = mol.graph().edge_count();
@@ -232,8 +236,12 @@ pub fn bench_memoize(c: &mut Criterion) {
                         let mut total_time = Duration::new(0, 0);
                         for mol in &mol_list {
                             // Precompute the molecule's matches and setup.
-                            let matches =
-                                matches(mol, EnumerateMode::GrowErode, CanonizeMode::TreeNauty, ParallelMode::DepthOne);
+                            let matches = matches(
+                                mol,
+                                EnumerateMode::GrowErode,
+                                CanonizeMode::TreeNauty,
+                                ParallelMode::DepthOne,
+                            );
                             let mut init = BitSet::new();
                             init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
                             let edge_count = mol.graph().edge_count();

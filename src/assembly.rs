@@ -112,9 +112,13 @@ pub fn matches(
             .or_insert(vec![subgraph.clone()]);
     };
     if parallel_mode == ParallelMode::None {
-        enumerate_subgraphs(mol, enumerate_mode).iter().for_each(bin_subgraph);
+        enumerate_subgraphs(mol, enumerate_mode)
+            .iter()
+            .for_each(bin_subgraph);
     } else {
-        enumerate_subgraphs(mol, enumerate_mode).par_iter().for_each(bin_subgraph);
+        enumerate_subgraphs(mol, enumerate_mode)
+            .par_iter()
+            .for_each(bin_subgraph);
     }
 
     // In each isomorphism class, collect non-overlapping pairs of subgraphs.
