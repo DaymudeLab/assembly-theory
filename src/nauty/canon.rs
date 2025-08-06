@@ -51,7 +51,12 @@ where
                 .then(self.e.cmp(&other.e))
                 .then(self.g.cmp(&other.g))
                 .then(self.dense.nodes.ptn.partial_cmp(&other.dense.nodes.ptn)?)
-                .then(self.dense.nodes.weights.partial_cmp(&other.dense.nodes.weights)?),
+                .then(
+                    self.dense
+                        .nodes
+                        .weights
+                        .partial_cmp(&other.dense.nodes.weights)?,
+                ),
         )
     }
 }

@@ -6,7 +6,7 @@ use nauty_Traces_sys::{
 };
 use petgraph::{EdgeType, Graph};
 
-use crate::nauty::{canon::bit_adj_to_graph, dense::Nodes, dense::DenseGraph};
+use crate::nauty::{canon::bit_adj_to_graph, dense::DenseGraph, dense::Nodes};
 
 #[repr(C)]
 #[derive(Debug)]
