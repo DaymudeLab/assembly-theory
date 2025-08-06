@@ -4,7 +4,6 @@ use std::{collections::HashMap, hash::Hash, iter, mem};
 
 use bit_set::BitSet;
 use clap::ValueEnum;
-use graph_canon::CanonLabeling;
 use petgraph::{
     graph::{EdgeIndex, Graph, NodeIndex},
     Undirected,
@@ -12,6 +11,7 @@ use petgraph::{
 
 use crate::{
     molecule::{AtomOrBond, Index, Molecule},
+    nauty::CanonLabeling,
     utils::node_count_under_edge_mask,
 };
 

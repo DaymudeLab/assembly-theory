@@ -53,6 +53,7 @@ pub mod enumerate;
 pub mod kernels;
 pub mod memoize;
 mod vf3;
+mod nauty;
 
 // Python wrapper.
 #[cfg(feature = "python")]
