@@ -20,7 +20,6 @@
             rustfmt
             pre-commit
             rustPackages.clippy
-            git-lfs
             libclang
             clang
             nix-ld
