@@ -18,6 +18,8 @@ petgraph = "0.6.5"
 pyo3 = { version = "0.24.1", features = ["abi3-py310", "extension-module"]}
 rayon = "1.10.0"
 dashmap = "6.1.0"
+nauty-Traces-sys = "0.10.0"
+bitvec = "1.0.1"
 
 [dev-dependencies]
 criterion = "0.3"
