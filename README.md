@@ -127,6 +127,7 @@ Want to contribute your own code?
 - Familiarize yourself with the [Rust API Guidelines](https://github.com/DaymudeLab/assembly-theory/compare) and overall architecture of `assembly-theory`.
 - Development team members should work in individual feature branches.
 External contributors should work in repository forks.
+- Commit messages should follow [conventional commits](https://www.conventionalcommits.org).
 - Before opening a pull request onto `main`, make sure you rebase onto `main`, run `cargo fmt`, and resolve any issues raised by `cargo clippy`.
 - Open a [new pull request](https://github.com/DaymudeLab/assembly-theory/compare), provide a descriptive list of your changes (with references to any issues your PR resolves), and assign one of [@AgentElement](https://github.com/AgentElement), [@jdaymude](https://github.com/jdaymude), or [@colemathis](https://github.com/colemathis) as a reviewer. 
 Your PR will not be reviewed unless it passes all GitHub Actions (compilation, formatting, tests, etc.).
