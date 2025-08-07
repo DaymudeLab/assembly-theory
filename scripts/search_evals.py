@@ -8,6 +8,7 @@ import re
 parser = argparse.ArgumentParser()
 parser.add_argument("directory", help="Path to directory to be benchmarked")
 parser.add_argument("--progress", action='store_true', help="Print progress of benchmark")
+parser.add_argument("--out", help="Directory to place output files")
 
 args = parser.parse_args()
 
@@ -44,6 +45,8 @@ for (i, file) in enumerate(os.listdir(os.fsencode(dir))):
             kernel_str = 'none',
             bound_strs = {'int', 'vec-simple', 'vec-small-frags'}
         )
+        if dup > 2500:
+            continue
         num_dups.append(dup)
         states_searched.append(state)
     
@@ -55,7 +58,13 @@ plt.scatter(x=num_dups, y=states_searched)
 plt.xlabel("Num duplicatable matches")
 plt.ylabel("States Searched")
 
+# Save eval data and figure
 regex = re.compile('/?([^/]*)/$')
 data_dir = regex.search(dir).group(1)
-plt.savefig(data_dir + ".png")
+out_dir = args.out if args.out else "./"
+if out_dir[-1] != "/":
+    out_dir += "/"
+
+os.makedirs(out_dir, exist_ok=True)
+plt.savefig(out_dir + data_dir + ".svg", format="svg")
 
