@@ -54,7 +54,7 @@ jobs:
           set -e
           python3 -m venv .venv
           source .venv/bin/activate
-          pip install assembly-theory --find-links dist --force-reinstall
+          pip install assembly-theory --no-index --find-links dist --force-reinstall
           pip install pytest
           pytest
 
@@ -97,7 +97,7 @@ jobs:
             pip3 install -U pip pytest
           run: |
             set -e
-            pip3 install assembly-theory --find-links dist --force-reinstall
+            pip3 install assembly-theory --no-index --find-links dist --force-reinstall
             pytest
 
   macos:
@@ -134,7 +134,7 @@ jobs:
           set -e
           python3 -m venv .venv
           source .venv/bin/activate
-          pip install assembly-theory --find-links dist --force-reinstall
+          pip install assembly-theory --no-index --find-links dist --force-reinstall
           pip install pytest
           pytest
 
