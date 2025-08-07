@@ -15,8 +15,6 @@ args = parser.parse_args()
 dir = args.directory
 if dir[-1] != '/':
     dir += '/'
-num_dups = []
-states_searched = []
 
 # Find number of files to be benchmarked
 total = 0
@@ -28,6 +26,9 @@ if args.progress:
             total += 1
 
 # Loop through mol files and compute MA
+indices = []
+num_dups = []
+states_searched = []
 for (i, file) in enumerate(os.listdir(os.fsencode(dir))):
     filename = os.fsdecode(file)
     
@@ -36,7 +37,7 @@ for (i, file) in enumerate(os.listdir(os.fsencode(dir))):
 
     with open(dir + filename) as mol_file:
         mol = mol_file.read()
-        (_, dup, state) = at.index_search(
+        (ma, dup, state) = at.index_search(
             mol,
             enumerate_str = 'grow-erode',
             canonize_str = 'tree-nauty',
@@ -45,8 +46,7 @@ for (i, file) in enumerate(os.listdir(os.fsencode(dir))):
             kernel_str = 'none',
             bound_strs = {'int', 'vec-simple', 'vec-small-frags'}
         )
-        if dup > 2500:
-            continue
+        indices.append(ma)
         num_dups.append(dup)
         states_searched.append(state)
     
@@ -58,13 +58,26 @@ plt.scatter(x=num_dups, y=states_searched)
 plt.xlabel("Num duplicatable matches")
 plt.ylabel("States Searched")
 
-# Save eval data and figure
+# Save eval figure
 regex = re.compile('/?([^/]*)/$')
-data_dir = regex.search(dir).group(1)
+data_name = regex.search(dir).group(1)
 out_dir = args.out if args.out else "./"
 if out_dir[-1] != "/":
     out_dir += "/"
 
 os.makedirs(out_dir, exist_ok=True)
-plt.savefig(out_dir + data_dir + ".svg", format="svg")
+plt.savefig(out_dir + data_name + ".svg", format="svg")
 
+# Save eval data
+with open(out_dir + data_name + ".out", 'w') as f:
+    f.write("Assembly indices\n")
+    for x in indices:
+        f.write(str(x) + '\n')
+
+    f.write("Num duplicate matches\n")
+    for x in num_dups:
+        f.write(str(x) + '\n')
+    
+    f.write("States Searched\n")
+    for x in states_searched:
+        f.write(str(x) + '\n')
