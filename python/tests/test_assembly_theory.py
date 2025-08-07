@@ -71,20 +71,14 @@ def test_index_search():
             "none",  # Disable parallelism for deterministic states_searched.
             "none",
             "none",
-            set(["int", "vec-simple", "vec-small-frags"]))
+            ["int", "vec-simple", "vec-small-frags"])
 
     assert (index, num_matches, states_searched) == (6, 466, 2562)
 
 
 def test_index_search_bad_molblock():
     with pytest.raises(OSError) as e:
-        at.index_search("This string is not the contents of a .mol file.",
-                        "grow-erode",
-                        "tree-nauty",
-                        "none",
-                        "none",
-                        "none",
-                        set(["int", "vec-simple", "vec-small-frags"]))
+        at.index_search("This string is not the contents of a .mol file.")
 
     assert e.type is OSError
 
@@ -94,13 +88,7 @@ def test_index_search_bad_enumerate():
         mol_block = f.read()
 
     with pytest.raises(ValueError) as e:
-        at.index_search(mol_block,
-                        "invalid-mode",
-                        "tree-nauty",
-                        "none",
-                        "none",
-                        "none",
-                        set(["int", "vec-simple", "vec-small-frags"]))
+        at.index_search(mol_block, enumerate_str="invalid-mode")
 
     assert e.type is ValueError and "Invalid enumeration" in str(e.value)
 
@@ -110,13 +98,7 @@ def test_index_search_bad_canonize():
         mol_block = f.read()
 
     with pytest.raises(ValueError) as e:
-        at.index_search(mol_block,
-                        "grow-erode",
-                        "invalid-mode",
-                        "none",
-                        "none",
-                        "none",
-                        set(["int", "vec-simple", "vec-small-frags"]))
+        at.index_search(mol_block, canonize_str="invalid-mode")
 
     assert e.type is ValueError and "Invalid canonization" in str(e.value)
 
@@ -126,13 +108,7 @@ def test_index_search_bad_parallel():
         mol_block = f.read()
 
     with pytest.raises(ValueError) as e:
-        at.index_search(mol_block,
-                        "grow-erode",
-                        "tree-nauty",
-                        "invalid-mode",
-                        "none",
-                        "none",
-                        set(["int", "vec-simple", "vec-small-frags"]))
+        at.index_search(mol_block, parallel_str="invalid-mode")
 
     assert e.type is ValueError and "Invalid parallelization" in str(e.value)
 
@@ -142,13 +118,7 @@ def test_index_search_bad_memoize():
         mol_block = f.read()
 
     with pytest.raises(ValueError) as e:
-        at.index_search(mol_block,
-                        "grow-erode",
-                        "tree-nauty",
-                        "none",
-                        "invalid-mode",
-                        "none",
-                        set(["int", "vec-simple", "vec-small-frags"]))
+        at.index_search(mol_block, memoize_str="invalid-mode")
 
     assert e.type is ValueError and "Invalid memoization" in str(e.value)
 
@@ -158,13 +128,7 @@ def test_index_search_bad_kernel():
         mol_block = f.read()
 
     with pytest.raises(ValueError) as e:
-        at.index_search(mol_block,
-                        "grow-erode",
-                        "tree-nauty",
-                        "none",
-                        "none",
-                        "invalid-mode",
-                        set(["int", "vec-simple", "vec-small-frags"]))
+        at.index_search(mol_block, kernel_str="invalid-mode")
 
     assert e.type is ValueError and "Invalid kernelization" in str(e.value)
 
@@ -174,12 +138,6 @@ def test_index_search_bad_bound():
         mol_block = f.read()
 
     with pytest.raises(ValueError) as e:
-        at.index_search(mol_block,
-                        "grow-erode",
-                        "tree-nauty",
-                        "none",
-                        "none",
-                        "none",
-                        set(["int", "invalid-bound"]))
+        at.index_search(mol_block, bound_strs=["int", "invalid-bound"])
 
     assert e.type is ValueError and "Invalid bound" in str(e.value)
