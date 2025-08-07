@@ -5,7 +5,7 @@ import argparse
 import re
 
 # Function to run benchmark
-def run_bench(indices, num_dups, states_searched):
+def run_bench(dir, indices, num_dups, states_searched):
     if dir[-1] != '/':
         dir += '/'
 
@@ -19,9 +19,6 @@ def run_bench(indices, num_dups, states_searched):
                 total += 1
 
     # Loop through mol files and compute MA
-    indices = []
-    num_dups = []
-    states_searched = []
     for (i, file) in enumerate(os.listdir(os.fsencode(dir))):
         filename = os.fsdecode(file)
         
@@ -77,19 +74,42 @@ parser = argparse.ArgumentParser()
 parser.add_argument("directory", help="Path to directory to be benchmarked or file to be read")
 parser.add_argument("--progress", action='store_true', help="Print progress of benchmark")
 parser.add_argument("--out", help="Directory to place output files")
+parser.add_argument("--name", help="Evaluation name")
 
+# Parse arguments
 args = parser.parse_args()
 dir = args.directory
 
+reading = dir[-4:] == ".out"
+
+out_dir = args.out if args.out else "./"
+if out_dir[-1] != "/":
+    out_dir += "/"
+os.makedirs(out_dir, exist_ok=True)
+
+data_name = ""
+if args.name:
+    # Data name is provided by user
+    data_name = args.name
+else:
+    # Get data name from benchmark directory name
+    if reading:
+        regex = re.compile("/([^/]*)\\.out$")
+    else:
+        regex = re.compile('/?([^/]*)/$')
+    data_name = regex.search(dir).group(1)
+
+out_file = out_dir + data_name
+
+# Fill lists of molecule assemlby info
 indices = []
 num_dups = []
 states_searched = []
-reading = dir[-4:] == ".out"
 
 if reading:
     read_from_file(dir, indices, num_dups, states_searched)
 else:
-    run_bench(indices, num_dups, states_searched)
+    run_bench(dir, indices, num_dups, states_searched)
 
 # Plotting
 plt.scatter(x=num_dups, y=states_searched)
@@ -97,22 +117,11 @@ plt.xlabel("Num duplicatable matches")
 plt.ylabel("States Searched")
 
 # Save eval figure
-out_dir = args.out if args.out else "./"
-if out_dir[-1] != "/":
-    out_dir += "/"
-
-if reading:
-    regex = re.compile("/([^/]*)\\.out$")
-else:
-    regex = re.compile('/?([^/]*)/$')
-data_name = regex.search(dir).group(1)
-
-os.makedirs(out_dir, exist_ok=True)
-plt.savefig(out_dir + data_name + ".svg", format="svg")
+plt.savefig(out_file + ".svg", format="svg")
 
 # Save eval data if benchmarking
 if not reading:
-    with open(out_dir + data_name + ".out", 'w') as f:
+    with open(out_file + ".out", 'w') as f:
         f.write("Assembly indices\n")
         for x in indices:
             f.write(str(x) + '\n')
