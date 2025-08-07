@@ -71,7 +71,7 @@ def test_index_search():
             "none",  # Disable parallelism for deterministic states_searched.
             "none",
             "none",
-            set(["int", "vec-simple", "vec-small-frags"]))
+            ["int", "vec-simple", "vec-small-frags"])
 
     assert (index, num_matches, states_searched) == (6, 466, 2562)
 
@@ -84,7 +84,7 @@ def test_index_search_bad_molblock():
                         "none",
                         "none",
                         "none",
-                        set(["int", "vec-simple", "vec-small-frags"]))
+                        ["int", "vec-simple", "vec-small-frags"])
 
     assert e.type is OSError
 
@@ -100,7 +100,7 @@ def test_index_search_bad_enumerate():
                         "none",
                         "none",
                         "none",
-                        set(["int", "vec-simple", "vec-small-frags"]))
+                        ["int", "vec-simple", "vec-small-frags"])
 
     assert e.type is ValueError and "Invalid enumeration" in str(e.value)
 
@@ -116,7 +116,7 @@ def test_index_search_bad_canonize():
                         "none",
                         "none",
                         "none",
-                        set(["int", "vec-simple", "vec-small-frags"]))
+                        ["int", "vec-simple", "vec-small-frags"])
 
     assert e.type is ValueError and "Invalid canonization" in str(e.value)
 
@@ -132,7 +132,7 @@ def test_index_search_bad_parallel():
                         "invalid-mode",
                         "none",
                         "none",
-                        set(["int", "vec-simple", "vec-small-frags"]))
+                        ["int", "vec-simple", "vec-small-frags"])
 
     assert e.type is ValueError and "Invalid parallelization" in str(e.value)
 
@@ -148,7 +148,7 @@ def test_index_search_bad_memoize():
                         "none",
                         "invalid-mode",
                         "none",
-                        set(["int", "vec-simple", "vec-small-frags"]))
+                        ["int", "vec-simple", "vec-small-frags"])
 
     assert e.type is ValueError and "Invalid memoization" in str(e.value)
 
@@ -164,7 +164,7 @@ def test_index_search_bad_kernel():
                         "none",
                         "none",
                         "invalid-mode",
-                        set(["int", "vec-simple", "vec-small-frags"]))
+                        ["int", "vec-simple", "vec-small-frags"])
 
     assert e.type is ValueError and "Invalid kernelization" in str(e.value)
 
@@ -180,6 +180,6 @@ def test_index_search_bad_bound():
                         "none",
                         "none",
                         "none",
-                        set(["int", "invalid-bound"]))
+                        ["int", "invalid-bound"])
 
     assert e.type is ValueError and "Invalid bound" in str(e.value)

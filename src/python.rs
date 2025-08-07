@@ -23,7 +23,7 @@
 //! at.index(mol_block)  # 6
 //! ```
 
-use std::{collections::HashSet, str::FromStr};
+use std::str::FromStr;
 
 use pyo3::{
     exceptions::{PyOSError, PyValueError},
@@ -212,9 +212,9 @@ impl FromStr for PyBound {
     }
 }
 
-/// Converts a `HashSet<String>` of bound strings from Python into a
-/// `Vec<PyBound>`, raising an error if any bound string is invalid.
-fn process_bound_strs(bound_strs: HashSet<String>) -> PyResult<Vec<PyBound>> {
+/// Converts a `Vec<String>` of bound Python strings into a `Vec<PyBound>`,
+/// raising an error if any bound string is invalid.
+fn process_bound_strs(bound_strs: Vec<String>) -> PyResult<Vec<PyBound>> {
     bound_strs
         .iter()
         .map(|s| s.parse())
@@ -374,7 +374,7 @@ pub fn _index(mol_block: String) -> PyResult<u32> {
 /// `canon-index`]. See [`MemoizeMode`] for details.
 /// - `kernel_str`: A kernelization mode from [`"none"`, `"once"`,
 /// `"depth-one"`, `"always"`]. See [`KernelMode`] for details.
-/// - `bound_strs`: A `set` of bounds containing zero or more of [`"log"`,
+/// - `bound_strs`: A list of bounds containing zero or more of [`"log"`,
 /// `"int"`, `"vec-simple"`, `"vec-small-frags"`, `"cover-sort"`,
 /// `"cover-no-sort"`, `"clique-budget"`]. See [`crate::bounds::Bound`] for
 /// details.
@@ -403,7 +403,7 @@ pub fn _index(mol_block: String) -> PyResult<u32> {
 ///     "none",
 ///     "none",
 ///     "none",
-///     set(["int", "vec-simple", "vec-small-frags"]))
+///     ["int", "vec-simple", "vec-small-frags"])
 ///
 /// print(f"Assembly Index: {index}")  # 6
 /// print(f"Non-Overlapping Isomorphic Subgraph Pairs: {num_matches}")  # 466
@@ -417,7 +417,7 @@ pub fn _index_search(
     parallel_str: String,
     memoize_str: String,
     kernel_str: String,
-    bound_strs: HashSet<String>,
+    bound_strs: Vec<String>,
 ) -> PyResult<(u32, u32, usize)> {
     // Parse the .mol file contents as a molecule::Molecule.
     let mol_result = parse_molfile_str(&mol_block);
