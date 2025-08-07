@@ -61,31 +61,6 @@ def run_bench(dir):
     return df
 
 
-# Function for reading from file
-def read_from_file(file, indices, num_dups, states_searched):
-    with open(file) as f:
-        f.readline()
-
-        # Read assembly indices
-        line = f.readline()
-        while line != "Num duplicate matches\n":
-            indices.append(int(line.strip()))
-            line = f.readline()
-            
-        
-        # Read num duplicates
-        line = f.readline()
-        while line != "States Searched\n":
-            num_dups.append(int(line.strip()))
-            line = f.readline()
-        
-        # Read states searched
-        line = f.readline()
-        while line:
-            states_searched.append(int(line.strip()))
-            line = f.readline()
-
-
 # CLI parsing
 parser = argparse.ArgumentParser()
 parser.add_argument("directory", help="Path to directory to be benchmarked or file to be read")
@@ -96,8 +71,6 @@ parser.add_argument("--name", help="Evaluation name")
 # Parse arguments
 args = parser.parse_args()
 dir = args.directory
-
-reading = dir[-4:] == ".out"
 
 out_dir = args.out if args.out else "./"
 if out_dir[-1] != "/":
@@ -110,29 +83,11 @@ if args.name:
     data_name = args.name
 else:
     # Get data name from benchmark directory name
-    if reading:
-        regex = re.compile("/([^/]*)\\.out$")
-    else:
-        regex = re.compile('/?([^/]*)/$')
+    regex = re.compile('/?([^/]*)/$')
     data_name = regex.search(dir).group(1)
 
 out_file = out_dir + data_name
 
 # Fill lists of molecule assemlby info
-df: pd.DataFrame
-if reading:
-    df = pd.read_csv(dir)
-else:
-    df = run_bench(dir)
-
-# Plotting
-plt.scatter(x=df['Dupes'], y=df['StatesSearched'])
-plt.xlabel("Num duplicatable matches")
-plt.ylabel("States Searched")
-
-# Save eval figure
-plt.savefig(out_file + ".svg", format="svg")
-
-# Save eval data if benchmarking
-if not reading:
-    df.to_csv(out_file + '.out', index=False)
+df = run_bench(dir)
+df.to_csv(out_file + '.out', index=False)
