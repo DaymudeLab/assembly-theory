@@ -273,9 +273,9 @@ fn make_boundlist(pybounds: &[PyBound]) -> Vec<OurBound> {
 /// # }
 /// ```
 #[pyfunction(name = "mol_info")]
-pub fn _mol_info(mol_block: String) -> PyResult<String> {
+pub fn _mol_info(mol_block: &str) -> PyResult<String> {
     // Parse the .mol file contents as a molecule::Molecule.
-    let mol_result = parse_molfile_str(&mol_block);
+    let mol_result = parse_molfile_str(mol_block);
     let mol = match mol_result {
         Ok(mol) => mol,
         Err(e) => return Err(e.into()), // Convert the error to PyErr
@@ -309,9 +309,9 @@ pub fn _mol_info(mol_block: String) -> PyResult<String> {
 /// at.depth(mol_block)  # 3
 /// ```
 #[pyfunction(name = "depth")]
-pub fn _depth(mol_block: String) -> PyResult<u32> {
+pub fn _depth(mol_block: &str) -> PyResult<u32> {
     // Parse the .mol file contents as a molecule::Molecule.
-    let mol_result = parse_molfile_str(&mol_block);
+    let mol_result = parse_molfile_str(mol_block);
     let mol = match mol_result {
         Ok(mol) => mol,
         Err(e) => return Err(e.into()), // Convert the error to PyErr
@@ -344,9 +344,9 @@ pub fn _depth(mol_block: String) -> PyResult<u32> {
 /// at.index(mol_block)  # 6
 /// ```
 #[pyfunction(name = "index")]
-pub fn _index(mol_block: String) -> PyResult<u32> {
+pub fn _index(mol_block: &str) -> PyResult<u32> {
     // Parse the .mol file contents as a molecule::Molecule.
-    let mol_result = parse_molfile_str(&mol_block);
+    let mol_result = parse_molfile_str(mol_block);
     let mol = match mol_result {
         Ok(mol) => mol,
         Err(e) => return Err(e.into()), // Convert the error to PyErr
@@ -364,19 +364,21 @@ pub fn _index(mol_block: String) -> PyResult<u32> {
 /// # Python Parameters
 ///
 /// - `mol_block`: The contents of a `.mol` file as a `str`.
-/// - `enumerate_str`: An enumeration mode from [`"extend"`, `"grow-erode"`].
-/// See [`EnumerateMode`] for details.
+/// - `enumerate_str`: An enumeration mode from [`"extend"`, `"grow-erode"`
+/// (default)]. See [`EnumerateMode`] for details.
 /// - `canonize_str`: A canonization mode from [`"nauty"`, `"faulon"`,
-/// `"tree-nauty"`, `"tree-faulon"`]. See [`CanonizeMode`] for details.
-/// - `parallel_str`: A parallelization mode from [`"none"`, `"depth-one"`,
-/// `"always"`]. See [`ParallelMode`] for details.
+/// `"tree-nauty"` (default), `"tree-faulon"`]. See [`CanonizeMode`] for
+/// details.
+/// - `parallel_str`: A parallelization mode from [`"none"`, `"depth-one"`
+/// (default), `"always"`]. See [`ParallelMode`] for details.
 /// - `memoize_str`: A memoization mode from [`none`, `frags-index`,
-/// `canon-index`]. See [`MemoizeMode`] for details.
-/// - `kernel_str`: A kernelization mode from [`"none"`, `"once"`,
+/// `canon-index` (default)]. See [`MemoizeMode`] for details.
+/// - `kernel_str`: A kernelization mode from [`"none"` (default), `"once"`,
 /// `"depth-one"`, `"always"`]. See [`KernelMode`] for details.
 /// - `bound_strs`: A list of bounds containing zero or more of [`"log"`,
 /// `"int"`, `"vec-simple"`, `"vec-small-frags"`, `"cover-sort"`,
-/// `"cover-no-sort"`, `"clique-budget"`]. See [`crate::bounds::Bound`] for
+/// `"cover-no-sort"`, `"clique-budget"`]. The default bounds are [`"int"`,
+/// `"vec-simple"`, `"vec-small-frags"`]. See [`crate::bounds::Bound`] for
 /// details.
 ///
 /// # Python Returns
@@ -410,48 +412,49 @@ pub fn _index(mol_block: String) -> PyResult<u32> {
 /// print(f"Assembly States Searched: {states_searched}")  # 2562
 /// ```
 #[pyfunction(name = "index_search")]
+#[pyo3(signature = (mol_block, enumerate_str="grow-erode", canonize_str="tree-nauty", parallel_str="depth-one", memoize_str="canon-index", kernel_str="none", bound_strs=vec!["int".to_string(), "vec-simple".to_string(), "vec-small-frags".to_string()]), text_signature = "(mol_block, enumerate_str=\"grow-erode\", canonize_str=\"tree-nauty\", parallel_str=\"depth-one\", memoize_str=\"canon-index\", kernel_str=\"none\", bound_strs=[\"int\", \"vec-simple\", \"vec-small-frags\"]))")]
 pub fn _index_search(
-    mol_block: String,
-    enumerate_str: String,
-    canonize_str: String,
-    parallel_str: String,
-    memoize_str: String,
-    kernel_str: String,
+    mol_block: &str,
+    enumerate_str: &str,
+    canonize_str: &str,
+    parallel_str: &str,
+    memoize_str: &str,
+    kernel_str: &str,
     bound_strs: Vec<String>,
 ) -> PyResult<(u32, u32, usize)> {
     // Parse the .mol file contents as a molecule::Molecule.
-    let mol_result = parse_molfile_str(&mol_block);
+    let mol_result = parse_molfile_str(mol_block);
     let mol = match mol_result {
         Ok(mol) => mol,
         Err(e) => return Err(e.into()), // Convert the error to PyErr
     };
 
     // Parse the various modes and bound options.
-    let enumerate_mode = match PyEnumerateMode::from_str(&enumerate_str) {
+    let enumerate_mode = match PyEnumerateMode::from_str(enumerate_str) {
         Ok(PyEnumerateMode::Extend) => EnumerateMode::Extend,
         Ok(PyEnumerateMode::GrowErode) => EnumerateMode::GrowErode,
         Err(e) => return Err(e),
     };
-    let canonize_mode = match PyCanonizeMode::from_str(&canonize_str) {
+    let canonize_mode = match PyCanonizeMode::from_str(canonize_str) {
         Ok(PyCanonizeMode::Nauty) => CanonizeMode::Nauty,
         Ok(PyCanonizeMode::Faulon) => CanonizeMode::Faulon,
         Ok(PyCanonizeMode::TreeNauty) => CanonizeMode::TreeNauty,
         Ok(PyCanonizeMode::TreeFaulon) => CanonizeMode::TreeFaulon,
         Err(e) => return Err(e),
     };
-    let parallel_mode = match PyParallelMode::from_str(&parallel_str) {
+    let parallel_mode = match PyParallelMode::from_str(parallel_str) {
         Ok(PyParallelMode::None) => ParallelMode::None,
         Ok(PyParallelMode::DepthOne) => ParallelMode::DepthOne,
         Ok(PyParallelMode::Always) => ParallelMode::Always,
         Err(e) => return Err(e),
     };
-    let memoize_mode = match PyMemoizeMode::from_str(&memoize_str) {
+    let memoize_mode = match PyMemoizeMode::from_str(memoize_str) {
         Ok(PyMemoizeMode::None) => MemoizeMode::None,
         Ok(PyMemoizeMode::FragsIndex) => MemoizeMode::FragsIndex,
         Ok(PyMemoizeMode::CanonIndex) => MemoizeMode::CanonIndex,
         Err(e) => return Err(e),
     };
-    let kernel_mode = match PyKernelMode::from_str(&kernel_str) {
+    let kernel_mode = match PyKernelMode::from_str(kernel_str) {
         Ok(PyKernelMode::None) => KernelMode::None,
         Ok(PyKernelMode::Once) => KernelMode::Once,
         Ok(PyKernelMode::DepthOne) => KernelMode::DepthOne,
