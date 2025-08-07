@@ -1,6 +1,5 @@
 use crate::molecule::{AtomOrBond, CGraph, Molecule};
 use bit_set::BitSet;
-use lexical_sort::{lexical_cmp, lexical_only_alnum_cmp, natural_cmp, StringSort};
 use petgraph::{
     graph::{EdgeIndex, NodeIndex},
     Direction::{Incoming, Outgoing},
@@ -12,7 +11,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 struct DAGVert {
     atom_idx: NodeIndex,
     inv: u32,
-    order: String,
+    order: Vec<u32>,
     parents: Vec<NodeIndex>,
     level: u32,
 }
@@ -24,7 +23,7 @@ impl DAGVert {
             inv: 0,
             parents,
             level,
-            order: String::new(),
+            order: vec![],
         }
     }
 }
@@ -33,12 +32,12 @@ impl DAGVert {
 struct MolAtomNode {
     color: u32,
     inv: u32,
-    order: String,
+    order: Vec<u8>,
     num_parents: u32,
 }
 
 impl MolAtomNode {
-    pub fn new(color: u32, inv: u32, order: String, num_parents: u32) -> Self {
+    pub fn new(color: u32, inv: u32, order: Vec<u8>, num_parents: u32) -> Self {
         MolAtomNode {
             color,
             inv,
@@ -83,7 +82,7 @@ pub fn canonize(molecule: &Molecule, subgraph: &BitSet) -> Option<Vec<u8>> {
         );
     }
 
-    let mut max_string = String::new();
+    let mut max_string = Vec::new();
     for root in mol_graph.node_indices() {
         // for each node in the molecule graph create a signature
         /*
@@ -173,21 +172,21 @@ pub fn canonize(molecule: &Molecule, subgraph: &BitSet) -> Option<Vec<u8>> {
          */
         let mut extended_molg_atom_map: Vec<MolAtomNode> =
             Vec::with_capacity(mol_graph.node_count());
-        let mut order_str_set: HashSet<String> = HashSet::new();
+        let mut order_str_set: HashSet<Vec<u8>> = HashSet::new();
 
         // Each atom does not have just one vertex in dag!!!
         for atom_node in mol_graph.node_indices() {
             // find unique parents for an atom's associated vertices in dag
             let atom_assoc_vert_list = &mol_g_dag_vertex_map[atom_node.index()];
-            let mut parents = HashSet::new();
+            let mut parents = BitSet::new();
             for vert_id in atom_assoc_vert_list {
                 for parent in &dag[*vert_id].parents {
-                    parents.insert(parent);
+                    parents.insert(parent.index());
                 }
             }
             let parent_len = parents.len();
-            let atom_str = mol_graph[atom_node].to_string();
-            let atom_order_str = format!("{atom_str}{parent_len}");
+            let mut atom_order_str = mol_graph[atom_node].to_string().into_bytes();
+            atom_order_str.extend_from_slice(&parent_len.to_string().into_bytes());
             order_str_set.insert(atom_order_str.clone());
             extended_molg_atom_map.insert(
                 atom_node.index(),
@@ -197,9 +196,9 @@ pub fn canonize(molecule: &Molecule, subgraph: &BitSet) -> Option<Vec<u8>> {
 
         // lexico-sort
         let mut ordered_vec: Vec<_> = order_str_set.into_iter().collect();
-        ordered_vec.string_sort_unstable(lexical_only_alnum_cmp);
+        ordered_vec.sort();
 
-        let mut order_idx: HashMap<String, u32> = HashMap::new();
+        let mut order_idx: HashMap<Vec<u8>, u32> = HashMap::new();
 
         for (idx, order_str) in ordered_vec.iter().enumerate() {
             order_idx.insert(order_str.clone(), (idx as u32) + 1);
@@ -213,22 +212,23 @@ pub fn canonize(molecule: &Molecule, subgraph: &BitSet) -> Option<Vec<u8>> {
         }
 
         // get the canonized string for current root atom
-        let canon_string = canonize_signature(
+        let canon_string: Vec<u8> = canonize_signature(
             &mol_graph,
             &mut dag,
             &mut extended_molg_atom_map,
             &dag_level_list,
             max_level,
             1,
-            "".to_string(),
+            vec![],
         );
 
         // lexico-compare strings to save the max one.
-        if lexical_cmp(&max_string, &canon_string).is_lt() {
+        if max_string < canon_string {
             max_string = canon_string
         }
     }
-    Some(max_string.as_bytes().to_vec())
+    // Some(max_string.as_bytes().to_vec())
+    Some(max_string)
 }
 
 fn canonize_signature(
@@ -238,8 +238,8 @@ fn canonize_signature(
     dag_level_list: &[Vec<NodeIndex>],
     max_level: u32,
     color_c: u32,
-    s_max: String,
-) -> String {
+    s_max: Vec<u8>,
+) -> Vec<u8> {
     // 1. get the invariants for each atom
     invariant_atom(
         mol_graph,
@@ -342,18 +342,19 @@ fn print_signature_string(
     mol_graph: &CGraph,
     extended_molg_atom_map: &[MolAtomNode],
     edges: &mut Vec<(NodeIndex, NodeIndex)>,
-) -> String {
-    let mut print_sign = String::new();
-    print_sign.push('[');
+) -> Vec<u8> {
+    let mut print_sign: Vec<u8> = vec![];
+    print_sign.push(b'[');
     let atom_idx = dag[vertex].atom_idx;
     let atom = &mol_graph[dag[vertex].atom_idx];
-    print_sign.push_str(&atom.to_string());
+    // print_sign.push_str(&atom.to_string());
+    print_sign.extend_from_slice(atom.to_string().as_bytes());
     let atom_color = extended_molg_atom_map[atom_idx.index()].color;
     if atom_color != 0 {
-        print_sign.push(',');
-        print_sign.push_str(&atom_color.to_string());
+        print_sign.push(b',');
+        print_sign.extend_from_slice(&atom_color.to_string().into_bytes());
     }
-    print_sign.push(']');
+    print_sign.push(b']');
 
     let mut child_vec = dag
         .neighbors_directed(vertex, Outgoing)
@@ -364,7 +365,7 @@ fn print_signature_string(
         // sort children in descending order of inv
         child_vec.sort_by(|vert_a, vert_b| dag[*vert_b].inv.cmp(&dag[*vert_a].inv));
 
-        let mut sub_print_sign = String::new();
+        let mut sub_print_sign = vec![];
 
         for child in child_vec {
             if let Some(_edge) = edges
@@ -374,7 +375,7 @@ fn print_signature_string(
             } else {
                 // if the edge is not already seen then add it to seen and generate signature-string for the child
                 edges.push((vertex, child));
-                sub_print_sign.push_str(&print_signature_string(
+                sub_print_sign.extend_from_slice(&print_signature_string(
                     child,
                     dag,
                     mol_graph,
@@ -384,9 +385,9 @@ fn print_signature_string(
             }
         }
         if !sub_print_sign.is_empty() {
-            print_sign.push('(');
-            print_sign.push_str(&sub_print_sign);
-            print_sign.push(')');
+            print_sign.push(b'(');
+            print_sign.extend_from_slice(&sub_print_sign);
+            print_sign.push(b')');
         }
         print_sign
     }
@@ -449,25 +450,21 @@ fn invariant_atom(
                 [(max_level - dag[vert].level) as usize] = dag[vert].inv;
         }
 
-        let mut order_to_atom: HashMap<String, Vec<NodeIndex>> = HashMap::new();
+        let mut order_to_atom: HashMap<Vec<u32>, Vec<NodeIndex>> = HashMap::new();
 
         // turn vectors into strings for sorting
         for atom in mol_graph.node_indices() {
-            let order_str = order_map_vert_atom[atom.index()]
-                .clone()
-                .into_iter()
-                .map(|i| i.to_string())
-                .collect::<String>();
+            let order_str = &order_map_vert_atom[atom.index()];
+            
             order_to_atom
-                .entry(order_str)
+                .entry(order_str.to_vec())
                 .and_modify(|atom_list| atom_list.push(atom))
                 .or_insert([atom].to_vec());
         }
 
         // lexico-sort the vectors-strings
         let mut atom_ordered_vec: Vec<_> = order_to_atom.keys().collect();
-        atom_ordered_vec.string_sort_unstable(lexical_only_alnum_cmp);
-        // atom_ordered_vec.string_sort_unstable(natural_cmp);
+        atom_ordered_vec.sort();
         // descend sort
         atom_ordered_vec.reverse();
 
@@ -515,52 +512,42 @@ fn invariant_dag_vert(
     let mut curr_lvl_range = if bottom { max_level } else { 0 };
     loop {
         // for each vertex generate a invariant-string based on assoc. atom color and atom invariant + directed neighbors
-        let mut order_str_set: HashSet<String> = HashSet::new();
+        let mut order_str_set: HashSet<Vec<u32>> = HashSet::new();
         for vert in &dag_level_list[curr_lvl_range as usize] {
             let atom_idx_for_vert = dag[*vert].atom_idx;
             let atom_node = &extended_molg_atom_map[atom_idx_for_vert.index()];
             let (atom_color, atom_inv) = (atom_node.color, atom_node.inv);
             let vert_inv = dag[*vert].inv;
-            let mut vert_order;
+            let mut vert_order: Vec<u32> = vec![];
             let mut child_inv_set: Vec<u32> = Vec::new();
-            vert_order = if initial {
-                format!("{atom_color}{atom_inv}")
-            } else {
-                format!("{atom_color}{vert_inv}")
-            };
+            vert_order.push(atom_color);
+            if initial { vert_order.push(atom_inv); } else { vert_order.push(vert_inv); }
+            
             if bottom {
-                // vert_order = format!("{}{}", atom_color, atom_inv);
                 for vert_neigh in dag.neighbors_directed(*vert, Outgoing) {
                     child_inv_set.push(dag[vert_neigh].inv);
                 }
             } else {
-                // vert_order = format!("{}{}", atom_color, vert_inv);
                 for vert_neigh in dag.neighbors_directed(*vert, Incoming) {
                     child_inv_set.push(dag[vert_neigh].inv);
                 }
             }
 
-            while child_inv_set.len() < 10 {
-                child_inv_set.push(0);
-            }
-
+            // first sort (desc) among the children/parent
             child_inv_set.sort();
             child_inv_set.reverse();
-            child_inv_set
-                .iter()
-                .for_each(|val| vert_order.push_str(&format!("{}", *val)));
-
-            let vec_string = format!("{vert_order:0>20}");
-            dag[*vert].order = vec_string.clone();
-            order_str_set.insert(vec_string);
+            vert_order.append(&mut child_inv_set);
+            
+            dag[*vert].order = vert_order.clone();
+            order_str_set.insert(vert_order);
         }
 
         // lexico-sort the invariant-strings in descending order
-        let mut ordered_vec: Vec<String> = order_str_set.into_iter().collect();
-        ordered_vec.string_sort_unstable(natural_cmp);
+        let mut ordered_vec: Vec<Vec<u32>> = order_str_set.into_iter().collect();
+        ordered_vec.sort();
         ordered_vec.reverse();
 
-        let mut order_idx: HashMap<String, u32> = HashMap::new();
+        let mut order_idx: HashMap<Vec<u32>, u32> = HashMap::new();
 
         for (idx, order_str) in ordered_vec.iter().enumerate() {
             order_idx.insert(order_str.clone(), idx as u32);
