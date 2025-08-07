@@ -1,5 +1,4 @@
 import assembly_theory as at
-import matplotlib.pyplot as plt
 import os
 import argparse
 import re
@@ -86,8 +85,8 @@ else:
     regex = re.compile('/?([^/]*)/$')
     data_name = regex.search(dir).group(1)
 
-out_file = out_dir + data_name
+out_file = out_dir + data_name + '.out'
 
 # Fill lists of molecule assemlby info
 df = run_bench(dir)
-df.to_csv(out_file + '.out', index=False)
+df.to_csv(out_file, index=False)
