@@ -3,9 +3,14 @@ import matplotlib.pyplot as plt
 import os
 import argparse
 import re
+import pandas as pd
+from rdkit import Chem
+from rdkit.Chem import rdMolDescriptors
 
 # Function to run benchmark
-def run_bench(dir, indices, num_dups, states_searched):
+def run_bench(dir):
+    df = pd.DataFrame(columns=["File", "Atoms", "Bonds", "Rings", "Index", "Dupes", "StatesSearched"])
+
     if dir[-1] != '/':
         dir += '/'
 
@@ -26,22 +31,34 @@ def run_bench(dir, indices, num_dups, states_searched):
             continue
 
         with open(dir + filename) as mol_file:
-            mol = mol_file.read()
+            mol_block = mol_file.read()
+            mol = Chem.MolFromMolBlock(mol_block)
+
             (ma, dup, state) = at.index_search(
-                mol,
+                mol_block,
                 enumerate_str = 'grow-erode',
                 canonize_str = 'tree-nauty',
-                parallel_str = 'depth-one',
+                parallel_str = 'none',
                 memoize_str = 'canon-index',
                 kernel_str = 'none',
-                bound_strs = {'int', 'vec-simple', 'vec-small-frags'}
+                bound_strs = ['int', 'vec-simple', 'vec-small-frags']
             )
-            indices.append(ma)
-            num_dups.append(dup)
-            states_searched.append(state)
+            
+            new_row = pd.DataFrame({
+                'File': [filename],
+                'Atoms': [mol.GetNumAtoms()],
+                'Bonds': [mol.GetNumBonds()],
+                'Rings': [rdMolDescriptors.CalcNumRings(mol)],
+                'Index': [ma],
+                'Dupes': [dup],
+                'StatesSearched': [state],
+            })
+            df = pd.concat([df, new_row])
         
         if args.progress:
             print(str(i) + "/" + str(total))
+
+    return df
 
 
 # Function for reading from file
@@ -102,17 +119,14 @@ else:
 out_file = out_dir + data_name
 
 # Fill lists of molecule assemlby info
-indices = []
-num_dups = []
-states_searched = []
-
+df: pd.DataFrame
 if reading:
-    read_from_file(dir, indices, num_dups, states_searched)
+    df = pd.read_csv(dir)
 else:
-    run_bench(dir, indices, num_dups, states_searched)
+    df = run_bench(dir)
 
 # Plotting
-plt.scatter(x=num_dups, y=states_searched)
+plt.scatter(x=df['Dupes'], y=df['StatesSearched'])
 plt.xlabel("Num duplicatable matches")
 plt.ylabel("States Searched")
 
@@ -121,15 +135,4 @@ plt.savefig(out_file + ".svg", format="svg")
 
 # Save eval data if benchmarking
 if not reading:
-    with open(out_file + ".out", 'w') as f:
-        f.write("Assembly indices\n")
-        for x in indices:
-            f.write(str(x) + '\n')
-
-        f.write("Num duplicate matches\n")
-        for x in num_dups:
-            f.write(str(x) + '\n')
-        
-        f.write("States Searched\n")
-        for x in states_searched:
-            f.write(str(x) + '\n')
+    df.to_csv(out_file + '.out', index=False)
