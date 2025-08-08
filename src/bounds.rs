@@ -13,6 +13,8 @@
 
 use bit_set::BitSet;
 use clap::ValueEnum;
+use std::{sync::Arc, time::{Duration, Instant}};
+use dashmap::DashMap;
 
 use crate::molecule::{Bond, Element, Molecule};
 
@@ -63,6 +65,38 @@ struct EdgeType {
     ends: (Element, Element),
 }
 
+#[derive(Clone)]
+pub struct BoundTimer {
+    int_timer: Arc<DashMap<(usize, usize), (Duration, usize)>>,
+}
+
+impl BoundTimer {
+    pub fn new() -> Self {
+        Self {
+            int_timer: Arc::new(DashMap::<(usize, usize), (Duration, usize)>::new()),
+        }
+    }
+
+    pub fn int_insert(&mut self, largest_remove: usize, num_frag: usize, dur: Duration) {
+        self.int_timer
+            .entry((largest_remove, num_frag))
+            .and_modify(|(entry_dur, entry_num)| {*entry_dur += dur; *entry_num += 1;})
+            .or_insert((dur, 1));
+    }
+
+    pub fn print(&self) {
+        println!("Int Timer:");
+        println!("LargestRemove,NumFrags,AvgTime");
+        for x in self.int_timer.iter() {
+            let key = x.key();
+            let val = x.value();
+            let avg = (val.0.as_secs_f64()) / (val.1 as f64);
+
+            println!("{},{},{}", key.0, key.1, avg);
+        }
+    }
+}
+
 /// Returns `true` iff any of the given bounds would prune this assembly state.
 pub fn bound_exceeded(
     mol: &Molecule,
@@ -71,11 +105,20 @@ pub fn bound_exceeded(
     best_index: usize,
     largest_remove: usize,
     bounds: &[Bound],
+    timer: &mut BoundTimer,
 ) -> bool {
     for bound_type in bounds {
         let exceeds = match bound_type {
             Bound::Log => state_index - log_bound(fragments) >= best_index,
-            Bound::Int => state_index - int_bound(fragments, largest_remove) >= best_index,
+            Bound::Int => {
+                let start = Instant::now();
+                let bound = int_bound(fragments, largest_remove);
+                let dur = start.elapsed();
+                timer.int_insert(largest_remove, fragments.len(), dur);
+
+                state_index - bound >= best_index
+
+            }
             Bound::VecSimple => {
                 state_index - vec_simple_bound(fragments, largest_remove, mol) >= best_index
             }

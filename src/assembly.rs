@@ -29,7 +29,7 @@ use dashmap::DashMap;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
-    bounds::{bound_exceeded, Bound},
+    bounds::{bound_exceeded, Bound, BoundTimer},
     canonize::{canonize, CanonizeMode, Labeling},
     enumerate::{enumerate_subgraphs, EnumerateMode},
     kernels::KernelMode,
@@ -234,6 +234,7 @@ pub fn recurse_index_search(
     bounds: &[Bound],
     cache: &mut Cache,
     parallel_mode: ParallelMode,
+    timer: &mut BoundTimer,
 ) -> (usize, usize) {
     // If any bounds would prune this assembly state or if memoization is
     // enabled and this assembly state is preempted by the cached state, halt.
@@ -244,6 +245,7 @@ pub fn recurse_index_search(
         best_index.load(Relaxed),
         largest_remove,
         bounds,
+        timer,
     ) || cache.memoize_state(mol, state, state_index, &removal_order)
     {
         return (state_index, 1);
@@ -282,6 +284,7 @@ pub fn recurse_index_search(
                 bounds,
                 &mut cache.clone(),
                 new_parallel,
+                &mut timer.clone(),
             );
 
             // Update the best assembly indices (across children states and
@@ -398,6 +401,8 @@ pub fn index_search(
     let mut init = BitSet::new();
     init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
 
+    let mut timer = BoundTimer::new();
+
     // Search for the shortest assembly pathway recursively.
     let edge_count = mol.graph().edge_count();
     let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
@@ -412,7 +417,10 @@ pub fn index_search(
         bounds,
         &mut cache,
         parallel_mode,
+        &mut timer,
     );
+
+    //timer.print();
 
     (index as u32, matches.len() as u32, states_searched)
 }
