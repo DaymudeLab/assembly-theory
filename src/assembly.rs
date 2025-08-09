@@ -420,7 +420,52 @@ pub fn index_search(
         &mut timer,
     );
 
-    //timer.print();
+    timer.print_int();
+
+    (index as u32, matches.len() as u32, states_searched)
+}
+
+pub fn index_search_timer(
+    mol: &Molecule,
+    enumerate_mode: EnumerateMode,
+    canonize_mode: CanonizeMode,
+    parallel_mode: ParallelMode,
+    memoize_mode: MemoizeMode,
+    kernel_mode: KernelMode,
+    bounds: &[Bound],
+    timer: &mut BoundTimer,
+) -> (u32, u32, usize) {
+    // Catch not-yet-implemented modes.
+    if kernel_mode != KernelMode::None {
+        panic!("The chosen --kernel mode is not implemented yet!")
+    }
+
+    // Enumerate non-overlapping isomorphic subgraph pairs.
+    let matches = matches(mol, enumerate_mode, canonize_mode, parallel_mode);
+
+    // Create memoization cache.
+    let mut cache = Cache::new(memoize_mode, canonize_mode);
+
+    // Initialize the first fragment as the entire graph.
+    let mut init = BitSet::new();
+    init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
+
+    // Search for the shortest assembly pathway recursively.
+    let edge_count = mol.graph().edge_count();
+    let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
+    let (index, states_searched) = recurse_index_search(
+        mol,
+        &matches,
+        Vec::new(),
+        &[init],
+        edge_count - 1,
+        best_index,
+        edge_count,
+        bounds,
+        &mut cache,
+        parallel_mode,
+        &mut timer.clone(),
+    );
 
     (index as u32, matches.len() as u32, states_searched)
 }

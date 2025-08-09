@@ -2,8 +2,8 @@ use std::{fs, path::PathBuf};
 
 use anyhow::{bail, Context, Result};
 use assembly_theory::{
-    assembly::{depth, index_search, ParallelMode},
-    bounds::Bound,
+    assembly::{depth, index_search, index_search_timer, ParallelMode},
+    bounds::{Bound, BoundTimer},
     canonize::CanonizeMode,
     enumerate::EnumerateMode,
     kernels::KernelMode,

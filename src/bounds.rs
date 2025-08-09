@@ -84,13 +84,17 @@ impl BoundTimer {
             .or_insert((dur, 1));
     }
 
-    pub fn print(&self) {
-        println!("Int Timer:");
+    pub fn print_int(&self) {
+        //println!("Int Timer:");
         println!("LargestRemove,NumFrags,AvgTime");
         for x in self.int_timer.iter() {
             let key = x.key();
             let val = x.value();
             let avg = (val.0.as_secs_f64()) / (val.1 as f64);
+
+            if key.1 == 1 {
+                continue;
+            }
 
             println!("{},{},{}", key.0, key.1, avg);
         }
