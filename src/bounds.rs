@@ -68,12 +68,14 @@ struct EdgeType {
 #[derive(Clone)]
 pub struct BoundTimer {
     int_timer: Arc<DashMap<(usize, usize), (Duration, usize)>>,
+    vec_simple_timer: Arc<DashMap<usize, (Duration, usize)>>,
 }
 
 impl BoundTimer {
     pub fn new() -> Self {
         Self {
             int_timer: Arc::new(DashMap::<(usize, usize), (Duration, usize)>::new()),
+            vec_simple_timer: Arc::new(DashMap::<usize, (Duration, usize)>::new())
         }
     }
 
@@ -81,6 +83,13 @@ impl BoundTimer {
         self.int_timer
             .entry((largest_remove, num_frag))
             .and_modify(|(entry_dur, entry_num)| {*entry_dur += dur; *entry_num += 1;})
+            .or_insert((dur, 1));
+    }
+
+    pub fn vec_simple_insert(&mut self, num_edges:usize, dur: Duration) {
+        self.vec_simple_timer
+            .entry(num_edges)
+            .and_modify(|(entry_dur, entry_num)| {*entry_dur += dur; *entry_num += 1})
             .or_insert((dur, 1));
     }
 
@@ -97,6 +106,17 @@ impl BoundTimer {
             }
 
             println!("{},{},{}", key.0, key.1, avg);
+        }
+    }
+
+    pub fn print_vec_simple(&self) {
+        println!("NumEdges,AvgTime");
+        for x in self.vec_simple_timer.iter() {
+            let key = x.key();
+            let val = x.value();
+            let avg = (val.0.as_secs_f64()) / (val.1 as f64);
+
+            println!("{},{}", key, avg);
         }
     }
 }
