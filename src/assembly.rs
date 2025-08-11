@@ -18,10 +18,10 @@
 //! # }
 //! ```
 
-use std::sync::{
+use std::{sync::{
     atomic::{AtomicUsize, Ordering::Relaxed},
     Arc,
-};
+}, time::Instant};
 
 use bit_set::BitSet;
 use clap::ValueEnum;
@@ -246,10 +246,26 @@ pub fn recurse_index_search(
         largest_remove,
         bounds,
         timer,
-    ) || cache.memoize_state(mol, state, state_index, &removal_order)
+    )
     {
         return (state_index, 1);
     }
+    
+    let start = Instant::now();
+    let cached = cache.memoize_state(mol, state, state_index, &removal_order);
+    let dur = start.elapsed();
+    let largest_frag = if let Some(x) = state.iter().map(|f| f.len()).max() {
+        x
+    }
+    else {
+        0
+    };
+    timer.memoize_insert(largest_frag, dur);
+
+    if cached {
+        return (state_index, 1);
+    }
+
 
     // Keep track of the best assembly index found in any of this assembly
     // state's children and the number of states searched, including this one.

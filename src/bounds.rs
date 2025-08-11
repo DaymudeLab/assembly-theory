@@ -70,7 +70,8 @@ pub struct BoundTimer {
     log_timer: Arc<DashMap<usize, (Duration, usize)>>,
     int_timer: Arc<DashMap<(usize, usize), (Duration, usize)>>,
     vec_simple_timer: Arc<DashMap<usize, (Duration, usize)>>,
-    vec_small_frags_timer: Arc<DashMap<usize, (Duration, usize)>>
+    vec_small_frags_timer: Arc<DashMap<usize, (Duration, usize)>>,
+    memoize_timer: Arc<DashMap<usize, (Duration, usize)>>,
 }
 
 impl BoundTimer {
@@ -80,6 +81,7 @@ impl BoundTimer {
             int_timer: Arc::new(DashMap::<(usize, usize), (Duration, usize)>::new()),
             vec_simple_timer: Arc::new(DashMap::<usize, (Duration, usize)>::new()),
             vec_small_frags_timer: Arc::new(DashMap::<usize, (Duration, usize)>::new()),
+            memoize_timer: Arc::new(DashMap::<usize, (Duration, usize)>::new()),
         }
     }
 
@@ -104,9 +106,16 @@ impl BoundTimer {
             .or_insert((dur, 1));
     }
 
-    pub fn vec_small_frags_insert(&mut self, num_edges:usize, dur: Duration) {
+    pub fn vec_small_frags_insert(&mut self, num_edges: usize, dur: Duration) {
         self.vec_small_frags_timer
             .entry(num_edges)
+            .and_modify(|(entry_dur, entry_num)| {*entry_dur += dur; *entry_num += 1})
+            .or_insert((dur, 1));
+    }
+
+    pub fn memoize_insert(&mut self, largest_frag: usize, dur: Duration) {
+        self.memoize_timer
+            .entry(largest_frag)
             .and_modify(|(entry_dur, entry_num)| {*entry_dur += dur; *entry_num += 1})
             .or_insert((dur, 1));
     }
@@ -160,6 +169,17 @@ impl BoundTimer {
         }
     }
 
+    pub fn print_memoize(&self) {
+        println!("LargestFrag,AvgTime");
+        for x in self.memoize_timer.iter() {
+            let key = x.key();
+            let val = x.value();
+            let avg = (val.0.as_secs_f64()) / (val.1 as f64);
+
+            println!("{},{}", key, avg);
+        }
+    }
+
     pub fn print_averages(&self) {
         let shift = 10000000f64;
 
@@ -170,7 +190,6 @@ impl BoundTimer {
             tot_time += time.as_secs_f64();
             tot_num += num;
         }
-
         let log_avg = shift * tot_time / (tot_num as f64);
 
         tot_time = 0f64;
@@ -180,7 +199,6 @@ impl BoundTimer {
             tot_time += time.as_secs_f64();
             tot_num += num;
         }
-
         let int_avg = shift * tot_time / (tot_num as f64);
 
         tot_time = 0f64;
@@ -190,7 +208,6 @@ impl BoundTimer {
             tot_time += time.as_secs_f64();
             tot_num += num;
         }
-
         let vec_simple_avg = shift * tot_time / (tot_num as f64);
 
         tot_time = 0f64;
@@ -200,10 +217,18 @@ impl BoundTimer {
             tot_time += time.as_secs_f64();
             tot_num += num;
         }
-
         let vec_small_frags_avg = shift * tot_time / (tot_num as f64);
 
-        println!("Log: {}\nInt: {}\nVec-simple: {}\nVec-small-frags: {}", log_avg, int_avg, vec_simple_avg, vec_small_frags_avg);
+        tot_time = 0f64;
+        tot_num = 0;
+        for x in self.memoize_timer.iter() {
+            let (time, num) = x.value();
+            tot_time += time.as_secs_f64();
+            tot_num += num;
+        }
+        let memoize_avg = shift * tot_time / (tot_num as f64);
+
+        println!("Log: {}\nInt: {}\nVec-simple: {}\nVec-small-frags: {}\nMemoize: {}", log_avg, int_avg, vec_simple_avg, vec_small_frags_avg, memoize_avg);
     }
 }
 
