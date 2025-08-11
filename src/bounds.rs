@@ -151,7 +151,7 @@ impl BoundTimer {
 
     pub fn print_vec_small_frags(&self) {
         println!("NumEdges,AvgTime");
-        for x in self.vec_simple_timer.iter() {
+        for x in self.vec_small_frags_timer.iter() {
             let key = x.key();
             let val = x.value();
             let avg = (val.0.as_secs_f64()) / (val.1 as f64);
@@ -195,7 +195,7 @@ impl BoundTimer {
 
         tot_time = 0f64;
         tot_num = 0;
-        for x in self.vec_simple_timer.iter() {
+        for x in self.vec_small_frags_timer.iter() {
             let (time, num) = x.value();
             tot_time += time.as_secs_f64();
             tot_num += num;
@@ -203,7 +203,7 @@ impl BoundTimer {
 
         let vec_small_frags_avg = shift * tot_time / (tot_num as f64);
 
-        println!("Log: {}\n Int: {}\n Vec-simple: {}\n Vec-small-frags: {}", log_avg, int_avg, vec_simple_avg, vec_small_frags_avg);
+        println!("Log: {}\nInt: {}\nVec-simple: {}\nVec-small-frags: {}", log_avg, int_avg, vec_simple_avg, vec_small_frags_avg);
     }
 }
 
@@ -220,7 +220,13 @@ pub fn bound_exceeded(
     for bound_type in bounds {
         let exceeds = match bound_type {
             Bound::Log => {
-                state_index - log_bound(fragments) >= best_index
+                let start = Instant::now();
+                let bound = log_bound(fragments);
+                let dur = start.elapsed();
+                timer.log_insert(fragments.len(), dur);
+
+                state_index - bound >= best_index
+
             }
             Bound::Int => {
                 let start = Instant::now();
@@ -247,7 +253,7 @@ pub fn bound_exceeded(
                 let start = Instant::now();
                 let bound = vec_small_frags_bound(fragments, largest_remove, mol);
                 let dur = start.elapsed();
-                timer.vec_simple_insert(num_edges, dur);
+                timer.vec_small_frags_insert(num_edges, dur);
 
                 state_index - bound >= best_index
             }
