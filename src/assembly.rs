@@ -420,7 +420,7 @@ pub fn index_search(
         &mut timer,
     );
 
-    timer.print_int();
+    timer.print_averages();
 
     (index as u32, matches.len() as u32, states_searched)
 }

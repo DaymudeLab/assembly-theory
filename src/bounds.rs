@@ -67,16 +67,27 @@ struct EdgeType {
 
 #[derive(Clone)]
 pub struct BoundTimer {
+    log_timer: Arc<DashMap<usize, (Duration, usize)>>,
     int_timer: Arc<DashMap<(usize, usize), (Duration, usize)>>,
     vec_simple_timer: Arc<DashMap<usize, (Duration, usize)>>,
+    vec_small_frags_timer: Arc<DashMap<usize, (Duration, usize)>>
 }
 
 impl BoundTimer {
     pub fn new() -> Self {
         Self {
+            log_timer: Arc::new(DashMap::<usize, (Duration, usize)>::new()),
             int_timer: Arc::new(DashMap::<(usize, usize), (Duration, usize)>::new()),
-            vec_simple_timer: Arc::new(DashMap::<usize, (Duration, usize)>::new())
+            vec_simple_timer: Arc::new(DashMap::<usize, (Duration, usize)>::new()),
+            vec_small_frags_timer: Arc::new(DashMap::<usize, (Duration, usize)>::new()),
         }
+    }
+
+    pub fn log_insert(&mut self, num_frag: usize, dur: Duration) {
+        self.log_timer
+            .entry(num_frag)
+            .and_modify(|(entry_dur, entry_num)| {*entry_dur += dur; *entry_num += 1})
+            .or_insert((dur, 1));
     }
 
     pub fn int_insert(&mut self, largest_remove: usize, num_frag: usize, dur: Duration) {
@@ -86,11 +97,29 @@ impl BoundTimer {
             .or_insert((dur, 1));
     }
 
-    pub fn vec_simple_insert(&mut self, num_edges:usize, dur: Duration) {
+    pub fn vec_simple_insert(&mut self, num_edges: usize, dur: Duration) {
         self.vec_simple_timer
             .entry(num_edges)
             .and_modify(|(entry_dur, entry_num)| {*entry_dur += dur; *entry_num += 1})
             .or_insert((dur, 1));
+    }
+
+    pub fn vec_small_frags_insert(&mut self, num_edges:usize, dur: Duration) {
+        self.vec_small_frags_timer
+            .entry(num_edges)
+            .and_modify(|(entry_dur, entry_num)| {*entry_dur += dur; *entry_num += 1})
+            .or_insert((dur, 1));
+    }
+
+    pub fn print_log(&self) {
+        println!("NumFrags,AvgTime");
+        for x in self.vec_simple_timer.iter() {
+            let key = x.key();
+            let val = x.value();
+            let avg = (val.0.as_secs_f64()) / (val.1 as f64);
+
+            println!("{},{}", key, avg);
+        }
     }
 
     pub fn print_int(&self) {
@@ -101,9 +130,9 @@ impl BoundTimer {
             let val = x.value();
             let avg = (val.0.as_secs_f64()) / (val.1 as f64);
 
-            if key.1 == 1 {
+            /*if key.1 == 1 {
                 continue;
-            }
+            }*/
 
             println!("{},{},{}", key.0, key.1, avg);
         }
@@ -119,6 +148,63 @@ impl BoundTimer {
             println!("{},{}", key, avg);
         }
     }
+
+    pub fn print_vec_small_frags(&self) {
+        println!("NumEdges,AvgTime");
+        for x in self.vec_simple_timer.iter() {
+            let key = x.key();
+            let val = x.value();
+            let avg = (val.0.as_secs_f64()) / (val.1 as f64);
+
+            println!("{},{}", key, avg);
+        }
+    }
+
+    pub fn print_averages(&self) {
+        let shift = 10000000f64;
+
+        let mut tot_time = 0f64;
+        let mut tot_num = 0;
+        for x in self.log_timer.iter() {
+            let (time, num) = x.value();
+            tot_time += time.as_secs_f64();
+            tot_num += num;
+        }
+
+        let log_avg = shift * tot_time / (tot_num as f64);
+
+        tot_time = 0f64;
+        tot_num = 0;
+        for x in self.int_timer.iter() {
+            let (time, num) = x.value();
+            tot_time += time.as_secs_f64();
+            tot_num += num;
+        }
+
+        let int_avg = shift * tot_time / (tot_num as f64);
+
+        tot_time = 0f64;
+        tot_num = 0;
+        for x in self.vec_simple_timer.iter() {
+            let (time, num) = x.value();
+            tot_time += time.as_secs_f64();
+            tot_num += num;
+        }
+
+        let vec_simple_avg = shift * tot_time / (tot_num as f64);
+
+        tot_time = 0f64;
+        tot_num = 0;
+        for x in self.vec_simple_timer.iter() {
+            let (time, num) = x.value();
+            tot_time += time.as_secs_f64();
+            tot_num += num;
+        }
+
+        let vec_small_frags_avg = shift * tot_time / (tot_num as f64);
+
+        println!("Log: {}\n Int: {}\n Vec-simple: {}\n Vec-small-frags: {}", log_avg, int_avg, vec_simple_avg, vec_small_frags_avg);
+    }
 }
 
 /// Returns `true` iff any of the given bounds would prune this assembly state.
@@ -133,7 +219,9 @@ pub fn bound_exceeded(
 ) -> bool {
     for bound_type in bounds {
         let exceeds = match bound_type {
-            Bound::Log => state_index - log_bound(fragments) >= best_index,
+            Bound::Log => {
+                state_index - log_bound(fragments) >= best_index
+            }
             Bound::Int => {
                 let start = Instant::now();
                 let bound = int_bound(fragments, largest_remove);
@@ -144,10 +232,24 @@ pub fn bound_exceeded(
 
             }
             Bound::VecSimple => {
-                state_index - vec_simple_bound(fragments, largest_remove, mol) >= best_index
+                let num_edges: usize = fragments.iter().map(|f| f.len()).sum();
+
+                let start = Instant::now();
+                let bound = vec_simple_bound(fragments, largest_remove, mol);
+                let dur = start.elapsed();
+                timer.vec_simple_insert(num_edges, dur);
+
+                state_index - bound >= best_index
             }
             Bound::VecSmallFrags => {
-                state_index - vec_small_frags_bound(fragments, largest_remove, mol) >= best_index
+                let num_edges: usize = fragments.iter().map(|f| f.len()).sum();
+
+                let start = Instant::now();
+                let bound = vec_small_frags_bound(fragments, largest_remove, mol);
+                let dur = start.elapsed();
+                timer.vec_simple_insert(num_edges, dur);
+
+                state_index - bound >= best_index
             }
             _ => {
                 panic!("One of the chosen bounds is not implemented yet!")
