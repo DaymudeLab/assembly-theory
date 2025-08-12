@@ -74,6 +74,23 @@ pub struct BoundTimer {
     memoize_timer: Arc<DashMap<(usize,usize), (Duration, usize)>>,
 }
 
+#[derive(Clone, PartialEq)]
+// Used for tracking bounds in the search tree.
+pub enum TreeBound {
+    Log,
+    Int,
+    VecSimple,
+    VecSmallFrags,
+    Memoize,
+}
+
+pub struct SearchNode {
+    // All bounds tracked for this search tree
+    bounds: Vec<TreeBound>,
+    // children nodes
+    children: Vec<SearchNode>,
+}
+
 impl BoundTimer {
     pub fn new() -> Self {
         Self {
@@ -229,6 +246,44 @@ impl BoundTimer {
         let memoize_avg = shift * tot_time / (tot_num as f64);
 
         println!("Log: {}\nInt: {}\nVec-simple: {}\nVec-small-frags: {}\nMemoize: {}", log_avg, int_avg, vec_simple_avg, vec_small_frags_avg, memoize_avg);
+    }
+}
+
+impl SearchNode {
+    // Create new root node
+    pub fn new() -> Self {
+        Self {
+            bounds: Vec::with_capacity(5),
+            children: Vec::new(),
+        }
+    }
+
+    // Create new node and add it as a child
+    pub fn new_child(&mut self) -> &mut Self {
+        let new_node = Self {
+            bounds: self.bounds.clone(),
+            children: Vec::new(),
+        };
+
+        self.children.push(new_node);
+        self.children.last_mut().unwrap()
+    }
+
+    // Add bounds to a node
+    pub fn add_bound(&mut self, bound: TreeBound) {
+        self.bounds.push(bound);
+    }
+
+    // Tell if all bounds have been used.
+    // Used to stop computation
+    pub fn halt(&self, all_bounds: Vec<TreeBound>) -> bool {
+        for b in all_bounds {
+            if !self.bounds.contains(&b) {
+                return false
+            }
+        }
+
+        true
     }
 }
 
