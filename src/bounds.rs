@@ -271,12 +271,14 @@ impl SearchNode {
 
     // Add bounds to a node
     pub fn add_bound(&mut self, bound: TreeBound) {
-        self.bounds.push(bound);
+        if !self.bounds.contains(&bound) {
+            self.bounds.push(bound);
+        }
     }
 
     // Tell if all bounds have been used.
     // Used to stop computation
-    pub fn halt(&self, all_bounds: Vec<TreeBound>) -> bool {
+    pub fn halt(&self, all_bounds: &Vec<TreeBound>) -> bool {
         for b in all_bounds {
             if !self.bounds.contains(&b) {
                 return false
@@ -296,6 +298,7 @@ pub fn bound_exceeded(
     largest_remove: usize,
     bounds: &[Bound],
     timer: &mut BoundTimer,
+    search_node: &mut SearchNode,
 ) -> bool {
     for bound_type in bounds {
         let exceeds = match bound_type {
@@ -305,8 +308,11 @@ pub fn bound_exceeded(
                 let dur = start.elapsed();
                 timer.log_insert(fragments.len(), dur);
 
-                state_index - bound >= best_index
-
+                let exceeds = state_index - bound >= best_index;
+                if exceeds {
+                    search_node.add_bound(TreeBound::Log);
+                }
+                exceeds
             }
             Bound::Int => {
                 let start = Instant::now();
@@ -314,8 +320,11 @@ pub fn bound_exceeded(
                 let dur = start.elapsed();
                 timer.int_insert(largest_remove, fragments.len(), dur);
 
-                state_index - bound >= best_index
-
+                let exceeds = state_index - bound >= best_index;
+                if exceeds {
+                    search_node.add_bound(TreeBound::Int);
+                }
+                exceeds
             }
             Bound::VecSimple => {
                 let num_edges: usize = fragments.iter().map(|f| f.len()).sum();
@@ -325,7 +334,11 @@ pub fn bound_exceeded(
                 let dur = start.elapsed();
                 timer.vec_simple_insert(num_edges, dur);
 
-                state_index - bound >= best_index
+                let exceeds = state_index - bound >= best_index;
+                if exceeds {
+                    search_node.add_bound(TreeBound::VecSimple);
+                }
+                exceeds
             }
             Bound::VecSmallFrags => {
                 let num_edges: usize = fragments.iter().map(|f| f.len()).sum();
@@ -335,7 +348,11 @@ pub fn bound_exceeded(
                 let dur = start.elapsed();
                 timer.vec_small_frags_insert(num_edges, dur);
 
-                state_index - bound >= best_index
+                let exceeds = state_index - bound >= best_index;
+                if exceeds {
+                    search_node.add_bound(TreeBound::VecSmallFrags);
+                }
+                exceeds
             }
             _ => {
                 panic!("One of the chosen bounds is not implemented yet!")

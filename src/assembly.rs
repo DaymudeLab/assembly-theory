@@ -29,7 +29,7 @@ use dashmap::DashMap;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
-    bounds::{bound_exceeded, Bound, BoundTimer},
+    bounds::{bound_exceeded, Bound, BoundTimer, SearchNode, TreeBound},
     canonize::{canonize, CanonizeMode, Labeling},
     enumerate::{enumerate_subgraphs, EnumerateMode},
     kernels::KernelMode,
@@ -246,6 +246,7 @@ pub fn recurse_index_search(
         largest_remove,
         bounds,
         timer,
+        &mut SearchNode::new(),
     )
     {
         return (state_index, 1);
@@ -323,6 +324,109 @@ pub fn recurse_index_search(
             .enumerate()
             .for_each(|(i, (h1, h2))| recurse_on_match(i, h1, h2));
     }
+
+    (
+        best_child_index.load(Relaxed),
+        states_searched.load(Relaxed),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn recurse_index_search_tree(
+    mol: &Molecule,
+    matches: &[(BitSet, BitSet)],
+    removal_order: Vec<usize>,
+    state: &[BitSet],
+    state_index: usize,
+    best_index: Arc<AtomicUsize>,
+    largest_remove: usize,
+    bounds: &[Bound],
+    cache: &mut Cache,
+    parallel_mode: ParallelMode,
+    timer: &mut BoundTimer,
+    tree_bounds: &Vec<TreeBound>,
+    search_node: &mut SearchNode,
+) -> (usize, usize) {
+    let new_node = search_node.new_child();
+
+    // If any bounds would prune this assembly state or if memoization is
+    // enabled and this assembly state is preempted by the cached state, halt.
+    bound_exceeded(
+        mol,
+        state,
+        state_index,
+        best_index.load(Relaxed),
+        largest_remove,
+        bounds,
+        timer,
+        new_node,
+    );
+    
+    let start = Instant::now();
+    let cached = cache.memoize_state(mol, state, state_index, &removal_order);
+    let dur = start.elapsed();
+    let largest_frag = if let Some(x) = state.iter().map(|f| f.len()).max() {
+        x
+    }
+    else {
+        0
+    };
+    timer.memoize_insert(state.len(), largest_frag, dur);
+
+    if cached {
+        new_node.add_bound(TreeBound::Memoize);
+    }
+
+    if new_node.halt(tree_bounds) {
+        return (state_index, 1);
+    }
+
+
+    // Keep track of the best assembly index found in any of this assembly
+    // state's children and the number of states searched, including this one.
+    let best_child_index = AtomicUsize::from(state_index);
+    let states_searched = AtomicUsize::from(1);
+
+    // Define a closure that handles recursing to a new assembly state based on
+    // the given (enumerated) pair of non-overlapping isomorphic subgraphs.
+    for (i, (h1, h2)) in matches.iter().enumerate() {
+        if let Some(fragments) = fragments(mol, state, h1, h2) {
+            // If using depth-one parallelism, all descendant states should be
+            // computed serially.
+            let new_parallel = if parallel_mode == ParallelMode::DepthOne {
+                ParallelMode::None
+            } else {
+                parallel_mode
+            };
+
+            // Recurse using the remaining matches and updated fragments.
+            let (child_index, child_states_searched) = recurse_index_search_tree(
+                mol,
+                &matches[i + 1..],
+                {
+                    let mut clone = removal_order.clone();
+                    clone.push(i);
+                    clone
+                },
+                &fragments,
+                state_index - h1.len() + 1,
+                best_index.clone(),
+                h1.len(),
+                bounds,
+                &mut cache.clone(),
+                new_parallel,
+                &mut timer.clone(),
+                tree_bounds,
+                new_node,
+            );
+
+            // Update the best assembly indices (across children states and
+            // the entire search) and the number of descendant states searched.
+            best_child_index.fetch_min(child_index, Relaxed);
+            best_index.fetch_min(best_child_index.load(Relaxed), Relaxed);
+            states_searched.fetch_add(child_states_searched, Relaxed);
+        }
+    };
 
     (
         best_child_index.load(Relaxed),
@@ -419,10 +523,33 @@ pub fn index_search(
 
     let mut timer = BoundTimer::new();
 
+    let tree_bounds = {
+        let mut vec = Vec::new();
+        for b in bounds {
+            let option_tree_bound = match b {
+                Bound::Log => Some(TreeBound::Log),
+                Bound::Int => Some(TreeBound::Int),
+                Bound::VecSimple => Some(TreeBound::VecSimple),
+                Bound::VecSmallFrags => Some(TreeBound::VecSmallFrags),
+                _ => None
+            };
+
+            if let Some(tree_bound) = option_tree_bound {
+                vec.push(tree_bound);
+            }
+        }
+
+        if !(memoize_mode == MemoizeMode::None) {
+            vec.push(TreeBound::Memoize);
+        }
+
+        vec
+    };
+
     // Search for the shortest assembly pathway recursively.
     let edge_count = mol.graph().edge_count();
     let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
-    let (index, states_searched) = recurse_index_search(
+    let (index, states_searched) = recurse_index_search_tree(
         mol,
         &matches,
         Vec::new(),
@@ -434,6 +561,8 @@ pub fn index_search(
         &mut cache,
         parallel_mode,
         &mut timer,
+        &tree_bounds,
+        &mut SearchNode::new(),
     );
 
     //timer.print_memoize();
