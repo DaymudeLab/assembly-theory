@@ -260,7 +260,7 @@ pub fn recurse_index_search(
     else {
         0
     };
-    timer.memoize_insert(largest_frag, dur);
+    timer.memoize_insert(state.len(), largest_frag, dur);
 
     if cached {
         return (state_index, 1);
@@ -436,7 +436,7 @@ pub fn index_search(
         &mut timer,
     );
 
-    timer.print_averages();
+    //timer.print_memoize();
 
     (index as u32, matches.len() as u32, states_searched)
 }

@@ -71,7 +71,7 @@ pub struct BoundTimer {
     int_timer: Arc<DashMap<(usize, usize), (Duration, usize)>>,
     vec_simple_timer: Arc<DashMap<usize, (Duration, usize)>>,
     vec_small_frags_timer: Arc<DashMap<usize, (Duration, usize)>>,
-    memoize_timer: Arc<DashMap<usize, (Duration, usize)>>,
+    memoize_timer: Arc<DashMap<(usize,usize), (Duration, usize)>>,
 }
 
 impl BoundTimer {
@@ -81,7 +81,7 @@ impl BoundTimer {
             int_timer: Arc::new(DashMap::<(usize, usize), (Duration, usize)>::new()),
             vec_simple_timer: Arc::new(DashMap::<usize, (Duration, usize)>::new()),
             vec_small_frags_timer: Arc::new(DashMap::<usize, (Duration, usize)>::new()),
-            memoize_timer: Arc::new(DashMap::<usize, (Duration, usize)>::new()),
+            memoize_timer: Arc::new(DashMap::<(usize, usize), (Duration, usize)>::new()),
         }
     }
 
@@ -113,9 +113,9 @@ impl BoundTimer {
             .or_insert((dur, 1));
     }
 
-    pub fn memoize_insert(&mut self, largest_frag: usize, dur: Duration) {
+    pub fn memoize_insert(&mut self, num_frags: usize, largest_frag: usize, dur: Duration) {
         self.memoize_timer
-            .entry(largest_frag)
+            .entry((num_frags, largest_frag))
             .and_modify(|(entry_dur, entry_num)| {*entry_dur += dur; *entry_num += 1})
             .or_insert((dur, 1));
     }
@@ -170,13 +170,13 @@ impl BoundTimer {
     }
 
     pub fn print_memoize(&self) {
-        println!("LargestFrag,AvgTime");
+        println!("NumFrags,LargestFrag,AvgTime");
         for x in self.memoize_timer.iter() {
             let key = x.key();
             let val = x.value();
             let avg = (val.0.as_secs_f64()) / (val.1 as f64);
 
-            println!("{},{}", key, avg);
+            println!("{},{},{}", key.0, key.1, avg);
         }
     }
 
