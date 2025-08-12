@@ -74,7 +74,7 @@ pub struct BoundTimer {
     memoize_timer: Arc<DashMap<(usize,usize), (Duration, usize)>>,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 // Used for tracking bounds in the search tree.
 pub enum TreeBound {
     Log,
@@ -84,6 +84,7 @@ pub enum TreeBound {
     Memoize,
 }
 
+#[derive(Debug)]
 pub struct SearchNode {
     // All bounds tracked for this search tree
     bounds: Vec<TreeBound>,
@@ -200,26 +201,11 @@ impl BoundTimer {
     pub fn print_averages(&self) {
         let shift = 10000000f64;
 
+        let log_avg = shift * self.log_avg();
+        let int_avg = shift * self.int_avg();
+
         let mut tot_time = 0f64;
         let mut tot_num = 0;
-        for x in self.log_timer.iter() {
-            let (time, num) = x.value();
-            tot_time += time.as_secs_f64();
-            tot_num += num;
-        }
-        let log_avg = shift * tot_time / (tot_num as f64);
-
-        tot_time = 0f64;
-        tot_num = 0;
-        for x in self.int_timer.iter() {
-            let (time, num) = x.value();
-            tot_time += time.as_secs_f64();
-            tot_num += num;
-        }
-        let int_avg = shift * tot_time / (tot_num as f64);
-
-        tot_time = 0f64;
-        tot_num = 0;
         for x in self.vec_simple_timer.iter() {
             let (time, num) = x.value();
             tot_time += time.as_secs_f64();
@@ -246,6 +232,28 @@ impl BoundTimer {
         let memoize_avg = shift * tot_time / (tot_num as f64);
 
         println!("Log: {}\nInt: {}\nVec-simple: {}\nVec-small-frags: {}\nMemoize: {}", log_avg, int_avg, vec_simple_avg, vec_small_frags_avg, memoize_avg);
+    }
+
+    pub fn log_avg(&self) -> f64 {
+        let mut tot_time = 0f64;
+        let mut tot_num = 0;
+        for x in self.log_timer.iter() {
+            let (time, num) = x.value();
+            tot_time += time.as_secs_f64();
+            tot_num += num;
+        }
+        tot_time / (tot_num as f64)
+    }
+
+    pub fn int_avg(&self) -> f64 {
+        let mut tot_time = 0f64;
+        let mut tot_num = 0;
+        for x in self.int_timer.iter() {
+            let (time, num) = x.value();
+            tot_time += time.as_secs_f64();
+            tot_num += num;
+        }
+        tot_time / (tot_num as f64)
     }
 }
 
@@ -286,6 +294,24 @@ impl SearchNode {
         }
 
         true
+    }
+
+    pub fn log_score(&self, weight: f64) -> f64 {
+        if self.bounds.contains(&TreeBound::Log) {
+            weight
+        }
+        else {
+            weight + self.children.iter().map(|c| c.log_score(weight)).sum::<f64>()
+        }
+    }
+
+    pub fn int_score(&self, weight: f64) -> f64 {
+        if self.bounds.contains(&TreeBound::Int) {
+            weight
+        }
+        else {
+            weight + self.children.iter().map(|c| c.log_score(weight)).sum::<f64>()
+        }
     }
 }
 

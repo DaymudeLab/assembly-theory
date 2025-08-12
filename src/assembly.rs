@@ -546,6 +546,8 @@ pub fn index_search(
         vec
     };
 
+    let mut root = SearchNode::new();
+
     // Search for the shortest assembly pathway recursively.
     let edge_count = mol.graph().edge_count();
     let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
@@ -562,8 +564,11 @@ pub fn index_search(
         parallel_mode,
         &mut timer,
         &tree_bounds,
-        &mut SearchNode::new(),
+        &mut root,
     );
+
+    println!("{:?}", root.log_score(timer.log_avg()));
+    println!("{:?}", root.int_score(timer.int_avg()));
 
     //timer.print_memoize();
 
