@@ -567,10 +567,7 @@ pub fn index_search(
         &mut root,
     );
 
-    println!("{:?}", root.log_score(timer.log_avg()));
-    println!("{:?}", root.int_score(timer.int_avg()));
-
-    //timer.print_memoize();
+    root.scores(&timer, &tree_bounds);
 
     (index as u32, matches.len() as u32, states_searched)
 }

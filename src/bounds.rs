@@ -15,6 +15,7 @@ use bit_set::BitSet;
 use clap::ValueEnum;
 use std::{sync::Arc, time::{Duration, Instant}};
 use dashmap::DashMap;
+use itertools::Itertools;
 
 use crate::molecule::{Bond, Element, Molecule};
 
@@ -203,33 +204,9 @@ impl BoundTimer {
 
         let log_avg = shift * self.log_avg();
         let int_avg = shift * self.int_avg();
-
-        let mut tot_time = 0f64;
-        let mut tot_num = 0;
-        for x in self.vec_simple_timer.iter() {
-            let (time, num) = x.value();
-            tot_time += time.as_secs_f64();
-            tot_num += num;
-        }
-        let vec_simple_avg = shift * tot_time / (tot_num as f64);
-
-        tot_time = 0f64;
-        tot_num = 0;
-        for x in self.vec_small_frags_timer.iter() {
-            let (time, num) = x.value();
-            tot_time += time.as_secs_f64();
-            tot_num += num;
-        }
-        let vec_small_frags_avg = shift * tot_time / (tot_num as f64);
-
-        tot_time = 0f64;
-        tot_num = 0;
-        for x in self.memoize_timer.iter() {
-            let (time, num) = x.value();
-            tot_time += time.as_secs_f64();
-            tot_num += num;
-        }
-        let memoize_avg = shift * tot_time / (tot_num as f64);
+        let vec_simple_avg = shift * self.vec_simple_avg();
+        let vec_small_frags_avg = shift * self.vec_small_frags_avg();
+        let memoize_avg = shift * self.memoize_avg();
 
         println!("Log: {}\nInt: {}\nVec-simple: {}\nVec-small-frags: {}\nMemoize: {}", log_avg, int_avg, vec_simple_avg, vec_small_frags_avg, memoize_avg);
     }
@@ -249,6 +226,39 @@ impl BoundTimer {
         let mut tot_time = 0f64;
         let mut tot_num = 0;
         for x in self.int_timer.iter() {
+            let (time, num) = x.value();
+            tot_time += time.as_secs_f64();
+            tot_num += num;
+        }
+        tot_time / (tot_num as f64)
+    }
+
+    pub fn vec_simple_avg(&self) -> f64 {
+        let mut tot_time = 0f64;
+        let mut tot_num = 0;
+        for x in self.vec_simple_timer.iter() {
+            let (time, num) = x.value();
+            tot_time += time.as_secs_f64();
+            tot_num += num;
+        }
+        tot_time / (tot_num as f64)
+    }
+
+    pub fn vec_small_frags_avg(&self) -> f64 {
+        let mut tot_time = 0f64;
+        let mut tot_num = 0;
+        for x in self.vec_small_frags_timer.iter() {
+            let (time, num) = x.value();
+            tot_time += time.as_secs_f64();
+            tot_num += num;
+        }
+        tot_time / (tot_num as f64)
+    }
+
+    pub fn memoize_avg(&self) -> f64 {
+        let mut tot_time = 0f64;
+        let mut tot_num = 0;
+        for x in self.memoize_timer.iter() {
             let (time, num) = x.value();
             tot_time += time.as_secs_f64();
             tot_num += num;
@@ -296,21 +306,37 @@ impl SearchNode {
         true
     }
 
-    pub fn log_score(&self, weight: f64) -> f64 {
-        if self.bounds.contains(&TreeBound::Log) {
-            weight
-        }
-        else {
-            weight + self.children.iter().map(|c| c.log_score(weight)).sum::<f64>()
+    pub fn scores(&self, timer: &BoundTimer, bounds: &Vec<TreeBound>) {
+        let bounds_weights = {
+            let mut vec = Vec::new();
+            for b in bounds {
+                let pair = match b {
+                    TreeBound::Log => (TreeBound::Log, timer.log_avg()),
+                    TreeBound::Int => (TreeBound::Int, timer.int_avg()),
+                    TreeBound::VecSimple => (TreeBound::VecSimple, timer.vec_simple_avg()),
+                    TreeBound::VecSmallFrags => (TreeBound::VecSmallFrags, timer.vec_small_frags_avg()),
+                    TreeBound::Memoize => (TreeBound::Memoize, timer.memoize_avg()),
+                };
+                vec.push(pair);
+            }
+            vec
+        };
+
+        for subset in bounds_weights.iter().combinations(1) {
+            let bounds: Vec<TreeBound> = subset.iter().map(|s| s.0.clone()).collect();
+            println!("{:?}: {}", bounds, self.score(&subset))
         }
     }
 
-    pub fn int_score(&self, weight: f64) -> f64 {
-        if self.bounds.contains(&TreeBound::Int) {
+    fn score(&self, bounds_weights: &Vec<&(TreeBound, f64)>) -> f64{
+        let bound = bounds_weights[0].0.clone();
+        let weight = bounds_weights[0].1;
+
+        if self.bounds.contains(&bound) {
             weight
         }
         else {
-            weight + self.children.iter().map(|c| c.log_score(weight)).sum::<f64>()
+            weight + self.children.iter().map(|c| c.score(bounds_weights)).sum::<f64>()
         }
     }
 }
