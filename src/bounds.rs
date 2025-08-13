@@ -322,22 +322,29 @@ impl SearchNode {
             vec
         };
 
-        for subset in bounds_weights.iter().combinations(1) {
-            let bounds: Vec<TreeBound> = subset.iter().map(|s| s.0.clone()).collect();
-            println!("{:?}: {}", bounds, self.score(&subset))
+        for n in 1..bounds_weights.len()+1 {
+            for subset in bounds_weights.iter().combinations(n) {
+                for perm in subset.into_iter().permutations(n) {
+                    let bounds: Vec<TreeBound> = perm.iter().map(|s| s.0.clone()).collect();
+                    println!("{:?}: {}", bounds, self.score(&perm))
+                }
+            }
         }
     }
 
-    fn score(&self, bounds_weights: &Vec<&(TreeBound, f64)>) -> f64{
-        let bound = bounds_weights[0].0.clone();
-        let weight = bounds_weights[0].1;
+    fn score(&self, bounds_weights: &Vec<&(TreeBound, f64)>) -> f64 {
+        let mut total_weight = 0f64;
+        for b in bounds_weights {
+            let bound = &b.0;
+            let weight = b.1;
 
-        if self.bounds.contains(&bound) {
-            weight
+            total_weight += weight;
+            if self.bounds.contains(bound) {
+                return total_weight;
+            }
         }
-        else {
-            weight + self.children.iter().map(|c| c.score(bounds_weights)).sum::<f64>()
-        }
+
+        total_weight + self.children.iter().map(|c| c.score(bounds_weights)).sum::<f64>()
     }
 }
 
