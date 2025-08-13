@@ -87,7 +87,7 @@ pub enum TreeBound {
 
 #[derive(Debug)]
 pub struct SearchNode {
-    // All bounds tracked for this search tree
+    // Bounds that have been exceeded here or earlier in the tree
     bounds: Vec<TreeBound>,
     // children nodes
     children: Vec<SearchNode>,
@@ -352,8 +352,10 @@ pub fn bound_exceeded(
     timer: &mut BoundTimer,
     search_node: &mut SearchNode,
 ) -> bool {
+    let mut exceeds = false;
+
     for bound_type in bounds {
-        let exceeds = match bound_type {
+        if match bound_type {
             Bound::Log => {
                 let start = Instant::now();
                 let bound = log_bound(fragments);
@@ -409,12 +411,11 @@ pub fn bound_exceeded(
             _ => {
                 panic!("One of the chosen bounds is not implemented yet!")
             }
-        };
-        if exceeds {
-            return true;
+        } {
+            exceeds = true;
         }
     }
-    false
+    exceeds
 }
 
 /// TODO
