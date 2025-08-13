@@ -18,7 +18,7 @@
 //! # }
 //! ```
 
-use std::{fs::File, sync::{
+use std::{fs::{self, File}, path::Path, sync::{
     atomic::{AtomicUsize, Ordering::Relaxed},
     Arc,
 }, time::Instant};
@@ -506,6 +506,7 @@ pub fn index_search(
     kernel_mode: KernelMode,
     bounds: &[Bound],
     tree: bool,
+    name: &str,
 ) -> (u32, u32, usize) {
     // Catch not-yet-implemented modes.
     if kernel_mode != KernelMode::None {
@@ -571,11 +572,13 @@ pub fn index_search(
         //root.scores(&timer, &tree_bounds);
 
         // Serialize search tree
-        let file = File::create("eval_out/test.cbor").unwrap();
-        serde_cbor::to_writer(file, &root).expect("bad");
-        // Serialize timer information
-        let file = File::create("eval_out/test.cbor").unwrap();
-        serde_cbor::to_writer(file, &timer).expect("bad");
+        let path = Path::new("eval_out").join(name);
+        fs::create_dir(&path).expect("Create dir error");
+        let file = File::create(path.join("tree.cbor")).unwrap();
+        serde_cbor::to_writer(file, &root).expect("Tree write fail");
+
+        let file = File::create(path.join("timer.cbor")).unwrap();
+        serde_cbor::to_writer(file, &timer).expect("Timer write fail");
 
         (index as u32, matches.len() as u32, states_searched)
     }
@@ -672,6 +675,7 @@ pub fn index(mol: &Molecule) -> u32 {
         KernelMode::None,
         &[Bound::Int, Bound::VecSimple, Bound::VecSmallFrags],
         false,
+        "",
     )
     .0
 }

@@ -120,6 +120,7 @@ fn main() -> Result<()> {
         cli.kernel,
         boundlist,
         cli.tree,
+        "morphine.mol",
     );
 
     // Print final output, depending on --verbose.
