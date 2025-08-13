@@ -18,7 +18,7 @@
 //! # }
 //! ```
 
-use std::{sync::{
+use std::{fs::File, sync::{
     atomic::{AtomicUsize, Ordering::Relaxed},
     Arc,
 }, time::Instant};
@@ -568,7 +568,14 @@ pub fn index_search(
             &mut root,
         );
 
-        root.scores(&timer, &tree_bounds);
+        //root.scores(&timer, &tree_bounds);
+
+        // Serialize search tree
+        let file = File::create("eval_out/test.cbor").unwrap();
+        serde_cbor::to_writer(file, &root).expect("bad");
+        // Serialize timer information
+        let file = File::create("eval_out/test.cbor").unwrap();
+        serde_cbor::to_writer(file, &timer).expect("bad");
 
         (index as u32, matches.len() as u32, states_searched)
     }

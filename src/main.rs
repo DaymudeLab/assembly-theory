@@ -128,7 +128,7 @@ fn main() -> Result<()> {
         println!("Non-Overlapping Isomorphic Subgraph Pairs: {num_matches}");
         println!("Assembly States Searched: {states_searched}");
     } else {
-        println!("{index}");
+        //println!("{index}");
     }
 
     Ok(())

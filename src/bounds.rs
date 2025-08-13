@@ -16,6 +16,7 @@ use clap::ValueEnum;
 use std::{sync::Arc, time::{Duration, Instant}};
 use dashmap::DashMap;
 use itertools::Itertools;
+use serde::Serialize;
 
 use crate::molecule::{Bond, Element, Molecule};
 
@@ -66,7 +67,7 @@ struct EdgeType {
     ends: (Element, Element),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub struct BoundTimer {
     log_timer: Arc<DashMap<usize, (Duration, usize)>>,
     int_timer: Arc<DashMap<(usize, usize), (Duration, usize)>>,
@@ -75,7 +76,7 @@ pub struct BoundTimer {
     memoize_timer: Arc<DashMap<(usize,usize), (Duration, usize)>>,
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Serialize)]
 // Used for tracking bounds in the search tree.
 pub enum TreeBound {
     Log,
@@ -85,7 +86,7 @@ pub enum TreeBound {
     Memoize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct SearchNode {
     // Bounds that have been exceeded here or earlier in the tree
     bounds: Vec<TreeBound>,
