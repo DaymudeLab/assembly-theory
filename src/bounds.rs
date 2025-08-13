@@ -324,10 +324,16 @@ impl SearchNode {
 
         for n in 1..bounds_weights.len()+1 {
             for subset in bounds_weights.iter().combinations(n) {
+                let mut best = 10f64;
+                let mut best_bounds: Vec<TreeBound> = Vec::new();
                 for perm in subset.into_iter().permutations(n) {
-                    let bounds: Vec<TreeBound> = perm.iter().map(|s| s.0.clone()).collect();
-                    println!("{:?}: {}", bounds, self.score(&perm))
+                    let score = self.score(&perm);
+                    if score < best {
+                        best = score;
+                        best_bounds = perm.iter().map(|s| s.0.clone()).collect();
+                    }
                 }
+                println!("{:?}, {}", best_bounds, best);
             }
         }
     }

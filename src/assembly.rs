@@ -505,6 +505,7 @@ pub fn index_search(
     memoize_mode: MemoizeMode,
     kernel_mode: KernelMode,
     bounds: &[Bound],
+    tree: bool,
 ) -> (u32, u32, usize) {
     // Catch not-yet-implemented modes.
     if kernel_mode != KernelMode::None {
@@ -521,55 +522,73 @@ pub fn index_search(
     let mut init = BitSet::new();
     init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
 
-    let mut timer = BoundTimer::new();
-
-    let tree_bounds = {
-        let mut vec = Vec::new();
-        for b in bounds {
-            let option_tree_bound = match b {
-                Bound::Log => Some(TreeBound::Log),
-                Bound::Int => Some(TreeBound::Int),
-                Bound::VecSimple => Some(TreeBound::VecSimple),
-                Bound::VecSmallFrags => Some(TreeBound::VecSmallFrags),
-                _ => None
-            };
-
-            if let Some(tree_bound) = option_tree_bound {
-                vec.push(tree_bound);
-            }
-        }
-
-        if !(memoize_mode == MemoizeMode::None) {
-            vec.push(TreeBound::Memoize);
-        }
-
-        vec
-    };
-
-    let mut root = SearchNode::new();
-
-    // Search for the shortest assembly pathway recursively.
     let edge_count = mol.graph().edge_count();
     let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
-    let (index, states_searched) = recurse_index_search_tree(
-        mol,
-        &matches,
-        Vec::new(),
-        &[init],
-        edge_count - 1,
-        best_index,
-        edge_count,
-        bounds,
-        &mut cache,
-        parallel_mode,
-        &mut timer,
-        &tree_bounds,
-        &mut root,
-    );
 
-    root.scores(&timer, &tree_bounds);
+    let mut timer = BoundTimer::new();
 
-    (index as u32, matches.len() as u32, states_searched)
+    if tree {
+        let tree_bounds = {
+            let mut vec = Vec::new();
+            for b in bounds {
+                let option_tree_bound = match b {
+                    Bound::Log => Some(TreeBound::Log),
+                    Bound::Int => Some(TreeBound::Int),
+                    Bound::VecSimple => Some(TreeBound::VecSimple),
+                    Bound::VecSmallFrags => Some(TreeBound::VecSmallFrags),
+                    _ => None
+                };
+
+                if let Some(tree_bound) = option_tree_bound {
+                    vec.push(tree_bound);
+                }
+            }
+
+            if !(memoize_mode == MemoizeMode::None) {
+                vec.push(TreeBound::Memoize);
+            }
+
+            vec
+        };
+
+        let mut root = SearchNode::new();
+        let (index, states_searched) = recurse_index_search_tree(
+            mol,
+            &matches,
+            Vec::new(),
+            &[init],
+            edge_count - 1,
+            best_index,
+            edge_count,
+            bounds,
+            &mut cache,
+            parallel_mode,
+            &mut timer,
+            &tree_bounds,
+            &mut root,
+        );
+
+        root.scores(&timer, &tree_bounds);
+
+        (index as u32, matches.len() as u32, states_searched)
+    }
+    else {
+        let (index, states_searched) = recurse_index_search(
+            mol,
+            &matches,
+            Vec::new(),
+            &[init],
+            edge_count - 1,
+            best_index,
+            edge_count,
+            bounds,
+            &mut cache,
+            parallel_mode,
+            &mut timer,
+        );
+
+        (index as u32, matches.len() as u32, states_searched)
+    }
 }
 
 pub fn index_search_timer(
@@ -645,6 +664,7 @@ pub fn index(mol: &Molecule) -> u32 {
         MemoizeMode::CanonIndex,
         KernelMode::None,
         &[Bound::Int, Bound::VecSimple, Bound::VecSmallFrags],
+        false,
     )
     .0
 }

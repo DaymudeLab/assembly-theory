@@ -55,6 +55,9 @@ struct Cli {
     /// Strategy for performing graph kernelization during the search phase.
     #[arg(long, value_enum, default_value_t = KernelMode::None)]
     kernel: KernelMode,
+
+    #[arg(long)]
+    tree: bool,
 }
 
 #[derive(Args, Debug)]
@@ -116,6 +119,7 @@ fn main() -> Result<()> {
         cli.memoize,
         cli.kernel,
         boundlist,
+        cli.tree,
     );
 
     // Print final output, depending on --verbose.

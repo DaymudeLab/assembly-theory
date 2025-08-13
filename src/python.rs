@@ -473,6 +473,7 @@ pub fn _index_search(
         memoize_mode,
         kernel_mode,
         &boundlist,
+        false,
     ))
 }
 
