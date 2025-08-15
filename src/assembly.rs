@@ -347,7 +347,7 @@ pub fn recurse_index_search_tree(
     tree_bounds: &Vec<TreeBound>,
     search_node: &mut SearchNode,
 ) -> (usize, usize) {
-    let new_node = search_node.new_child();
+    //let new_node = search_node.new_child();
 
     // If any bounds would prune this assembly state or if memoization is
     // enabled and this assembly state is preempted by the cached state, halt.
@@ -359,7 +359,7 @@ pub fn recurse_index_search_tree(
         largest_remove,
         bounds,
         timer,
-        new_node,
+        search_node,
     );
     
     let start = Instant::now();
@@ -374,11 +374,11 @@ pub fn recurse_index_search_tree(
     timer.memoize_insert(state.len(), largest_frag, dur);
 
     if cached {
-        new_node.add_bound(TreeBound::Memoize);
-        new_node.add_time(dur);
+        search_node.add_bound(TreeBound::Memoize);
+        search_node.add_time(TreeBound::Memoize, dur);
     }
 
-    if new_node.halt(tree_bounds) {
+    if search_node.halt(tree_bounds) {
         return (state_index, 1);
     }
 
@@ -399,7 +399,8 @@ pub fn recurse_index_search_tree(
             } else {
                 parallel_mode
             };
-
+            
+            let new_node = search_node.new_child();
             // Recurse using the remaining matches and updated fragments.
             let (child_index, child_states_searched) = recurse_index_search_tree(
                 mol,

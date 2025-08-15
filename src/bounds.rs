@@ -275,7 +275,7 @@ impl SearchNode {
     pub fn new() -> Self {
         Self {
             bounds: Vec::with_capacity(5),
-            times: Vec::new(),
+            times: vec![Duration::new(0, 0); 5],
             children: Vec::new(),
         }
     }
@@ -284,7 +284,7 @@ impl SearchNode {
     pub fn new_child(&mut self) -> &mut Self {
         let new_node = Self {
             bounds: self.bounds.clone(),
-            times: Vec::new(),
+            times: vec![Duration::new(0, 0); 5],
             children: Vec::new(),
         };
 
@@ -300,8 +300,16 @@ impl SearchNode {
     }
 
     // Add time taken to compute a bound
-    pub fn add_time(&mut self, dur: Duration) {
-        self.times.push(dur);
+    pub fn add_time(&mut self, bound: TreeBound, dur: Duration) {
+        let index = match bound {
+            TreeBound::Log => 0,
+            TreeBound::Int => 1,
+            TreeBound::VecSimple => 2,
+            TreeBound::VecSmallFrags => 3,
+            TreeBound::Memoize => 4,
+        };
+
+        self.times.insert(index, dur);
     }
 
     // Tell if all bounds have been used.
@@ -384,7 +392,7 @@ pub fn bound_exceeded(
                 let bound = log_bound(fragments);
                 let dur = start.elapsed();
                 timer.log_insert(fragments.len(), dur);
-                search_node.add_time(dur);
+                search_node.add_time(TreeBound::Log, dur);
 
                 let exceeds = state_index - bound >= best_index;
                 if exceeds {
@@ -397,7 +405,7 @@ pub fn bound_exceeded(
                 let bound = int_bound(fragments, largest_remove);
                 let dur = start.elapsed();
                 timer.int_insert(largest_remove, fragments.len(), dur);
-                search_node.add_time(dur);
+                search_node.add_time(TreeBound::Int, dur);
                 
 
                 let exceeds = state_index - bound >= best_index;
@@ -413,7 +421,7 @@ pub fn bound_exceeded(
                 let bound = vec_simple_bound(fragments, largest_remove, mol);
                 let dur = start.elapsed();
                 timer.vec_simple_insert(num_edges, dur);
-                search_node.add_time(dur);
+                search_node.add_time(TreeBound::VecSimple, dur);
 
                 let exceeds = state_index - bound >= best_index;
                 if exceeds {
@@ -428,7 +436,7 @@ pub fn bound_exceeded(
                 let bound = vec_small_frags_bound(fragments, largest_remove, mol);
                 let dur = start.elapsed();
                 timer.vec_small_frags_insert(num_edges, dur);
-                search_node.add_time(dur);
+                search_node.add_time(TreeBound::VecSmallFrags, dur);
 
                 let exceeds = state_index - bound >= best_index;
                 if exceeds {
