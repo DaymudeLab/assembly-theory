@@ -110,6 +110,58 @@ fn main() -> Result<()> {
         }) => &bounds.clone(),
     };
 
+
+    use std::ffi::{OsStr, OsString};
+    use std::path::Path;
+    use assembly_theory::molecule::Molecule;
+    use rayon::iter::{ParallelIterator, IntoParallelRefIterator, IndexedParallelIterator};
+
+    let dataset = "gdb17_200";
+    fs::create_dir_all(Path::new("eval_out").join(dataset)).expect("Create dir error");
+    let paths = fs::read_dir(Path::new("data").join(dataset)).unwrap();
+    let mut mol_list: Vec<Molecule> = Vec::new();
+    let mut names: Vec<OsString> = Vec::new();
+
+    for path in paths {
+        let name = path.unwrap().path();
+        if name.extension().and_then(OsStr::to_str) != Some("mol") {
+            continue;
+        }
+        names.push(name.file_name().unwrap().to_os_string());
+        mol_list.push(
+            parse_molfile_str(
+                &fs::read_to_string(name.clone())
+                    .expect(&format!("Could not read file {name:?}")),
+            )
+            .expect(&format!("Failed to parse {name:?}")),
+        );
+    }
+
+    names.par_iter().zip(mol_list.par_iter()).for_each(|(n, mol)| {
+        if n == "46.mol" {
+            println!("Skipping 46");
+        }
+        else {
+            let path = Path::new("eval_out").join(dataset).join(n);
+            fs::create_dir_all(&path).expect("Create dir error");
+            let index = index_search(
+                &mol,
+                cli.enumerate,
+                cli.canonize,
+                cli.parallel,
+                cli.memoize,
+                cli.kernel,            
+                boundlist,
+                true,
+                Some(&path),
+            );
+            println!("{:?}: MA: {} Space: {}", n, index.0, index.1);
+        }
+    });
+    //std::process::exit(1);
+
+
+
     // Call index calculation with all the various options.
     let (index, num_matches, states_searched) = index_search(
         &mol,
@@ -120,7 +172,7 @@ fn main() -> Result<()> {
         cli.kernel,
         boundlist,
         cli.tree,
-        "morphine.mol",
+        None,
     );
 
     // Print final output, depending on --verbose.

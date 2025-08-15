@@ -474,7 +474,7 @@ pub fn _index_search(
         kernel_mode,
         &boundlist,
         false,
-        "",
+        None,
     ))
 }
 

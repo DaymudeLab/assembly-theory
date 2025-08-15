@@ -18,7 +18,7 @@
 //! # }
 //! ```
 
-use std::{fs::{self, File}, path::Path, sync::{
+use std::{fs::File, path::Path, sync::{
     atomic::{AtomicUsize, Ordering::Relaxed},
     Arc,
 }, time::Instant};
@@ -375,6 +375,7 @@ pub fn recurse_index_search_tree(
 
     if cached {
         new_node.add_bound(TreeBound::Memoize);
+        new_node.add_time(dur);
     }
 
     if new_node.halt(tree_bounds) {
@@ -506,7 +507,7 @@ pub fn index_search(
     kernel_mode: KernelMode,
     bounds: &[Bound],
     tree: bool,
-    name: &str,
+    output_path: Option<&Path>,
 ) -> (u32, u32, usize) {
     // Catch not-yet-implemented modes.
     if kernel_mode != KernelMode::None {
@@ -572,15 +573,16 @@ pub fn index_search(
         //root.scores(&timer, &tree_bounds);
 
         // Serialize search tree
-        let path = Path::new("eval_out").join(name);
-        fs::create_dir(&path).expect("Create dir error");
-        let file = File::create(path.join("tree.cbor")).unwrap();
-        serde_cbor::to_writer(file, &root).expect("Tree write fail");
+        if let Some(path) = output_path {
+            let file = File::create(path.join("tree.cbor")).unwrap();
+            serde_cbor::to_writer(file, &root).expect("Tree write fail");
 
-        let file = File::create(path.join("timer.cbor")).unwrap();
-        serde_cbor::to_writer(file, &timer).expect("Timer write fail");
+            let file = File::create(path.join("timer.cbor")).unwrap();
+            serde_cbor::to_writer(file, &timer).expect("Timer write fail");
+        }
 
         (index as u32, matches.len() as u32, states_searched)
+
     }
     else {
         let (index, states_searched) = recurse_index_search(
@@ -675,7 +677,7 @@ pub fn index(mol: &Molecule) -> u32 {
         KernelMode::None,
         &[Bound::Int, Bound::VecSimple, Bound::VecSmallFrags],
         false,
-        "",
+        None,
     )
     .0
 }

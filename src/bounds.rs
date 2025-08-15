@@ -76,7 +76,7 @@ pub struct BoundTimer {
     memoize_timer: Arc<DashMap<(usize,usize), (Duration, usize)>>,
 }
 
-#[derive(Clone, PartialEq, Debug, Serialize)]
+#[derive(Clone, PartialEq, Debug, Serialize, Eq, Hash)]
 // Used for tracking bounds in the search tree.
 pub enum TreeBound {
     Log,
@@ -90,6 +90,8 @@ pub enum TreeBound {
 pub struct SearchNode {
     // Bounds that have been exceeded here or earlier in the tree
     bounds: Vec<TreeBound>,
+    // Time taken for each bound at this node
+    times: Vec<Duration>,
     // children nodes
     children: Vec<SearchNode>,
 }
@@ -273,6 +275,7 @@ impl SearchNode {
     pub fn new() -> Self {
         Self {
             bounds: Vec::with_capacity(5),
+            times: Vec::new(),
             children: Vec::new(),
         }
     }
@@ -281,6 +284,7 @@ impl SearchNode {
     pub fn new_child(&mut self) -> &mut Self {
         let new_node = Self {
             bounds: self.bounds.clone(),
+            times: Vec::new(),
             children: Vec::new(),
         };
 
@@ -293,6 +297,11 @@ impl SearchNode {
         if !self.bounds.contains(&bound) {
             self.bounds.push(bound);
         }
+    }
+
+    // Add time taken to compute a bound
+    pub fn add_time(&mut self, dur: Duration) {
+        self.times.push(dur);
     }
 
     // Tell if all bounds have been used.
@@ -375,6 +384,7 @@ pub fn bound_exceeded(
                 let bound = log_bound(fragments);
                 let dur = start.elapsed();
                 timer.log_insert(fragments.len(), dur);
+                search_node.add_time(dur);
 
                 let exceeds = state_index - bound >= best_index;
                 if exceeds {
@@ -387,6 +397,8 @@ pub fn bound_exceeded(
                 let bound = int_bound(fragments, largest_remove);
                 let dur = start.elapsed();
                 timer.int_insert(largest_remove, fragments.len(), dur);
+                search_node.add_time(dur);
+                
 
                 let exceeds = state_index - bound >= best_index;
                 if exceeds {
@@ -401,6 +413,7 @@ pub fn bound_exceeded(
                 let bound = vec_simple_bound(fragments, largest_remove, mol);
                 let dur = start.elapsed();
                 timer.vec_simple_insert(num_edges, dur);
+                search_node.add_time(dur);
 
                 let exceeds = state_index - bound >= best_index;
                 if exceeds {
@@ -415,6 +428,7 @@ pub fn bound_exceeded(
                 let bound = vec_small_frags_bound(fragments, largest_remove, mol);
                 let dur = start.elapsed();
                 timer.vec_small_frags_insert(num_edges, dur);
+                search_node.add_time(dur);
 
                 let exceeds = state_index - bound >= best_index;
                 if exceeds {
