@@ -18,7 +18,7 @@
 //! # }
 //! ```
 
-use std::{fs::File, path::Path, sync::{
+use std::{collections::{HashMap, HashSet}, fs::File, path::Path, sync::{
     atomic::{AtomicUsize, Ordering::Relaxed},
     Arc,
 }, time::Instant};
@@ -26,6 +26,7 @@ use std::{fs::File, path::Path, sync::{
 use bit_set::BitSet;
 use clap::ValueEnum;
 use dashmap::DashMap;
+use petgraph::graph::EdgeIndex;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
@@ -35,7 +36,7 @@ use crate::{
     kernels::KernelMode,
     memoize::{Cache, MemoizeMode},
     molecule::Molecule,
-    utils::connected_components_under_edges,
+    utils::{connected_components_under_edges, edge_neighbors},
 };
 
 /// Parallelization strategy for the recursive search phase.
@@ -151,6 +152,82 @@ pub fn matches(
         ord[i]
     });
 
+    matches
+}
+
+pub fn extend_matches(mol: &Molecule) -> Vec<(BitSet, BitSet)> {
+    let num_edges = mol.graph().edge_count();
+    let mut subgraphs: HashSet<BitSet> = HashSet::new();
+    let mut size_one_subgraphs: HashSet<BitSet> = HashSet::new();
+    let mut matches: Vec<(BitSet, BitSet)> = Vec::new();
+    let mut buckets: HashMap<Labeling, Vec<BitSet>> = HashMap::new();
+
+    // Generate subgraphs with one edge
+    for i in 0..num_edges {
+        let mut new_bitset = BitSet::with_capacity(num_edges);
+        new_bitset.insert(i);
+        size_one_subgraphs.insert(new_bitset);
+    }
+
+    // Generate subgraphs with two edges
+    for subgraph in size_one_subgraphs.iter() {
+        let mut neighborhood = BitSet::with_capacity(num_edges);
+        for e in subgraph {
+            neighborhood.extend(edge_neighbors(mol.graph(), EdgeIndex::new(e)).map(|x| x.index()));
+        }
+        neighborhood.difference_with(subgraph);
+
+        for e in neighborhood.iter() {
+            let mut new_subgraph = subgraph.clone();
+            new_subgraph.insert(e);
+            subgraphs.insert(new_subgraph);
+        }
+    }
+
+    while subgraphs.len() > 0 {
+        buckets.clear();
+        // Generate buckets
+        for g in subgraphs.iter() {
+            let canon = canonize(mol, g, CanonizeMode::TreeNauty);
+            buckets.entry(canon)
+                .and_modify(|v| v.push(g.clone()))
+                .or_insert(vec![g.clone()]);
+        }
+
+        subgraphs.clear();
+        for (_, bucket) in buckets.iter() {
+            // Generate matches
+            let mut has_match = BitSet::with_capacity(bucket.len());
+            for (i, first) in bucket.iter().enumerate() {
+                for (j, second) in bucket[i+1..].iter().enumerate() {
+                    if first.intersection(second).count() == 0 {
+                        matches.push((first.clone(), second.clone()));
+                        has_match.insert(i);
+                        has_match.insert(i + 1 + j);
+                    }
+                }
+            }
+
+            // Generate new subgraphs
+            // Only extend if subgraph has a match
+            for i in has_match.iter() {
+                let subgraph = &bucket[i];
+                let mut neighborhood = BitSet::with_capacity(num_edges);
+                for e in subgraph {
+                    neighborhood.extend(edge_neighbors(mol.graph(), EdgeIndex::new(e)).map(|x| x.index()));
+                }
+                neighborhood.difference_with(subgraph);
+
+                for e in neighborhood.iter() {
+                    let mut new_subgraph = subgraph.clone();
+                    new_subgraph.insert(e);
+                    subgraphs.insert(new_subgraph);
+                }
+            }
+        }
+    }
+
+    matches.reverse();
     matches
 }
 
@@ -516,7 +593,7 @@ pub fn index_search(
     }
 
     // Enumerate non-overlapping isomorphic subgraph pairs.
-    let matches = matches(mol, enumerate_mode, canonize_mode, parallel_mode);
+    let matches = extend_matches(mol);
 
     // Create memoization cache.
     let mut cache = Cache::new(memoize_mode, canonize_mode);
