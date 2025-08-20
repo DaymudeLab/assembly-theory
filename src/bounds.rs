@@ -275,7 +275,7 @@ impl SearchNode {
     pub fn new() -> Self {
         Self {
             bounds: Vec::with_capacity(5),
-            times: vec![Duration::new(0, 0); 5],
+            times: vec![Duration::new(0, 0); 6],
             children: Vec::new(),
         }
     }
@@ -284,7 +284,7 @@ impl SearchNode {
     pub fn new_child(&mut self) -> &mut Self {
         let new_node = Self {
             bounds: self.bounds.clone(),
-            times: vec![Duration::new(0, 0); 5],
+            times: vec![Duration::new(0, 0); 6],
             children: Vec::new(),
         };
 
@@ -309,7 +309,12 @@ impl SearchNode {
             TreeBound::Memoize => 4,
         };
 
-        self.times.insert(index, dur);
+        self.times[index] = dur;
+    }
+
+    pub fn add_default_time(&mut self, dur: Duration) {
+        let idx = 5;
+        self.times[idx] = dur;
     }
 
     // Tell if all bounds have been used.

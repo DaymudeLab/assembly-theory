@@ -21,7 +21,7 @@
 use std::{collections::{HashMap, HashSet}, fs::File, path::Path, sync::{
     atomic::{AtomicUsize, Ordering::Relaxed},
     Arc,
-}, time::Instant};
+}, time::{Duration, Instant}};
 
 use bit_set::BitSet;
 use clap::ValueEnum;
@@ -467,7 +467,10 @@ pub fn recurse_index_search_tree(
 
     // Define a closure that handles recursing to a new assembly state based on
     // the given (enumerated) pair of non-overlapping isomorphic subgraphs.
+    let mut total_time = Duration::new(0, 0);
+
     for (i, (h1, h2)) in matches.iter().enumerate() {
+        let start = Instant::now();
         if let Some(fragments) = fragments(mol, state, h1, h2) {
             // If using depth-one parallelism, all descendant states should be
             // computed serially.
@@ -476,6 +479,8 @@ pub fn recurse_index_search_tree(
             } else {
                 parallel_mode
             };
+
+            total_time += start.elapsed();
             
             let new_node = search_node.new_child();
             // Recurse using the remaining matches and updated fragments.
@@ -506,6 +511,8 @@ pub fn recurse_index_search_tree(
             states_searched.fetch_add(child_states_searched, Relaxed);
         }
     };
+
+    search_node.add_default_time(total_time);
 
     (
         best_child_index.load(Relaxed),
