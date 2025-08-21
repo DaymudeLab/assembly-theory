@@ -201,7 +201,11 @@ pub fn extend_matches(mol: &Molecule) -> Vec<(BitSet, BitSet)> {
             for (i, first) in bucket.iter().enumerate() {
                 for (j, second) in bucket[i+1..].iter().enumerate() {
                     if first.intersection(second).count() == 0 {
+                        if first > second {
                         matches.push((first.clone(), second.clone()));
+                        } else {
+                            matches.push((second.clone(), first.clone()));
+                        }
                         has_match.insert(i);
                         has_match.insert(i + 1 + j);
                     }
@@ -227,7 +231,19 @@ pub fn extend_matches(mol: &Molecule) -> Vec<(BitSet, BitSet)> {
         }
     }
 
-    matches.reverse();
+    matches.sort_by(|e1, e2| {
+        let ord = [
+            e2.0.len().cmp(&e1.0.len()), // Decreasing subgraph size.
+            e1.0.cmp(&e2.0),             // First subgraph lexicographical.
+            e1.1.cmp(&e2.1),             // Second subgraph lexicographical.
+        ];
+        let mut i = 0;
+        while ord[i] == std::cmp::Ordering::Equal {
+            i += 1;
+        }
+        ord[i]
+    });
+
     matches
 }
 
@@ -585,7 +601,7 @@ pub fn recurse_index_search_tree(
 /// ```
 pub fn index_search(
     mol: &Molecule,
-    enumerate_mode: EnumerateMode,
+    _enumerate_mode: EnumerateMode,
     canonize_mode: CanonizeMode,
     parallel_mode: ParallelMode,
     memoize_mode: MemoizeMode,
