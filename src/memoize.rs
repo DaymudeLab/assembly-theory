@@ -6,6 +6,8 @@ use bit_set::BitSet;
 use clap::ValueEnum;
 use dashmap::DashMap;
 
+use std::sync::atomic::AtomicUsize;
+
 use crate::{
     canonize::{canonize, CanonizeMode, Labeling},
     molecule::Molecule,
@@ -47,6 +49,8 @@ pub struct Cache {
     /// A parallel-aware map from fragments to their canonical labelings; only
     /// used with [`MemoizeMode::CanonIndex`].
     fragment_labels: Arc<DashMap<BitSet, Labeling>>,
+
+    count: Arc<AtomicUsize>,
 }
 
 impl Cache {
@@ -57,6 +61,7 @@ impl Cache {
             canonize_mode,
             cache: Arc::new(DashMap::<CacheKey, (usize, Vec<usize>)>::new()),
             fragment_labels: Arc::new(DashMap::<BitSet, Labeling>::new()),
+            count: Arc::new(AtomicUsize::from(0)),
         }
     }
 
@@ -95,7 +100,7 @@ impl Cache {
     /// preempted by the cached assembly state.
     /// See https://github.com/DaymudeLab/assembly-theory/pull/95 for details.
     pub fn memoize_state(
-        &self,
+        &mut self,
         mol: &Molecule,
         state: &[BitSet],
         state_index: usize,
@@ -121,9 +126,14 @@ impl Cache {
                 .value()
                 .clone();
             if cached_index <= state_index && cached_order < *removal_order {
+                self.count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 return true;
             }
         }
         false
+    }
+
+    pub fn count(&mut self) -> usize {
+        self.count.load(std::sync::atomic::Ordering::Relaxed)
     }
 }
