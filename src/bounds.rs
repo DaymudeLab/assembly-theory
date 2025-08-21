@@ -77,11 +77,13 @@ pub fn bound_exceeded(
     best_index: usize,
     largest_remove: usize,
     bounds: &[Bound],
+    masks: &Vec<Vec<BitSet>>,
 ) -> bool {
     for bound_type in bounds {
         let exceeds = match bound_type {
             Bound::Log => state_index - log_bound(fragments) >= best_index,
-            Bound::Int => state_index - int_bound(fragments, largest_remove) >= best_index,
+            //Bound::Int => state_index - int_bound_seet(masks, largest_remove) >= best_index,
+            Bound::Int => best_index + int_bound_new(masks) <= state_index,
             Bound::VecSimple => {
                 state_index - vec_simple_bound(fragments, largest_remove, mol) >= best_index
             }
@@ -148,6 +150,74 @@ fn int_bound(fragments: &[BitSet], m: usize) -> usize {
 
     max_s
 }
+
+fn int_bound_new(masks: &Vec<Vec<BitSet>>) -> usize {
+    let mut max = 0;
+    for (i, list) in masks.iter().enumerate() {
+        let mut val = 0;
+        let i = i + 2;
+        for (j, frag) in list.iter().enumerate() {
+            let mf = masks[0][j].len();
+            let mi = frag.len();
+            let x = mf + (mi % i) - mi;
+            val += mf - (mi / i) - x / (i-1) - (x % (i-1) != 0) as usize;
+        }
+        val -= (i as f32).log2().ceil() as usize;
+        max = max.max(val);
+    }
+
+    max
+}
+
+fn int_bound_seet(masks: &Vec<Vec<BitSet>>, largest_remove: usize) -> usize {
+    let mut dup_bonds_2 = 0;
+    let mut dup_bonds_total;
+    let mut max;
+    let mut size_lists = vec![Vec::new(); masks.len()];
+
+    for j in 0..masks.len()
+    {
+        size_lists[j] = vec![0; masks[j].len()];
+        for i in 0..masks[0].len()
+        {
+            size_lists[j][i] = masks[j][i].len();
+        }
+    }
+
+    for i in 0..size_lists[0].len() {
+        dup_bonds_2 += size_lists[0][i] / 2;
+    }
+    dup_bonds_2 -= 1;
+    max = dup_bonds_2;
+
+    for j in 3..largest_remove+1
+    {
+        let size_list = &size_lists[j - 2];
+        let size_list2 = &size_lists[0];
+        let mut adjusted_size_list = vec![0; size_list.len()];
+        let mut adjusted_size_list2 = vec![0; size_list.len()];
+        for i in 0..size_list.len()
+        {
+            adjusted_size_list[i] = size_list[i] - size_list[i] % j;
+            adjusted_size_list2[i] = size_list2[i] - adjusted_size_list[i];
+        }
+        dup_bonds_total = 0;
+        for i in 0..size_list.len()
+        {
+            dup_bonds_total += adjusted_size_list[i] - adjusted_size_list[i] / j;
+            dup_bonds_total += adjusted_size_list2[i] - adjusted_size_list2[i] / (j - 1);
+            if adjusted_size_list2[i] % (j - 1) != 0 {
+                dup_bonds_total -= 1;
+            }
+        }
+        dup_bonds_total -= (j as f32).log2().ceil() as usize;
+        max = max.max(dup_bonds_total);
+    }
+
+    max
+}
+
+
 
 /// TODO
 // Count number of unique edges in a fragment
