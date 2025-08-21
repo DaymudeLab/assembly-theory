@@ -1,11 +1,12 @@
 import cbor2
+import numpy as np
 import os
-import matplotlib.pyplot as plt
+import gc
 import itertools
+import matplotlib.pyplot as plt
 from matplotlib_venn import venn3
 from matplotlib_venn.layout.venn3 import DefaultLayoutAlgorithm
-import numpy as np
-import gc
+from ete3 import Tree, TreeStyle, NodeStyle, TextFace
 
 class SearchNode:
     def __init__(self, bound_list, dur_list):
@@ -186,11 +187,6 @@ def plot_states_searched(infile):
     plt.show()'''
 
 def score_mol(mol_dir, bounds):
-    '''f = open(mol_file + '/timer.cbor', 'rb')
-    timer_data = cbor2.load(f)
-    f.close()
-    timers = [Timer.from_cbor(b, timer_data) for b in bounds]'''
-
     f = open(mol_dir + 'tree.cbor', 'rb')
     tree_data = cbor2.load(f)
     f.close()
@@ -275,7 +271,75 @@ def venn_diagram(inputfile):
           layout_algorithm=DefaultLayoutAlgorithm(fixed_subset_sizes=(1,1,1,1,1,1,1)))
     plt.show()
 
+def gen_tree(tree, child_names, parent_name):
+    for cname in child_names:
+        name = parent_name + (cname,)
 
-scores = score_mol('eval_out/gdb17_200/002.mol/', ['Int', 'VecSimple', 'VecSmallFrags'])
-for s in scores:
-    print(s)
+        # Create child node
+        child = tree.add_child(name=name)
+
+        # Add name to node
+        child.add_face(TextFace(cname), column=0, position='branch-top')
+
+        # Recurse
+        new_list = child_names.copy()
+        new_list.remove(cname)
+        gen_tree(child, new_list, name)
+
+def bound_order_tree(mol_file, bounds):
+    t = Tree(name='root')
+    t.add_face(TextFace('None'), column=0, position='branch-top')
+    ts = TreeStyle()
+    ts.show_scale = False
+    ts.scale = 240
+    ts.branch_vertical_margin = 30
+    ts.show_leaf_name = False
+    gen_tree(t, bounds, tuple())
+
+
+    scores = score_mol(mol_file, bounds)
+    low = scores[0][1]
+    high = scores[-1][1]
+
+    for n in t.traverse():
+        nstyle = NodeStyle()
+        color = '#000000'
+        default_rbg = (0, 128, 255)
+        name = n.name
+
+        if name != 'root':
+            # Find score entry for this name
+            i = 0
+            while scores[i][0] != n.name:
+                i += 1
+            
+            # Find proportional score
+            val = scores[i][1]
+            prop_val = 1 - (val - low) / (high - low)
+
+            # Add score to node
+            n.add_face(TextFace(round(prop_val, 3)), column=0, position='branch-bottom')
+
+            # Color according to proporional score
+            color = '#'
+            for i in default_rbg:
+                round_val = round(prop_val * i)
+                color += f'{round_val:02X}'
+
+        nstyle['shape'] = 'square'
+        nstyle['size'] = 60
+        nstyle['fgcolor'] = color
+
+        n.set_style(nstyle)
+
+    t.show(tree_style=ts)
+
+
+bound_order_tree('eval_out/coconut_55/38.mol/', ['Log', 'Int', 'VecSimple', 'VecSmallFrags'])
+
+'''
+low = (0, 0, 255)
+mlow = (0, 255, 0)
+mhigh = (255, 255, 0),
+high = (255, 0, 0)
+'''
