@@ -126,7 +126,7 @@ fn log_bound(fragments: &[BitSet]) -> usize {
 }
 
 /// TODO
-fn int_bound(fragments: &[BitSet], m: usize) -> usize {
+fn _int_bound(fragments: &[BitSet], m: usize) -> usize {
     let mut max_s: usize = 0;
     let mut frag_sizes: Vec<usize> = Vec::new();
 
@@ -169,7 +169,7 @@ fn int_bound_new(masks: &Vec<Vec<BitSet>>) -> usize {
     max
 }
 
-fn int_bound_seet(masks: &Vec<Vec<BitSet>>, largest_remove: usize) -> usize {
+fn _int_bound_seet(masks: &Vec<Vec<BitSet>>, largest_remove: usize) -> usize {
     let mut dup_bonds_2 = 0;
     let mut dup_bonds_total;
     let mut max;

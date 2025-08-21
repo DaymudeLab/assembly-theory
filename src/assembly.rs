@@ -19,7 +19,7 @@
 //! ```
 
 use std::{
-    collections::HashMap, sync::{
+    collections::{HashMap, HashSet}, sync::{
         atomic::{AtomicUsize, Ordering::Relaxed},
         Arc,
     }
@@ -28,15 +28,16 @@ use std::{
 use bit_set::BitSet;
 use clap::ValueEnum;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use petgraph::graph::EdgeIndex;
 
 use crate::{
     bounds::{bound_exceeded, Bound},
     canonize::{canonize, CanonizeMode, Labeling},
-    enumerate::{enumerate_subgraphs, EnumerateMode},
+    enumerate::{EnumerateMode},
     kernels::{KernelMode, deletion_kernel, inclusion_kernel},
     memoize::{Cache, MemoizeMode},
     molecule::Molecule,
-    utils::connected_components_under_edges,
+    utils::{connected_components_under_edges, edge_neighbors},
     reductions::CompatGraph,
 };
 
@@ -98,38 +99,82 @@ pub fn depth(mol: &Molecule) -> u32 {
 ///
 /// Return all pairs of non-overlapping, isomorphic subgraphs in the molecule,
 /// sorted to guarantee deterministic iteration.
-pub fn matches(
-    mol: &Molecule,
-    enumerate_mode: EnumerateMode,
-    canonize_mode: CanonizeMode,
-) -> Vec<(BitSet, BitSet)> {
-    // Enumerate all connected, non-induced subgraphs with at most |E|/2 edges
-    // and bin them into isomorphism classes using canonization.
-    let mut isomorphism_classes = HashMap::<Labeling, Vec<BitSet>>::new();
-    for subgraph in enumerate_subgraphs(mol, enumerate_mode) {
-        isomorphism_classes
-            .entry(canonize(mol, &subgraph, canonize_mode))
-            .and_modify(|bucket| bucket.push(subgraph.clone()))
-            .or_insert(vec![subgraph.clone()]);
+pub fn matches(mol: &Molecule) -> Vec<(BitSet, BitSet)> {
+    let num_edges = mol.graph().edge_count();
+    let mut subgraphs: HashSet<BitSet> = HashSet::new();
+    let mut size_one_subgraphs: HashSet<BitSet> = HashSet::new();
+    let mut matches: Vec<(BitSet, BitSet)> = Vec::new();
+    let mut buckets: HashMap<Labeling, Vec<BitSet>> = HashMap::new();
+
+    // Generate subgraphs with one edge
+    for i in 0..num_edges {
+        let mut new_bitset = BitSet::with_capacity(num_edges);
+        new_bitset.insert(i);
+        size_one_subgraphs.insert(new_bitset);
     }
 
-    // In each isomorphism class, collect non-overlapping pairs of subgraphs.
-    let mut matches = Vec::new();
-    for bucket in isomorphism_classes.values() {
-        for (i, first) in bucket.iter().enumerate() {
-            for second in &bucket[i..] {
-                if first.is_disjoint(second) {
-                    if first > second {
+    // Generate subgraphs with two edges
+    for subgraph in size_one_subgraphs.iter() {
+        let mut neighborhood = BitSet::with_capacity(num_edges);
+        for e in subgraph {
+            neighborhood.extend(edge_neighbors(mol.graph(), EdgeIndex::new(e)).map(|x| x.index()));
+        }
+        neighborhood.difference_with(subgraph);
+
+        for e in neighborhood.iter() {
+            let mut new_subgraph = subgraph.clone();
+            new_subgraph.insert(e);
+            subgraphs.insert(new_subgraph);
+        }
+    }
+
+    while subgraphs.len() > 0 {
+        buckets.clear();
+        // Generate buckets
+        for g in subgraphs.iter() {
+            let canon = canonize(mol, g, CanonizeMode::TreeNauty);
+            buckets.entry(canon)
+                .and_modify(|v| v.push(g.clone()))
+                .or_insert(vec![g.clone()]);
+        }
+
+        subgraphs.clear();
+        for (_, bucket) in buckets.iter() {
+            // Generate matches
+            let mut has_match = BitSet::with_capacity(bucket.len());
+            for (i, first) in bucket.iter().enumerate() {
+                for (j, second) in bucket[i+1..].iter().enumerate() {
+                    if first.intersection(second).count() == 0 {
+                        if first > second {
                         matches.push((first.clone(), second.clone()));
-                    } else {
-                        matches.push((second.clone(), first.clone()));
+                        } else {
+                            matches.push((second.clone(), first.clone()));
+                        }
+                        has_match.insert(i);
+                        has_match.insert(i + 1 + j);
                     }
+                }
+            }
+
+            // Generate new subgraphs
+            // Only extend if subgraph has a match
+            for i in has_match.iter() {
+                let subgraph = &bucket[i];
+                let mut neighborhood = BitSet::with_capacity(num_edges);
+                for e in subgraph {
+                    neighborhood.extend(edge_neighbors(mol.graph(), EdgeIndex::new(e)).map(|x| x.index()));
+                }
+                neighborhood.difference_with(subgraph);
+
+                for e in neighborhood.iter() {
+                    let mut new_subgraph = subgraph.clone();
+                    new_subgraph.insert(e);
+                    subgraphs.insert(new_subgraph);
                 }
             }
         }
     }
 
-    // Sort pairs in a deterministic order and return.
     matches.sort_by(|e1, e2| {
         let ord = [
             e2.0.len().cmp(&e1.0.len()), // Decreasing subgraph size.
@@ -468,7 +513,7 @@ pub fn recurse_index_search(
 /// ```
 pub fn index_search(
     mol: &Molecule,
-    enumerate_mode: EnumerateMode,
+    _enumerate_mode: EnumerateMode,
     canonize_mode: CanonizeMode,
     parallel_mode: ParallelMode,
     memoize_mode: MemoizeMode,
@@ -479,7 +524,7 @@ pub fn index_search(
     // Catch not-yet-implemented modes.
 
     // Enumerate non-overlapping isomorphic subgraph pairs.
-    let matches = matches(mol, enumerate_mode, canonize_mode);
+    let matches = matches(mol);
 
     // Create memoization cache.
     let mut cache = Cache::new(memoize_mode, canonize_mode);
@@ -519,8 +564,6 @@ pub fn index_search(
         parallel_mode,
         kernel_mode,
     );
-
-    println!("{}", cache.count());
 
     (index as u32, matches.len() as u32, states_searched)
 }
