@@ -187,17 +187,41 @@ def plot_states_searched(infile):
     plt.show()'''
 
 def score_mol(mol_dir, bounds):
-    f = open(mol_dir + 'tree.cbor', 'rb')
-    tree_data = cbor2.load(f)
-    f.close()
+    exists = False
 
-    scores = []
-    for n in range(1, len(bounds) + 1):
-        for perm in itertools.permutations(bounds, n):
-            score = score_cbor(tree_data, perm)
-            scores.append((perm, score))
+    # Try loading data if saved
+    if os.path.exists(mol_dir + 'scores.cbor'):
+        f = open(mol_dir + 'scores.cbor', 'rb')
+        saved_bounds = cbor2.load(f)
+        scores = cbor2.load(f)
+        f.close()
+
+        if set(bounds) <= set(saved_bounds):
+            exists = True
     
-    scores.sort(key=lambda x: x[1])
+    # Data was not saved
+    if not exists:
+        f = open(mol_dir + 'tree.cbor', 'rb')
+        tree_data = cbor2.load(f)
+        f.close()
+
+        scores = []
+        for n in range(1, len(bounds) + 1):
+            for perm in itertools.permutations(bounds, n):
+                score = score_cbor(tree_data, perm)
+                scores.append([list(perm), score])
+        
+        scores.sort(key=lambda x: x[1])
+
+        f = open(mol_dir + 'scores.cbor', 'wb')
+        cbor2.dump(bounds, f)
+        cbor2.dump(scores, f)
+        f.close()
+
+        # Explicitly call garbage collection to reduce mem usage
+        del tree_data
+        gc.collect()
+    
     return scores
 
 def score_cbor(node, bounds):
@@ -273,7 +297,7 @@ def venn_diagram(inputfile):
 
 def gen_tree(tree, child_names, parent_name):
     for cname in child_names:
-        name = parent_name + (cname,)
+        name = parent_name + [cname]
 
         # Create child node
         child = tree.add_child(name=name)
@@ -286,7 +310,8 @@ def gen_tree(tree, child_names, parent_name):
         new_list.remove(cname)
         gen_tree(child, new_list, name)
 
-def bound_order_tree(mol_file, bounds):
+def bound_order_tree(dir, bounds, dataset=False):
+    # Generate tree structure
     t = Tree(name='root')
     t.add_face(TextFace('None'), column=0, position='branch-top')
     ts = TreeStyle()
@@ -294,13 +319,46 @@ def bound_order_tree(mol_file, bounds):
     ts.scale = 240
     ts.branch_vertical_margin = 30
     ts.show_leaf_name = False
-    gen_tree(t, bounds, tuple())
+    gen_tree(t, bounds, list())
 
+    # Load scores
+    scores = list()
+    if dataset == True:
+        mols = os.listdir(dir)
 
-    scores = score_mol(mol_file, bounds)
+        totals = []
+        for n in range(1, len(bounds) + 1):
+            for perm in itertools.permutations(bounds, n):
+                totals.append([list(perm), 0])
+
+        for mol in mols:
+            print(mol)
+            mol_scores = score_mol(dir + mol + '/', bounds)
+
+            low = mol_scores[0][1]
+            high = mol_scores[-1][1]
+
+            for score in mol_scores:
+                score_name = score[0]
+                score_val = score[1]
+
+                prop_val = (score_val - low) / (high - low)
+
+                i = 0
+                while totals[i][0] != score_name:
+                    i += 1
+                
+                totals[i][1] += score_val
+
+        totals.sort(key=lambda x: x[1])
+        scores = totals
+    else:
+        scores = score_mol(dir, bounds)
+
     low = scores[0][1]
-    high = scores[-1][1]
+    high = scores[-2][1]
 
+    # Add visual elements to tree
     for n in t.traverse():
         nstyle = NodeStyle()
         color = '#000000'
@@ -335,7 +393,7 @@ def bound_order_tree(mol_file, bounds):
     t.show(tree_style=ts)
 
 
-bound_order_tree('eval_out/coconut_55/38.mol/', ['Log', 'Int', 'VecSimple', 'VecSmallFrags'])
+bound_order_tree('eval_out/coconut_55/', ['Log', 'Int', 'VecSimple', 'VecSmallFrags'], dataset=True)
 
 '''
 low = (0, 0, 255)
