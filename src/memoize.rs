@@ -140,7 +140,7 @@ impl Cache {
 
 #[derive(Clone)]
 pub struct NewCache {
-    cache: Arc<DashMap<Vec<usize>, usize>>,
+    cache: Arc<DashMap<Vec<usize>, (usize, Vec<usize>)>>,
     label_to_canon_id: Arc<DashMap<Labeling, usize>>,
     frag_to_canon_id: Arc<DashMap<BitSet, usize>>,
     next_id: Arc<AtomicUsize>,
@@ -150,7 +150,7 @@ pub struct NewCache {
 impl NewCache {
     pub fn new() -> Self {
         Self {
-            cache: Arc::new(DashMap::<Vec<usize>, usize>::new()),
+            cache: Arc::new(DashMap::<Vec<usize>, (usize, Vec<usize>)>::new()),
             label_to_canon_id: Arc::new(DashMap::<Labeling, usize>::new()),
             frag_to_canon_id: Arc::new(DashMap::<BitSet, usize>::new()),
             next_id: Arc::new(AtomicUsize::from(0)),
@@ -158,7 +158,7 @@ impl NewCache {
         }
     }
 
-    pub fn memoize_state(&mut self, mol: &Molecule, state: &[BitSet], state_index: usize) -> bool {
+    pub fn memoize_state(&mut self, mol: &Molecule, state: &[BitSet], state_index: usize, removal_order: &Vec<usize>) -> bool {
         let mut frag_ids = Vec::new();
         for frag in state {
             let id = self.get_canon_id(mol, frag);
@@ -171,14 +171,15 @@ impl NewCache {
         self.cache
             .entry(frag_ids)
             .and_modify(|val| {
-                if *val > state_index {
-                    *val = state_index;
+                if val.0 > state_index || val.1 > *removal_order {
+                    val.0 = state_index;
+                    val.1 = removal_order.clone();
                 } else {
                     self.counter.fetch_add(1, Relaxed);
                     stop = true;
                 }
             })
-            .or_insert(state_index);
+            .or_insert((state_index, removal_order.clone()));
 
         stop
     }
@@ -205,6 +206,10 @@ impl NewCache {
                 id
             }
         }
+    }
+
+    pub fn add_count(&mut self) {
+        self.counter.fetch_add(1, Relaxed);
     }
 
     pub fn count(&self) -> usize {

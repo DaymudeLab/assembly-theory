@@ -10,6 +10,7 @@
 //! edge directionality.
 
 use bit_set::BitSet;
+use std::time::Instant;
 
 /// Graph representation of the compatibility of duplicatable subgraph pairs.
 pub struct CompatGraph {
@@ -21,6 +22,7 @@ pub struct CompatGraph {
 impl CompatGraph {
     /// Constructs a compatibility graph given a set of matches.
     pub fn new(init_matches: &Vec<(BitSet, BitSet)>) -> Self {
+        let start = Instant::now();
         let size = init_matches.len();
 
         // Initialize weights and empty graph
@@ -47,6 +49,8 @@ impl CompatGraph {
                 }
             }
         }
+
+        println!("Graph Time: {:?}", start.elapsed());
 
         Self {
             graph: init_graph,

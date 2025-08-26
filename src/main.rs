@@ -128,7 +128,7 @@ fn main() -> Result<()> {
     use assembly_theory::molecule::Molecule;
     use rayon::iter::{IntoParallelIterator, ParallelIterator, IntoParallelRefIterator, IndexedParallelIterator};
 
-    let paths = fs::read_dir(Path::new("data").join("plycyclic_hydrocarbons")).unwrap();
+    let paths = fs::read_dir(Path::new("data").join("coconut_220")).unwrap();
     let mut mol_list: Vec<Molecule> = Vec::new();
     let mut names: Vec<OsString> = Vec::new();
 

@@ -307,6 +307,13 @@ pub fn recurse_index_search(
         let m = &matches[v];
         is_usable(state, &m.0, &m.1, &mut masks);
     }
+
+    let mut state = Vec::new();
+    for (i, m) in masks[0].iter().enumerate() {
+        if m.len() != 0 {
+            state.extend(connected_components_under_edges(mol.graph(), m));
+        }
+    }
     /*while masks.iter().last().unwrap().len() == 0 {
         masks.pop();
     }*/
@@ -336,9 +343,34 @@ pub fn recurse_index_search(
         is_usable(&state, &m.0, &m.1, &mut masks);
     }*/
 
+    let mut max = Vec::new();
+    for (i, list) in masks.iter().enumerate() {
+        let mut val = 0;
+        let i = i + 2;
+        for (j, frag) in list.iter().enumerate() {
+            let mf = masks[0][j].len();
+            let mi = frag.len();
+            let x = mf + (mi % i) - mi;
+            val += mf - (mi / i) - x / (i-1) - (x % (i-1) != 0) as usize;
+        }
+        val -= (i as f32).log2().ceil() as usize;
+        if max.len() == 0 {
+            max.push(val);
+        }
+        else {
+            max.push(val.max(max[max.len() - 1]));
+        }
+    }
+
+    let best = best_index.load(Relaxed);
+    let mut idx = 2;
+    while (idx < max.len() + 2) && best + max[idx - 2] <= state_index {
+        idx += 1;
+    }
+
     // If any bounds would prune this assembly state or if memoization is
     // enabled and this assembly state is preempted by the cached state, halt.
-    if bound_exceeded(
+    /*if bound_exceeded(
         mol,
         matches,
         graph,
@@ -349,14 +381,13 @@ pub fn recurse_index_search(
         largest_remove,
         bounds,
         &masks,
-    ) || cache.memoize_state(mol, &state, state_index)
+    ) || cache.memoize_state(mol, &state, state_index, &removal_order)
     {
         return (state_index, 1);
-    }
+    }*/
 
-    let mut state = Vec::new();
-    for (i, m) in masks[0].iter().enumerate() {
-        state.push(m.clone());
+    if cache.memoize_state(mol, &state, state_index, &removal_order) {
+        return (state_index, 1);
     }
 
     // Apply kernels
@@ -450,7 +481,7 @@ pub fn recurse_index_search(
     if parallel_mode == ParallelMode::None {
         subgraph
             .iter()
-            .filter(|v| *v <= must_include)
+            .filter(|v| *v <= must_include && matches[*v].0.len() >= idx)
             .for_each(|v| recurse_on_match(v));
     } else {
         let _ = subgraph
@@ -461,9 +492,9 @@ pub fn recurse_index_search(
             .for_each(|v| recurse_on_match(*v));
     }
 
-    if removal_order.len() == 1 {
+    /*if removal_order.len() == 1 {
         println!("{:?}, {}", removal_order, states_searched.load(Relaxed));
-    }
+    }*/
 
     (
         best_child_index.load(Relaxed),
@@ -577,7 +608,7 @@ pub fn index_search(
     // Search for the shortest assembly pathway recursively.
     let edge_count = mol.graph().edge_count();
     let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
-    //let best_index = Arc::new(AtomicUsize::from(22));
+    //let best_index = Arc::new(AtomicUsize::from(12));
     let (index, states_searched) = recurse_index_search(
         mol,
         &matches,
@@ -593,7 +624,7 @@ pub fn index_search(
         kernel_mode,
     );
 
-    println!("Bounded: {}", cache.count());
+    //println!("Bounded: {}", cache.count());
 
     (index as u32, matches.len() as u32, states_searched)
 }
