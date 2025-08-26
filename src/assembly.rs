@@ -35,7 +35,7 @@ use crate::{
     canonize::{canonize, CanonizeMode, Labeling},
     enumerate::{EnumerateMode},
     kernels::{KernelMode, deletion_kernel, inclusion_kernel},
-    memoize::{Cache, MemoizeMode},
+    memoize::{Cache, MemoizeMode, NewCache},
     molecule::Molecule,
     utils::{connected_components_under_edges, edge_neighbors},
     reductions::CompatGraph,
@@ -284,7 +284,7 @@ pub fn recurse_index_search(
     state_index: usize,
     best_index: Arc<AtomicUsize>,
     bounds: &[Bound],
-    cache: &mut Cache,
+    cache: &mut NewCache,
     parallel_mode: ParallelMode,
     kernel_mode: KernelMode,
 ) -> (usize, usize) {
@@ -310,17 +310,31 @@ pub fn recurse_index_search(
     /*while masks.iter().last().unwrap().len() == 0 {
         masks.pop();
     }*/
-    /*for (i, m) in masks[0].iter().enumerate() {
+    /*let mut state = Vec::new();
+    for (i, m) in masks[0].iter().enumerate() {
         state[i] = m.clone();
     }*/
-    /*let mut state = Vec::new();
-    for m in masks[0].iter() {
-        if m.len() != 0 {
-            state.extend(connected_components_under_edges(mol.graph(), m));
+    /*let mut temp = Vec::new();
+    let state = {
+        if removal_order.len() == 0 {
+            for m in masks[0].iter() {
+                if m.len() != 0 {
+                    temp.extend(connected_components_under_edges(mol.graph(), m));
+                }
+            }
+            temp.retain(|i| i.len() > 1);
+            &temp
         }
-    }
-    state.retain(|i| i.len() > 1);*/
+        else {
+            state
+        }
+    };*/
 
+    /*let mut masks: Vec<Vec<BitSet>> = vec![vec![BitSet::with_capacity(mol.graph().edge_count()); state.len()]; largest_remove - 1];
+    for v in subgraph.iter() {
+        let m = &matches[v];
+        is_usable(&state, &m.0, &m.1, &mut masks);
+    }*/
 
     // If any bounds would prune this assembly state or if memoization is
     // enabled and this assembly state is preempted by the cached state, halt.
@@ -335,9 +349,14 @@ pub fn recurse_index_search(
         largest_remove,
         bounds,
         &masks,
-    ) || cache.memoize_state(mol, &state, state_index, &removal_order)
+    ) || cache.memoize_state(mol, &state, state_index)
     {
         return (state_index, 1);
+    }
+
+    let mut state = Vec::new();
+    for (i, m) in masks[0].iter().enumerate() {
+        state.push(m.clone());
     }
 
     // Apply kernels
@@ -442,6 +461,10 @@ pub fn recurse_index_search(
             .for_each(|v| recurse_on_match(*v));
     }
 
+    if removal_order.len() == 1 {
+        println!("{:?}, {}", removal_order, states_searched.load(Relaxed));
+    }
+
     (
         best_child_index.load(Relaxed),
         states_searched.load(Relaxed),
@@ -525,9 +548,13 @@ pub fn index_search(
 
     // Enumerate non-overlapping isomorphic subgraph pairs.
     let matches = matches(mol);
+    /*for (i, m) in matches.iter().enumerate() {
+        println!("{i}: {:?}", m);
+    }*/
 
     // Create memoization cache.
-    let mut cache = Cache::new(memoize_mode, canonize_mode);
+    //let mut cache = Cache::new(memoize_mode, canonize_mode);
+    let mut cache = NewCache::new();
 
     let graph = {
         if clique {
@@ -550,6 +577,7 @@ pub fn index_search(
     // Search for the shortest assembly pathway recursively.
     let edge_count = mol.graph().edge_count();
     let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
+    //let best_index = Arc::new(AtomicUsize::from(22));
     let (index, states_searched) = recurse_index_search(
         mol,
         &matches,
@@ -564,6 +592,8 @@ pub fn index_search(
         parallel_mode,
         kernel_mode,
     );
+
+    println!("Bounded: {}", cache.count());
 
     (index as u32, matches.len() as u32, states_searched)
 }

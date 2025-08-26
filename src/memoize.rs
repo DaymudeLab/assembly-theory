@@ -5,6 +5,7 @@ use std::sync::Arc;
 use bit_set::BitSet;
 use clap::ValueEnum;
 use dashmap::DashMap;
+use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 
 use crate::{
     canonize::{canonize, CanonizeMode, Labeling},
@@ -47,6 +48,8 @@ pub struct Cache {
     /// A parallel-aware map from fragments to their canonical labelings; only
     /// used with [`MemoizeMode::CanonIndex`].
     fragment_labels: Arc<DashMap<BitSet, Labeling>>,
+
+    counter: Arc<AtomicUsize>,
 }
 
 impl Cache {
@@ -57,6 +60,7 @@ impl Cache {
             canonize_mode,
             cache: Arc::new(DashMap::<CacheKey, (usize, Vec<usize>)>::new()),
             fragment_labels: Arc::new(DashMap::<BitSet, Labeling>::new()),
+            counter: Arc::new(AtomicUsize::from(0)),
         }
     }
 
@@ -121,9 +125,89 @@ impl Cache {
                 .value()
                 .clone();
             if cached_index <= state_index && cached_order < *removal_order {
+                self.counter.fetch_add(1, Relaxed);
+                //println!("{:?}", state);
                 return true;
             }
         }
         false
+    }
+
+    pub fn count(&self) -> usize {
+        self.counter.load(Relaxed)
+    }
+}
+
+#[derive(Clone)]
+pub struct NewCache {
+    cache: Arc<DashMap<Vec<usize>, usize>>,
+    label_to_canon_id: Arc<DashMap<Labeling, usize>>,
+    frag_to_canon_id: Arc<DashMap<BitSet, usize>>,
+    next_id: Arc<AtomicUsize>,
+    counter: Arc<AtomicUsize>,
+}
+
+impl NewCache {
+    pub fn new() -> Self {
+        Self {
+            cache: Arc::new(DashMap::<Vec<usize>, usize>::new()),
+            label_to_canon_id: Arc::new(DashMap::<Labeling, usize>::new()),
+            frag_to_canon_id: Arc::new(DashMap::<BitSet, usize>::new()),
+            next_id: Arc::new(AtomicUsize::from(0)),
+            counter: Arc::new(AtomicUsize::from(0)),
+        }
+    }
+
+    pub fn memoize_state(&mut self, mol: &Molecule, state: &[BitSet], state_index: usize) -> bool {
+        let mut frag_ids = Vec::new();
+        for frag in state {
+            let id = self.get_canon_id(mol, frag);
+            frag_ids.push(id);
+        }
+        frag_ids.sort();
+
+        let mut stop = false;
+
+        self.cache
+            .entry(frag_ids)
+            .and_modify(|val| {
+                if *val > state_index {
+                    *val = state_index;
+                } else {
+                    self.counter.fetch_add(1, Relaxed);
+                    stop = true;
+                }
+            })
+            .or_insert(state_index);
+
+        stop
+    }
+
+    fn get_canon_id(&mut self, mol: &Molecule, frag: &BitSet) -> usize {
+        // If frag has id, use it
+        if let Some(x) = self.frag_to_canon_id.get(frag) {
+            *x
+        }
+        // Otherwise canonize to get labeling
+        else {
+            let canon = canonize(mol, frag, CanonizeMode::TreeNauty);
+            // If label has id, use it
+            if let Some(x) = self.label_to_canon_id.get(&canon) {
+                let id = *x;
+                self.frag_to_canon_id.insert(frag.clone(), id);
+                id
+            }
+            // Otherwise asign new id
+            else {
+                let id = self.next_id.fetch_add(1, Relaxed);
+                self.label_to_canon_id.insert(canon, id);
+                self.frag_to_canon_id.insert(frag.clone(), id);
+                id
+            }
+        }
+    }
+
+    pub fn count(&self) -> usize {
+        self.counter.load(Relaxed)
     }
 }
