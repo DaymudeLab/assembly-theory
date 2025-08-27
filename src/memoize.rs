@@ -140,6 +140,7 @@ impl Cache {
 
 #[derive(Clone)]
 pub struct NewCache {
+    memoize_mode: MemoizeMode,
     cache: Arc<DashMap<Vec<usize>, (usize, Vec<usize>)>>,
     label_to_canon_id: Arc<DashMap<Labeling, usize>>,
     frag_to_canon_id: Arc<DashMap<BitSet, usize>>,
@@ -148,8 +149,9 @@ pub struct NewCache {
 }
 
 impl NewCache {
-    pub fn new() -> Self {
+    pub fn new(mode: MemoizeMode) -> Self {
         Self {
+            memoize_mode: mode,
             cache: Arc::new(DashMap::<Vec<usize>, (usize, Vec<usize>)>::new()),
             label_to_canon_id: Arc::new(DashMap::<Labeling, usize>::new()),
             frag_to_canon_id: Arc::new(DashMap::<BitSet, usize>::new()),
@@ -159,6 +161,10 @@ impl NewCache {
     }
 
     pub fn memoize_state(&mut self, mol: &Molecule, state: &[BitSet], state_index: usize, removal_order: &Vec<usize>) -> bool {
+        if self.memoize_mode == MemoizeMode::None {
+            return false;
+        }
+        
         let mut frag_ids = Vec::new();
         for frag in state {
             let id = self.get_canon_id(mol, frag);

@@ -128,6 +128,7 @@ pub fn matches(mol: &Molecule) -> Vec<(BitSet, BitSet)> {
         }
     }
 
+    // Generate subgraphs with more than two edges
     while subgraphs.len() > 0 {
         buckets.clear();
         // Generate buckets
@@ -175,6 +176,7 @@ pub fn matches(mol: &Molecule) -> Vec<(BitSet, BitSet)> {
         }
     }
 
+    // Sort matches
     matches.sort_by(|e1, e2| {
         let ord = [
             e2.0.len().cmp(&e1.0.len()), // Decreasing subgraph size.
@@ -291,8 +293,6 @@ pub fn recurse_index_search(
     //println!("{:?}", removal_order);
     //println!("{:?}", state);
 
-    // An upper bound on the size of fragments that can be
-    // removed from this or any descendant assembly state.
     let largest_remove = {
         if let Some(v) = subgraph.iter().next() {
             matches[v].0.len()
@@ -302,47 +302,63 @@ pub fn recurse_index_search(
         }
     };
 
+    // Prune edges of state
+    let mut subgraphs: HashSet<BitSet> = HashSet::new();
     let mut masks: Vec<Vec<BitSet>> = vec![vec![BitSet::with_capacity(mol.graph().edge_count()); state.len()]; largest_remove - 1];
-    for v in subgraph.iter() {
-        let m = &matches[v];
-        is_usable(state, &m.0, &m.1, &mut masks);
-    }
+    subgraph = subgraph.iter().filter(|v| {
+        let h1 = &matches[*v].0;
+        let h2 = &matches[*v].1;
+
+        let pre_have_h1 = subgraphs.contains(h1);
+        let pre_have_h2 = subgraphs.contains(h2);
+
+        let mut have_h1 = pre_have_h1;
+        let mut have_h2 = pre_have_h2;
+
+        let mut idx1 = 0;
+        let mut idx2 = 0;
+
+        if !pre_have_h1 {
+            if let Some((idx, _)) = state.iter().enumerate().find(|(_, frag)| h1.is_subset(frag)) {
+                idx1 = idx;
+                have_h1 = true;
+            }
+        }
+        if !pre_have_h2 {
+            if let Some((idx, _)) = state.iter().enumerate().find(|(_, frag)| h2.is_subset(frag)) {
+                idx2 = idx;
+                have_h2 = true;
+            }
+        }
+
+        if have_h1 && have_h2 {
+            if !pre_have_h1 {
+                subgraphs.insert(h1.clone());
+                masks[h1.len() - 2][idx1].union_with(h1);
+            }
+            if !pre_have_h2 {
+                subgraphs.insert(h2.clone());
+                masks[h1.len() - 2][idx2].union_with(h2);
+            }
+        }
+
+        have_h1 && have_h2
+    }).collect();
+
+    /*let mut masks: Vec<Vec<BitSet>> = vec![vec![BitSet::with_capacity(mol.graph().edge_count()); state.len()]; largest_remove - 1];
+    let subgraph1 = subgraph.iter().filter(|v| {
+        let m = &matches[*v];
+        is_usable(state, &m.0, &m.1, &mut masks)
+    }).collect::<BitSet>();*/
 
     let mut state = Vec::new();
-    for (i, m) in masks[0].iter().enumerate() {
+    for m in masks[0].iter() {
         if m.len() != 0 {
             state.extend(connected_components_under_edges(mol.graph(), m));
         }
     }
-    /*while masks.iter().last().unwrap().len() == 0 {
-        masks.pop();
-    }*/
-    /*let mut state = Vec::new();
-    for (i, m) in masks[0].iter().enumerate() {
-        state[i] = m.clone();
-    }*/
-    /*let mut temp = Vec::new();
-    let state = {
-        if removal_order.len() == 0 {
-            for m in masks[0].iter() {
-                if m.len() != 0 {
-                    temp.extend(connected_components_under_edges(mol.graph(), m));
-                }
-            }
-            temp.retain(|i| i.len() > 1);
-            &temp
-        }
-        else {
-            state
-        }
-    };*/
 
-    /*let mut masks: Vec<Vec<BitSet>> = vec![vec![BitSet::with_capacity(mol.graph().edge_count()); state.len()]; largest_remove - 1];
-    for v in subgraph.iter() {
-        let m = &matches[v];
-        is_usable(&state, &m.0, &m.1, &mut masks);
-    }*/
-
+    // Int bound
     let mut max = Vec::new();
     for (i, list) in masks.iter().enumerate() {
         let mut val = 0;
@@ -368,24 +384,7 @@ pub fn recurse_index_search(
         idx += 1;
     }
 
-    // If any bounds would prune this assembly state or if memoization is
-    // enabled and this assembly state is preempted by the cached state, halt.
-    /*if bound_exceeded(
-        mol,
-        matches,
-        graph,
-        &state,
-        &subgraph,
-        state_index,
-        best_index.load(Relaxed),
-        largest_remove,
-        bounds,
-        &masks,
-    ) || cache.memoize_state(mol, &state, state_index, &removal_order)
-    {
-        return (state_index, 1);
-    }*/
-
+    // Memoization
     if cache.memoize_state(mol, &state, state_index, &removal_order) {
         return (state_index, 1);
     }
@@ -414,6 +413,7 @@ pub fn recurse_index_search(
     let recurse_on_match = |v: usize| {
         let (h1, h2) = &matches[v];
         if let Some(fragments) = fragments(mol, &state, h1, h2) {
+
             // If using depth-one parallelism, all descendant states should be
             // computed serially.
             let new_parallel = if parallel_mode == ParallelMode::DepthOne {
@@ -442,8 +442,10 @@ pub fn recurse_index_search(
             }
             else {
                 sub_clone = BitSet::with_capacity(matches.len());
-                for j in (v+1)..matches.len() {
-                    sub_clone.insert(j);
+                for j in subgraph.iter() {
+                    if j > v {
+                        sub_clone.insert(j);
+                    }
                 }
             }
 
@@ -486,7 +488,7 @@ pub fn recurse_index_search(
     } else {
         let _ = subgraph
             .iter()
-            .filter(|v| *v <= must_include)
+            .filter(|v| *v <= must_include /*&& matches[*v].0.len() >= idx*/)
             .collect::<Vec<usize>>()
             .par_iter()
             .for_each(|v| recurse_on_match(*v));
@@ -585,7 +587,7 @@ pub fn index_search(
 
     // Create memoization cache.
     //let mut cache = Cache::new(memoize_mode, canonize_mode);
-    let mut cache = NewCache::new();
+    let mut cache = NewCache::new(memoize_mode);
 
     let graph = {
         if clique {
@@ -624,7 +626,7 @@ pub fn index_search(
         kernel_mode,
     );
 
-    //println!("Bounded: {}", cache.count());
+    println!("Bounded: {}", cache.count());
 
     (index as u32, matches.len() as u32, states_searched)
 }
