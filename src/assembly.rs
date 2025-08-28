@@ -29,6 +29,7 @@ use bit_set::BitSet;
 use clap::ValueEnum;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use petgraph::graph::EdgeIndex;
+use ahash::{AHasher, RandomState};
 
 use crate::{
     bounds::{bound_exceeded, Bound},
@@ -290,7 +291,7 @@ pub fn recurse_index_search(
     parallel_mode: ParallelMode,
     kernel_mode: KernelMode,
 ) -> (usize, usize) {
-    //println!("{:?}", removal_order);
+    println!("{:?}", removal_order);
     //println!("{:?}", state);
 
     let largest_remove = {
@@ -303,42 +304,60 @@ pub fn recurse_index_search(
     };
 
     // Prune edges of state
-    let mut subgraphs: HashSet<BitSet> = HashSet::new();
+    let mut subgraphs: HashMap<BitSet, (bool, bool), RandomState> = HashMap::with_capacity_and_hasher(256, RandomState::new());
     let mut masks: Vec<Vec<BitSet>> = vec![vec![BitSet::with_capacity(mol.graph().edge_count()); state.len()]; largest_remove - 1];
     subgraph = subgraph.iter().filter(|v| {
         let h1 = &matches[*v].0;
         let h2 = &matches[*v].1;
 
-        let pre_have_h1 = subgraphs.contains(h1);
-        let pre_have_h2 = subgraphs.contains(h2);
+        let x1 = subgraphs.get(h1).to_owned().cloned();
+        let x2 = subgraphs.get(h2).to_owned().cloned();
 
-        let mut have_h1 = pre_have_h1;
-        let mut have_h2 = pre_have_h2;
+        let mut have_h1 = false;
+        let mut have_h2 = false;
+        let mut h1_match = false;
+        let mut h2_match = false;
 
-        let mut idx1 = 0;
-        let mut idx2 = 0;
-
-        if !pre_have_h1 {
-            if let Some((idx, _)) = state.iter().enumerate().find(|(_, frag)| h1.is_subset(frag)) {
-                idx1 = idx;
-                have_h1 = true;
+        if let Some ((i1, i2)) = x1 {
+            if i1 == false {
+                return false;
             }
+            have_h1 = i1;
+            h1_match = i2;
         }
-        if !pre_have_h2 {
-            if let Some((idx, _)) = state.iter().enumerate().find(|(_, frag)| h2.is_subset(frag)) {
-                idx2 = idx;
-                have_h2 = true;
+        else if let Some((idx, _)) = state.iter().enumerate().find(|(_, frag)| h1.is_subset(frag)) {
+            have_h1 = true;
+            subgraphs.insert(h1.clone(), (true, false));
+        }
+        else {
+            subgraphs.insert(h1.clone(), (false, false));
+        }
+
+        if let Some ((i1, i2)) = x2 {
+            if i1 == false {
+                return false;
             }
+            have_h2 = i1;
+            h2_match = i2;
+        }
+        else if let Some((idx, _)) = state.iter().enumerate().find(|(_, frag)| h2.is_subset(frag)) {
+            have_h2 = true;
+            subgraphs.insert(h2.clone(), (true, false));
+        }
+        else {
+            subgraphs.insert(h2.clone(), (false, false));
         }
 
         if have_h1 && have_h2 {
-            if !pre_have_h1 {
-                subgraphs.insert(h1.clone());
-                masks[h1.len() - 2][idx1].union_with(h1);
+            if h1_match == false {
+                let (idx, _) = state.iter().enumerate().find(|(_, frag)| h1.is_subset(frag)).unwrap();
+                masks[h1.len() - 2][idx].union_with(h1);
+                subgraphs.get_mut(h1).unwrap().1 = true;
             }
-            if !pre_have_h2 {
-                subgraphs.insert(h2.clone());
-                masks[h1.len() - 2][idx2].union_with(h2);
+            if h2_match == false {
+                let (idx, _) = state.iter().enumerate().find(|(_, frag)| h2.is_subset(frag)).unwrap();
+                masks[h2.len() - 2][idx].union_with(h2);
+                subgraphs.get_mut(h2).unwrap().1 = true;
             }
         }
 
@@ -346,14 +365,14 @@ pub fn recurse_index_search(
     }).collect();
 
     /*let mut masks: Vec<Vec<BitSet>> = vec![vec![BitSet::with_capacity(mol.graph().edge_count()); state.len()]; largest_remove - 1];
-    let subgraph1 = subgraph.iter().filter(|v| {
+    subgraph = subgraph.iter().filter(|v| {
         let m = &matches[*v];
         is_usable(state, &m.0, &m.1, &mut masks)
-    }).collect::<BitSet>();*/
+    }).collect();*/
 
     let mut state = Vec::new();
     for m in masks[0].iter() {
-        if m.len() != 0 {
+        if m.len() >= 2 {
             state.extend(connected_components_under_edges(mol.graph(), m));
         }
     }
