@@ -29,14 +29,14 @@ use bit_set::BitSet;
 use clap::ValueEnum;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use petgraph::graph::EdgeIndex;
-use ahash::{AHasher, RandomState};
+use ahash::RandomState;
 
 use crate::{
     bounds::{bound_exceeded, Bound},
     canonize::{canonize, CanonizeMode, Labeling},
     enumerate::{EnumerateMode},
     kernels::{KernelMode, deletion_kernel, inclusion_kernel},
-    memoize::{Cache, MemoizeMode, NewCache},
+    memoize::{MemoizeMode, NewCache},
     molecule::Molecule,
     utils::{connected_components_under_edges, edge_neighbors},
     reductions::CompatGraph,
@@ -100,22 +100,28 @@ pub fn depth(mol: &Molecule) -> u32 {
 ///
 /// Return all pairs of non-overlapping, isomorphic subgraphs in the molecule,
 /// sorted to guarantee deterministic iteration.
-pub fn matches(mol: &Molecule) -> Vec<(BitSet, BitSet)> {
+pub fn matches(mol: &Molecule) -> (Vec<(BitSet, BitSet)>, HashMap<usize, (BitSet, Vec<usize>)>) {
     let num_edges = mol.graph().edge_count();
-    let mut subgraphs: HashSet<BitSet> = HashSet::new();
-    let mut size_one_subgraphs: HashSet<BitSet> = HashSet::new();
+    let mut subgraphs: HashMap<BitSet, usize> = HashMap::new();
+    let mut size_one_subgraphs: HashMap<BitSet, usize> = HashMap::new();
     let mut matches: Vec<(BitSet, BitSet)> = Vec::new();
-    let mut buckets: HashMap<Labeling, Vec<BitSet>> = HashMap::new();
+    let mut buckets: HashMap<Labeling, Vec<(BitSet, usize)>> = HashMap::new();
+
+    let mut dag: HashMap<usize, (BitSet, Vec<usize>)> = HashMap::new();
+    let mut next_id = 0;
 
     // Generate subgraphs with one edge
     for i in 0..num_edges {
         let mut new_bitset = BitSet::with_capacity(num_edges);
         new_bitset.insert(i);
-        size_one_subgraphs.insert(new_bitset);
+        size_one_subgraphs.insert(new_bitset, i);
+
+        dag.insert(next_id, (BitSet::new(), Vec::new()));
+        next_id += 1;
     }
 
     // Generate subgraphs with two edges
-    for subgraph in size_one_subgraphs.iter() {
+    for (subgraph, idx) in size_one_subgraphs.iter() {
         let mut neighborhood = BitSet::with_capacity(num_edges);
         for e in subgraph {
             neighborhood.extend(edge_neighbors(mol.graph(), EdgeIndex::new(e)).map(|x| x.index()));
@@ -125,7 +131,8 @@ pub fn matches(mol: &Molecule) -> Vec<(BitSet, BitSet)> {
         for e in neighborhood.iter() {
             let mut new_subgraph = subgraph.clone();
             new_subgraph.insert(e);
-            subgraphs.insert(new_subgraph);
+            subgraphs.entry(new_subgraph)
+                .or_insert(*idx);
         }
     }
 
@@ -133,45 +140,68 @@ pub fn matches(mol: &Molecule) -> Vec<(BitSet, BitSet)> {
     while subgraphs.len() > 0 {
         buckets.clear();
         // Generate buckets
-        for g in subgraphs.iter() {
-            let canon = canonize(mol, g, CanonizeMode::TreeNauty);
+        for (g, parent) in subgraphs.iter() {
+            let canon = canonize(mol, g, CanonizeMode::TreeNauty);            
             buckets.entry(canon)
-                .and_modify(|v| v.push(g.clone()))
-                .or_insert(vec![g.clone()]);
+                .and_modify(|v| v.push((g.clone(), *parent)))
+                .or_insert(vec![(g.clone(), *parent)]);
         }
 
         subgraphs.clear();
         for (_, bucket) in buckets.iter() {
             // Generate matches
             let mut has_match = BitSet::with_capacity(bucket.len());
-            for (i, first) in bucket.iter().enumerate() {
-                for (j, second) in bucket[i+1..].iter().enumerate() {
+            for (i, (first, first_parent)) in bucket.iter().enumerate() {
+                for (j, (second, second_parent)) in bucket[i+1..].iter().enumerate() {
                     if first.intersection(second).count() == 0 {
                         if first > second {
                         matches.push((first.clone(), second.clone()));
                         } else {
                             matches.push((second.clone(), first.clone()));
                         }
+
+                        if !has_match.contains(i) {
+                            dag.insert(next_id, (first.clone(), Vec::new()));
+                            dag.entry(*first_parent)
+                                .and_modify(|(_, children)| children.push(next_id));
+
+                            let mut neighborhood = BitSet::with_capacity(num_edges);
+                            for e in first {
+                                neighborhood.extend(edge_neighbors(mol.graph(), EdgeIndex::new(e)).map(|x| x.index()));
+                            }
+                            neighborhood.difference_with(first);
+
+                            for e in neighborhood.iter() {
+                                let mut new_subgraph = first.clone();
+                                new_subgraph.insert(e);
+                                subgraphs.insert(new_subgraph, next_id);
+                            }
+
+                            next_id += 1;
+                        }
+                        if !has_match.contains(i + 1 + j) {
+                            dag.insert(next_id, (second.clone(), Vec::new()));
+                            dag.entry(*second_parent)
+                                .and_modify(|(_, children)| children.push(next_id));
+
+                            let mut neighborhood = BitSet::with_capacity(num_edges);
+                            for e in second {
+                                neighborhood.extend(edge_neighbors(mol.graph(), EdgeIndex::new(e)).map(|x| x.index()));
+                            }
+                            neighborhood.difference_with(second);
+
+                            for e in neighborhood.iter() {
+                                let mut new_subgraph = second.clone();
+                                new_subgraph.insert(e);
+                                subgraphs.insert(new_subgraph, next_id);
+                            }
+
+                            next_id += 1;
+                        }
+
                         has_match.insert(i);
                         has_match.insert(i + 1 + j);
                     }
-                }
-            }
-
-            // Generate new subgraphs
-            // Only extend if subgraph has a match
-            for i in has_match.iter() {
-                let subgraph = &bucket[i];
-                let mut neighborhood = BitSet::with_capacity(num_edges);
-                for e in subgraph {
-                    neighborhood.extend(edge_neighbors(mol.graph(), EdgeIndex::new(e)).map(|x| x.index()));
-                }
-                neighborhood.difference_with(subgraph);
-
-                for e in neighborhood.iter() {
-                    let mut new_subgraph = subgraph.clone();
-                    new_subgraph.insert(e);
-                    subgraphs.insert(new_subgraph);
                 }
             }
         }
@@ -191,7 +221,7 @@ pub fn matches(mol: &Molecule) -> Vec<(BitSet, BitSet)> {
         ord[i]
     });
 
-    matches
+    (matches, dag)
 }
 
 /// Determine the fragments produced from the given assembly state by removing
@@ -291,7 +321,7 @@ pub fn recurse_index_search(
     parallel_mode: ParallelMode,
     kernel_mode: KernelMode,
 ) -> (usize, usize) {
-    println!("{:?}", removal_order);
+    //println!("{:?}", removal_order);
     //println!("{:?}", state);
 
     let largest_remove = {
@@ -304,14 +334,14 @@ pub fn recurse_index_search(
     };
 
     // Prune edges of state
-    let mut subgraphs: HashMap<BitSet, (bool, bool), RandomState> = HashMap::with_capacity_and_hasher(256, RandomState::new());
+    /*let mut subgraphs: HashMap<&BitSet, (bool, bool), RandomState> = HashMap::with_capacity_and_hasher(256, RandomState::new());
     let mut masks: Vec<Vec<BitSet>> = vec![vec![BitSet::with_capacity(mol.graph().edge_count()); state.len()]; largest_remove - 1];
     subgraph = subgraph.iter().filter(|v| {
         let h1 = &matches[*v].0;
         let h2 = &matches[*v].1;
 
-        let x1 = subgraphs.get(h1).to_owned().cloned();
-        let x2 = subgraphs.get(h2).to_owned().cloned();
+        let x1 = subgraphs.get(h1).cloned();
+        let x2 = subgraphs.get(h2).cloned();
 
         let mut have_h1 = false;
         let mut have_h2 = false;
@@ -325,12 +355,12 @@ pub fn recurse_index_search(
             have_h1 = i1;
             h1_match = i2;
         }
-        else if let Some((idx, _)) = state.iter().enumerate().find(|(_, frag)| h1.is_subset(frag)) {
+        else if let Some(_) = state.iter().enumerate().find(|(_, frag)| h1.is_subset(frag)) {
             have_h1 = true;
-            subgraphs.insert(h1.clone(), (true, false));
+            subgraphs.insert(h1, (true, false));
         }
         else {
-            subgraphs.insert(h1.clone(), (false, false));
+            subgraphs.insert(h1, (false, false));
         }
 
         if let Some ((i1, i2)) = x2 {
@@ -340,12 +370,12 @@ pub fn recurse_index_search(
             have_h2 = i1;
             h2_match = i2;
         }
-        else if let Some((idx, _)) = state.iter().enumerate().find(|(_, frag)| h2.is_subset(frag)) {
+        else if let Some(_) = state.iter().enumerate().find(|(_, frag)| h2.is_subset(frag)) {
             have_h2 = true;
-            subgraphs.insert(h2.clone(), (true, false));
+            subgraphs.insert(h2, (true, false));
         }
         else {
-            subgraphs.insert(h2.clone(), (false, false));
+            subgraphs.insert(h2, (false, false));
         }
 
         if have_h1 && have_h2 {
@@ -362,13 +392,13 @@ pub fn recurse_index_search(
         }
 
         have_h1 && have_h2
-    }).collect();
+    }).collect();*/
 
-    /*let mut masks: Vec<Vec<BitSet>> = vec![vec![BitSet::with_capacity(mol.graph().edge_count()); state.len()]; largest_remove - 1];
+    let mut masks: Vec<Vec<BitSet>> = vec![vec![BitSet::with_capacity(mol.graph().edge_count()); state.len()]; largest_remove - 1];
     subgraph = subgraph.iter().filter(|v| {
         let m = &matches[*v];
         is_usable(state, &m.0, &m.1, &mut masks)
-    }).collect();*/
+    }).collect();
 
     let mut state = Vec::new();
     for m in masks[0].iter() {
@@ -599,7 +629,7 @@ pub fn index_search(
     // Catch not-yet-implemented modes.
 
     // Enumerate non-overlapping isomorphic subgraph pairs.
-    let matches = matches(mol);
+    let (matches, _dag) = matches(mol);
     /*for (i, m) in matches.iter().enumerate() {
         println!("{i}: {:?}", m);
     }*/
