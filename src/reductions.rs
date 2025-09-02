@@ -11,6 +11,7 @@
 
 use bit_set::BitSet;
 use std::time::Instant;
+use std::collections::HashMap;
 
 /// Graph representation of the compatibility of duplicatable subgraph pairs.
 pub struct CompatGraph {
@@ -21,7 +22,7 @@ pub struct CompatGraph {
 
 impl CompatGraph {
     /// Constructs a compatibility graph given a set of matches.
-    pub fn new(init_matches: &Vec<(BitSet, BitSet)>) -> Self {
+    pub fn new(init_matches: &Vec<(usize, usize)>, dag: &HashMap<usize, (BitSet, Vec<usize>)>) -> Self {
         let start = Instant::now();
         let size = init_matches.len();
 
@@ -35,6 +36,10 @@ impl CompatGraph {
         for (idx1, (h1, h2)) in init_matches.iter().enumerate() {
             for (idx2, (h1p, h2p)) in init_matches[idx1 + 1..].iter().enumerate() {
                 let idx2 = idx2 + idx1 + 1;
+                let h1 = &dag.get(h1).unwrap().0;
+                let h1p = &dag.get(h1p).unwrap().0;
+                let h2 = &dag.get(h2).unwrap().0;
+                let h2p = &dag.get(h2p).unwrap().0;
 
                 let forward_compatible = {
                     h2.is_disjoint(h1p) && 
