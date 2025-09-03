@@ -642,6 +642,45 @@ pub fn recurse_index_search(
 
     // Remove frags of size 1 or less
     state.retain(|frag| frag.len() >= 2);
+
+
+    let best = best_index.load(Relaxed);
+    let mut best_bound = 0;
+    let mut largest_length = 2;
+
+    // Use bounding strategy to find the largest length match
+    // to try removing from this state.
+    for (i, list) in masks.iter().enumerate() {
+        let mut bound = 0;
+        let i = i + 2;
+        for (j, frag) in list.iter().enumerate() {
+            let mf = masks[0][j].len();
+            let mi = frag.len();
+            let x = mf + (mi % i) - mi;
+            bound += mf - (mi / i) - x / (i-1) - (x % (i-1) != 0) as usize;
+        }
+        bound -= (i as f32).log2().ceil() as usize;
+
+        best_bound = max(best_bound, bound);
+
+        // Check if removing at this length can give a more optimal answer
+        // If yes, stop and return the largest_length to remove
+        if state_index - best_bound < best {
+            break;
+        }
+
+        largest_length += 1;
+    }
+
+    // Remove from enum_matches any matches that have size smaller
+    // than largest_length, and thus their removal does not need to be tested
+    if largest_length > 2 {
+        let mut final_idx = 0;
+        while dag[enum_matches[final_idx].0].fragment.len() >= largest_length {
+            final_idx += 1;
+        }
+        enum_matches.truncate(final_idx);
+    }
                 
 
     // MATCHES METHOD 2
@@ -801,21 +840,6 @@ pub fn index_search(
 
     // Enumerate non-overlapping isomorphic subgraph pairs.
     let (matches, dag) = matches(mol, canonize_mode);
-
-    /*let mut match_list: Vec<((usize, usize), usize)> = Vec::new();
-    for m in matches.iter() {
-        match_list.push((*m.0, *m.1));
-    }
-
-    for (idx, d) in dag.iter().enumerate() {
-        println!("{}: {:?}", idx, d);
-    }
-
-    match_list.sort_by_key(|m| m.1);
-    for m in match_list {
-        println!("{:?}", m);
-    }
-    println!("{}", matches.len());*/
 
     // Create memoization cache.
     //let mut cache = Cache::new(memoize_mode, canonize_mode);
