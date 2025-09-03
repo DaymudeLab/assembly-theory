@@ -28,10 +28,11 @@ use std::{
 use bit_set::BitSet;
 use clap::ValueEnum;
 use graph_canon::canon;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator, IndexedParallelIterator};
 use petgraph::graph::EdgeIndex;
 use itertools::Itertools;
 use std::cmp::{max, min};
+use ahash::RandomState;
 
 use crate::{
     bounds::{bound_exceeded, Bound},
@@ -102,7 +103,6 @@ pub fn depth(mol: &Molecule) -> u32 {
 pub struct DagNode {
     fragment: BitSet,
     canon_id: usize,
-    // added_edge: usize,
     children: Vec<usize>,
 }
 
@@ -512,6 +512,7 @@ pub fn recurse_index_search(
     mol: &Molecule,
     matches: &HashMap<(usize, usize), usize>,
     dag: &Vec<DagNode>,
+    last_removed: usize,
     mut subgraph: BitSet,
     removal_order: Vec<usize>,
     state: &[BitSet],
@@ -525,18 +526,18 @@ pub fn recurse_index_search(
     //println!("{:?}", removal_order);
     //println!("{:?}", state);
     
-    let num_edges = mol.graph().edge_count();
-    let mut enum_matches: Vec<(usize, usize)> = Vec::new();
-    
     // MATCHES METHOD 1
     // EXTEND ALWAYS AND DO MATCHING AT END
-    let mut subgraphs: Vec<usize> = Vec::new();
-    let mut buckets: HashMap<usize, Vec<usize>> = HashMap::new();
+    let num_edges = mol.graph().edge_count();
+
+    let mut enum_matches: Vec<(usize, usize)> = Vec::new();
+    let mut subgraphs: Vec<(usize, usize)> = Vec::new();
+    let mut buckets: HashMap<usize, Vec<(usize, usize)>> = HashMap::new();
 
     // create subgraphs of size 1
-    for fragment in state.iter() {
+    for (state_id, fragment) in state.iter().enumerate() {
         for edge_idx in fragment.iter() {
-            subgraphs.push(edge_idx);
+            subgraphs.push((edge_idx, state_id));
         }
     }
 
@@ -545,27 +546,29 @@ pub fn recurse_index_search(
         let mut new_subgraphs = Vec::new();
 
         // Extend each subgraph and bucket
-        for frag_id in subgraphs {
+        for (frag_id, state_id) in subgraphs {
+            // Get state frament that this subgraph is contained in
+            let state_frag = &state[state_id];
+
             // Get ids of extensions of this subgraph
             let children_ids = &dag[frag_id].children;
 
             for child_id in children_ids {
                 // Check if this extension is valid
-                // TODO: save fragment id
-                // TODO: save edge id in DAG
+                // i.e. the extended subgraph is contained in a fragment of state
                 let child_frag = &dag[*child_id].fragment;
-                let valid = state.iter().any(|frag| child_frag.is_subset(frag));
+                let valid = child_frag.is_subset(state_frag);
 
                 if valid {
                     let canon_id = &dag[*child_id].canon_id;
                     
                     // Add fragment to bucket
                     buckets.entry(*canon_id)
-                        .and_modify(|bucket| bucket.push(*child_id))
-                        .or_insert(vec![*child_id]);
+                        .and_modify(|bucket| bucket.push((*child_id, state_id)))
+                        .or_insert(vec![(*child_id, state_id)]);
                     
                     // Add fragment to new subgraphs
-                    new_subgraphs.push(*child_id);
+                    new_subgraphs.push((*child_id, state_id));
                 }
             }
         }
@@ -574,6 +577,8 @@ pub fn recurse_index_search(
         subgraphs = new_subgraphs;
     }
 
+    let mut frag_id_to_state_idx: HashMap<usize, usize, RandomState> = HashMap::with_hasher(RandomState::new());
+
     // Generate matches from buckets of ismorphic fragments
     for fragments in buckets.values() {
         // Loop over pairs of fragments
@@ -581,10 +586,23 @@ pub fn recurse_index_search(
             let frag1 = *max(pair[0], pair[1]);
             let frag2 = *min(pair[0], pair[1]);
 
+            let (frag1_id, frag1_state_idx) = frag1;
+            let (frag2_id, frag2_state_idx) = frag2;
+
             // Check for valid match
             // If valid, add to matches to iterate over
-            if let Some(x) = matches.get(&(frag1, frag2)) {
-                enum_matches.push((frag1, frag2));
+            if let Some(x) = matches.get(&(frag1_id, frag2_id)) {
+                // Only add match if it occurs later in the ordering than
+                // the last removed match
+                if *x >= last_removed {
+                    enum_matches.push((frag1_id, frag2_id));
+
+                    // Store which state fragments the matched subgraphs are contained in
+                    frag_id_to_state_idx.entry(frag1_id)
+                        .or_insert(frag1_state_idx);
+                    frag_id_to_state_idx.entry(frag2_id)
+                        .or_insert(frag2_state_idx);
+                }
             }
         }
     }
@@ -598,15 +616,13 @@ pub fn recurse_index_search(
     enum_matches.reverse();
 
     // Modify mask
-    // TODO: try storing fragment so search can be reduced
-    // TODO: try with a set for frag_ids to only do intersection once per frag
     let largest_remove = dag[enum_matches[0].0].fragment.len();
     let mut masks = vec![
         vec![BitSet::with_capacity(num_edges); state.len()];
         largest_remove - 1
     ];
 
-    for m in enum_matches.iter() {
+    /*for m in enum_matches.iter() {
         // Extract fragments
         let frag1 = &dag[m.0].fragment;
         let frag2 = &dag[m.1].fragment;
@@ -625,18 +641,25 @@ pub fn recurse_index_search(
         // Union with masks to indicate that these edges are used
         masks[len][frag1_idx].union_with(frag1);
         masks[len][frag2_idx].union_with(frag2);
+    }*/
+
+    for (frag_id, state_idx) in frag_id_to_state_idx.iter() {
+        let frag = &dag[*frag_id].fragment;
+        let len = frag.len() - 2;
+
+        masks[len][*state_idx].union_with(frag);
     }
 
     // Let new state be only the edges which can be matched
     let mut state = Vec::new();
 
     for frag in masks[0].iter() {
-        // Split into connected components
-        let connected_frags = connected_components_under_edges(mol.graph(), &frag);
-        
         // Add connected components to new state
-        state.extend(connected_frags);
+        state.extend(connected_components_under_edges(mol.graph(), &frag));
     }
+
+    // Remove frags of size 1 or less
+    state.retain(|frag| frag.len() >= 2);
                 
 
     // MATCHES METHOD 2
@@ -655,7 +678,7 @@ pub fn recurse_index_search(
     
     // Define a closure that handles recursing to a new assembly state based on
     // the given (enumerated) pair of non-overlapping isomorphic subgraphs.
-    let  recurse_on_match = |v: (usize, usize)| {
+    let  recurse_on_match = |i: usize, v: (usize, usize)| {
         //let (h1, h2) = &matches[v];
         let h1 = &dag[v.0].fragment;
         let h2 = &dag[v.1].fragment;
@@ -675,10 +698,12 @@ pub fn recurse_index_search(
                 mol,
                 matches,
                 dag,
+                *matches.get(&v).unwrap(),
                 BitSet::new(),
                 {
                     let mut clone = removal_order.clone();
-                    clone.push(*matches.get(&v).unwrap());
+                    // clone.push(*matches.get(&v).unwrap());
+                    clone.push(i);
                     clone
                 },
                 &fragments,
@@ -702,11 +727,13 @@ pub fn recurse_index_search(
     if parallel_mode == ParallelMode::None {
         enum_matches
             .iter()
-            .for_each(|v| recurse_on_match(*v));
+            .enumerate()
+            .for_each(|(i, v)| recurse_on_match(i, *v));
     } else {
         enum_matches
             .par_iter()
-            .for_each(|v| recurse_on_match(*v));
+            .enumerate()
+            .for_each(|(i, v)| recurse_on_match(i, *v));
     }
 
     (
@@ -837,6 +864,7 @@ pub fn index_search(
         mol,
         &matches,
         &dag,
+        0,
         subgraph,
         Vec::new(),
         &[init],
