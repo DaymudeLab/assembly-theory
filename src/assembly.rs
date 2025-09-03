@@ -394,7 +394,6 @@ pub fn recurse_index_search(
 
     let mut valid_matches: Vec<(usize, usize)> = Vec::new();
     let mut subgraphs: Vec<(usize, usize)> = Vec::new();
-    let mut buckets: HashMap<usize, Vec<usize>> = HashMap::new();
 
     // Create subgraphs of size 1
     for (state_id, fragment) in state.iter().enumerate() {
@@ -405,6 +404,7 @@ pub fn recurse_index_search(
 
     while subgraphs.len() > 0 {
         // Subgraphs to extend in next loop
+        let mut buckets: HashMap<usize, Vec<(usize, usize)>> = HashMap::new();
         let mut new_subgraphs = Vec::new();
 
         // Extend each subgraph and bucket
@@ -426,36 +426,62 @@ pub fn recurse_index_search(
                     
                     // Add fragment to bucket
                     buckets.entry(*canon_id)
-                        .and_modify(|bucket| bucket.push(*child_id))
-                        .or_insert(vec![*child_id]);
-                    
-                    // Add fragment to new subgraphs
-                    new_subgraphs.push((*child_id, state_id));
+                        .and_modify(|bucket| bucket.push((*child_id, state_id)))
+                        .or_insert(vec![(*child_id, state_id)]);
+                }
+            }
+        }
+
+        // Search through buckets and create matches
+        for fragments in buckets.values() {
+            let mut has_match = BitSet::with_capacity(fragments.len());
+            // Loop over pairs of fragments
+            for pair in fragments.iter().enumerate().combinations(2) {
+                let mut frag1;
+                let mut frag2;
+
+                // Order fragments
+                if pair[0].1.0 > pair[1].1.0 {
+                    frag1 = pair[0];
+                    frag2 = pair[1];
+                }
+                else {
+                    frag1 = pair[1];
+                    frag2 = pair[0];
+                }
+
+                let frag1_bucket_idx = frag1.0;
+                let frag1_id = (*frag1.1).0;
+                let frag1_state_id = (*frag1.1).1;
+
+                let frag2_bucket_idx = frag2.0;
+                let frag2_id = (*frag2.1).0;
+                let frag2_state_id = (*frag2.1).1;
+
+                // Check for valid match
+                if let Some(x) = matches.get(&(frag1_id, frag2_id)) {
+                    // Only add match if it occurs later in the ordering than
+                    // the last removed match
+                    if *x >= last_removed {
+                        valid_matches.push((frag1_id, frag2_id));
+
+                        // If this is the first time seeing that this frag has a match,
+                        // add it to the new_subgraphs list
+                        if !has_match.contains(frag1_bucket_idx) {
+                            new_subgraphs.push((frag1_id, frag1_state_id));
+                            has_match.insert(frag1_bucket_idx);
+                        }
+                        if !has_match.contains(frag2_bucket_idx) {
+                            new_subgraphs.push((frag2_id, frag2_state_id));
+                            has_match.insert(frag2_bucket_idx);
+                        }
+                    }
                 }
             }
         }
 
         // Update to new subgraphs
         subgraphs = new_subgraphs;
-    }
-
-    // Generate matches from buckets of ismorphic fragments
-    for fragments in buckets.values() {
-        // Loop over pairs of fragments
-        for pair in fragments.iter().combinations(2) {
-            let frag1 = *max(pair[0], pair[1]);
-            let frag2 = *min(pair[0], pair[1]);
-
-            // Check for valid match
-            // If valid, add to matches to iterate over
-            if let Some(x) = matches.get(&(frag1, frag2)) {
-                // Only add match if it occurs later in the ordering than
-                // the last removed match
-                if *x >= last_removed {
-                    valid_matches.push((frag1, frag2));
-                }
-            }
-        }
     }
 
     // If there are no matches, return
