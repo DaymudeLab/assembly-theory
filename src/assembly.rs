@@ -19,7 +19,7 @@
 //! ```
 
 use std::{
-    collections::{HashMap, HashSet}, sync::{
+    collections::{BTreeMap, HashMap, HashSet}, sync::{
         atomic::{AtomicUsize, Ordering::Relaxed},
         Arc,
     }
@@ -27,9 +27,11 @@ use std::{
 
 use bit_set::BitSet;
 use clap::ValueEnum;
+use graph_canon::canon;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use petgraph::graph::EdgeIndex;
 use itertools::Itertools;
+use std::cmp::{max, min};
 
 use crate::{
     bounds::{bound_exceeded, Bound},
@@ -142,7 +144,7 @@ pub fn matches(mol: &Molecule, canonize_mode: CanonizeMode) -> (HashMap<(usize, 
 
     while subgraphs.len() > 0 {
         // Initialize new buckets and subgraph list
-        let mut buckets: HashMap<Labeling, Vec<(BitSet, usize)>> = HashMap::new();
+        let mut buckets: BTreeMap<Labeling, Vec<(BitSet, usize)>> = BTreeMap::new();
         let mut child_subgraphs: Vec<usize> = Vec::new();
 
         // Extend and bucket new subgraphs
@@ -506,11 +508,10 @@ fn is_usable(state: &[BitSet], h1: &BitSet, h2: &BitSet, masks: &mut Vec<Vec<Bit
 ///   upper bound returned is unchanged.)
 /// - `usize`: The number of assembly states searched.
 #[allow(clippy::too_many_arguments)]
-/*pub fn recurse_index_search(
+pub fn recurse_index_search(
     mol: &Molecule,
-    matches: &Vec<(usize, usize)>,
-    dag: &HashMap<usize, (BitSet, Vec<usize>)>,
-    graph: &Option<CompatGraph>,
+    matches: &HashMap<(usize, usize), usize>,
+    dag: &Vec<DagNode>,
     mut subgraph: BitSet,
     removal_order: Vec<usize>,
     state: &[BitSet],
@@ -523,85 +524,144 @@ fn is_usable(state: &[BitSet], h1: &BitSet, h2: &BitSet, masks: &mut Vec<Vec<Bit
 ) -> (usize, usize) {
     //println!("{:?}", removal_order);
     //println!("{:?}", state);
+    
+    let num_edges = mol.graph().edge_count();
+    let mut enum_matches: Vec<(usize, usize)> = Vec::new();
+    
+    // MATCHES METHOD 1
+    // EXTEND ALWAYS AND DO MATCHING AT END
+    let mut subgraphs: Vec<usize> = Vec::new();
+    let mut buckets: HashMap<usize, Vec<usize>> = HashMap::new();
 
-    let largest_remove = {
-        if let Some(v) = subgraph.iter().next() {
-            dag.get(matches[v].0).unwrap().0.len();
+    // create subgraphs of size 1
+    for fragment in state.iter() {
+        for edge_idx in fragment.iter() {
+            subgraphs.push(edge_idx);
         }
-        else {
-            return (state_index, 1);
-        }
-    };
+    }
 
-    let mut masks: Vec<Vec<BitSet>> = vec![
-        vec![BitSet::with_capacity(mol.graph().edge_count()); state.len()]; 
+    while subgraphs.len() > 0 {
+        // Subgraphs to extend in next loop
+        let mut new_subgraphs = Vec::new();
+
+        // Extend each subgraph and bucket
+        for frag_id in subgraphs {
+            // Get ids of extensions of this subgraph
+            let children_ids = &dag[frag_id].children;
+
+            for child_id in children_ids {
+                // Check if this extension is valid
+                // TODO: save fragment id
+                // TODO: save edge id in DAG
+                let child_frag = &dag[*child_id].fragment;
+                let valid = state.iter().any(|frag| child_frag.is_subset(frag));
+
+                if valid {
+                    let canon_id = &dag[*child_id].canon_id;
+                    
+                    // Add fragment to bucket
+                    buckets.entry(*canon_id)
+                        .and_modify(|bucket| bucket.push(*child_id))
+                        .or_insert(vec![*child_id]);
+                    
+                    // Add fragment to new subgraphs
+                    new_subgraphs.push(*child_id);
+                }
+            }
+        }
+
+        // Update to new subgraphs
+        subgraphs = new_subgraphs;
+    }
+
+    // Generate matches from buckets of ismorphic fragments
+    for fragments in buckets.values() {
+        // Loop over pairs of fragments
+        for pair in fragments.iter().combinations(2) {
+            let frag1 = *max(pair[0], pair[1]);
+            let frag2 = *min(pair[0], pair[1]);
+
+            // Check for valid match
+            // If valid, add to matches to iterate over
+            if let Some(x) = matches.get(&(frag1, frag2)) {
+                enum_matches.push((frag1, frag2));
+            }
+        }
+    }
+
+    // If there are no matches, return
+    if enum_matches.len() == 0 {
+        return (state_index, 1);
+    }
+
+    enum_matches.sort();
+    enum_matches.reverse();
+
+    // Modify mask
+    // TODO: try storing fragment so search can be reduced
+    // TODO: try with a set for frag_ids to only do intersection once per frag
+    let largest_remove = dag[enum_matches[0].0].fragment.len();
+    let mut masks = vec![
+        vec![BitSet::with_capacity(num_edges); state.len()];
         largest_remove - 1
     ];
 
+    for m in enum_matches.iter() {
+        // Extract fragments
+        let frag1 = &dag[m.0].fragment;
+        let frag2 = &dag[m.1].fragment;
+        let len = frag1.len() - 2;
 
+        // Find indices of fragments that contain frag1 and frag2
+        let (frag1_idx, _) = state.iter()
+            .enumerate()   
+            .find(|(_, state_frag)| frag1.is_subset(state_frag))
+            .unwrap();
+        let (frag2_idx, _) = state.iter()
+            .enumerate()
+            .find(|(_, state_frag)| frag2.is_subset(state_frag))
+            .unwrap();
+
+        // Union with masks to indicate that these edges are used
+        masks[len][frag1_idx].union_with(frag1);
+        masks[len][frag2_idx].union_with(frag2);
+    }
+
+    // Let new state be only the edges which can be matched
     let mut state = Vec::new();
-    for m in masks[0].iter() {
-        if m.len() >= 2 {
-            state.extend(connected_components_under_edges(mol.graph(), m));
-        }
-    }
 
-    // Int bound
-    let mut max = Vec::new();
-    for (i, list) in masks.iter().enumerate() {
-        let mut val = 0;
-        let i = i + 2;
-        for (j, frag) in list.iter().enumerate() {
-            let mf = masks[0][j].len();
-            let mi = frag.len();
-            let x = mf + (mi % i) - mi;
-            val += mf - (mi / i) - x / (i-1) - (x % (i-1) != 0) as usize;
-        }
-        val -= (i as f32).log2().ceil() as usize;
-        if max.len() == 0 {
-            max.push(val);
-        }
-        else {
-            max.push(val.max(max[max.len() - 1]));
-        }
+    for frag in masks[0].iter() {
+        // Split into connected components
+        let connected_frags = connected_components_under_edges(mol.graph(), &frag);
+        
+        // Add connected components to new state
+        state.extend(connected_frags);
     }
+                
 
-    let best = best_index.load(Relaxed);
-    let mut idx = 2;
-    while (idx < max.len() + 2) && best + max[idx - 2] <= state_index {
-        idx += 1;
-    }
+    // MATCHES METHOD 2
+    // ONLY EXTEND IF A SUBGRAPH HAS A MATCH
+
 
     // Memoization
     if cache.memoize_state(mol, &state, state_index, &removal_order) {
         return (state_index, 1);
     }
 
-    // Apply kernels
-    let mut must_include = matches.len();
-    if kernel_mode != KernelMode::None {
-        let g = graph.as_ref().unwrap();
-
-        // Deletion kernel
-        // Returns a subgraph without nodes that never occur in an optimal solution.
-        subgraph = deletion_kernel(matches, g, subgraph);
-        
-        // Inclusion kernel.
-        // must_include is the first match in the matches list that will be included in an optimal solution.
-        must_include = inclusion_kernel(matches, g, &subgraph);
-    }
-
     // Keep track of the best assembly index found in any of this assembly
     // state's children and the number of states searched, including this one.
     let best_child_index = AtomicUsize::from(state_index);
     let states_searched = AtomicUsize::from(1);
-
+    
     // Define a closure that handles recursing to a new assembly state based on
     // the given (enumerated) pair of non-overlapping isomorphic subgraphs.
-    let recurse_on_match = |v: usize| {
-        let (h1, h2) = &matches[v];
+    let  recurse_on_match = |v: (usize, usize)| {
+        //let (h1, h2) = &matches[v];
+        let h1 = &dag[v.0].fragment;
+        let h2 = &dag[v.1].fragment;
+        
+        // TODO: try keeping track of fragment to elimate some some search
         if let Some(fragments) = fragments(mol, &state, h1, h2) {
-
             // If using depth-one parallelism, all descendant states should be
             // computed serially.
             let new_parallel = if parallel_mode == ParallelMode::DepthOne {
@@ -610,43 +670,15 @@ fn is_usable(state: &[BitSet], h1: &BitSet, h2: &BitSet, masks: &mut Vec<Vec<Bit
                 parallel_mode
             };
 
-            // If kernelizing once, do not kernelize again. If kernelizing at depth-one,
-            // kernelize once more at the beginning of each descendent.
-            let new_kernel = if kernel_mode == KernelMode::Once {
-                KernelMode::None
-            } else if kernel_mode == KernelMode::DepthOne {
-                KernelMode::Once
-            } else {
-                kernel_mode
-            };
-
-            // Update subgraph
-            // If using CompatGraph, only consider the neighborhood of the node removed.
-            // Otherwise, only consider the matches that occur after the removed match in the list.
-            let mut sub_clone;
-            if let Some(g) = graph {
-                sub_clone = subgraph.clone();
-                sub_clone.intersect_with(&g.forward_neighbors(v, &subgraph));
-            }
-            else {
-                sub_clone = BitSet::with_capacity(matches.len());
-                for j in subgraph.iter() {
-                    if j > v {
-                        sub_clone.insert(j);
-                    }
-                }
-            }
-
             // Recurse using the remaining matches and updated fragments.
             let (child_index, child_states_searched) = recurse_index_search(
                 mol,
                 matches,
                 dag,
-                graph,
-                sub_clone,
+                BitSet::new(),
                 {
                     let mut clone = removal_order.clone();
-                    clone.push(v);
+                    clone.push(*matches.get(&v).unwrap());
                     clone
                 },
                 &fragments,
@@ -655,7 +687,7 @@ fn is_usable(state: &[BitSet], h1: &BitSet, h2: &BitSet, masks: &mut Vec<Vec<Bit
                 bounds,
                 &mut cache.clone(),
                 new_parallel,
-                new_kernel,
+                kernel_mode,
             );
 
             // Update the best assembly indices (across children states and
@@ -667,31 +699,21 @@ fn is_usable(state: &[BitSet], h1: &BitSet, h2: &BitSet, masks: &mut Vec<Vec<Bit
     };
 
     // Use the iterator type corresponding to the specified parallelism mode.
-    // Only search on nodes with v <= must_include since any searches after that would
-    // not use must_include.
     if parallel_mode == ParallelMode::None {
-        subgraph
+        enum_matches
             .iter()
-            .filter(|v| *v <= must_include && matches[*v].0.len() >= idx)
-            .for_each(|v| recurse_on_match(v));
+            .for_each(|v| recurse_on_match(*v));
     } else {
-        let _ = subgraph
-            .iter()
-            .filter(|v| *v <= must_include /*&& matches[*v].0.len() >= idx*/)
-            .collect::<Vec<usize>>()
+        enum_matches
             .par_iter()
             .for_each(|v| recurse_on_match(*v));
     }
-
-    /*if removal_order.len() == 1 {
-        println!("{:?}, {}", removal_order, states_searched.load(Relaxed));
-    }*/
 
     (
         best_child_index.load(Relaxed),
         states_searched.load(Relaxed),
     )
-}*/
+}
 
 /// Compute a molecule's assembly index and related information using a
 /// top-down recursive algorithm, parameterized by the specified options.
@@ -770,6 +792,7 @@ pub fn index_search(
 
     // Enumerate non-overlapping isomorphic subgraph pairs.
     let (matches, dag) = matches(mol, canonize_mode);
+
     /*let mut match_list: Vec<((usize, usize), usize)> = Vec::new();
     for m in matches.iter() {
         match_list.push((*m.0, *m.1));
@@ -785,20 +808,18 @@ pub fn index_search(
     }
     println!("{}", matches.len());*/
 
-    std::process::exit(1);
-
     // Create memoization cache.
     //let mut cache = Cache::new(memoize_mode, canonize_mode);
-    /*let mut cache = NewCache::new(memoize_mode);
+    let mut cache = NewCache::new(memoize_mode);
 
-    let graph = {
+    /*let graph = {
         if clique {
             Some(CompatGraph::new(&matches, &dag))
         }
         else {
             None
         }
-    };
+    };*/
 
     // Initialize the first fragment as the entire graph.
     let mut init = BitSet::new();
@@ -812,12 +833,10 @@ pub fn index_search(
     // Search for the shortest assembly pathway recursively.
     let edge_count = mol.graph().edge_count();
     let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
-    //let best_index = Arc::new(AtomicUsize::from(12));
     let (index, states_searched) = recurse_index_search(
         mol,
         &matches,
         &dag,
-        &graph,
         subgraph,
         Vec::new(),
         &[init],
@@ -831,8 +850,7 @@ pub fn index_search(
 
     println!("Bounded: {}", cache.count());
 
-    (index as u32, matches.len() as u32, states_searched)*/
-    (0, 0, 0)
+    (index as u32, matches.len() as u32, states_searched)
 }
 
 /// Compute a molecule's assembly index using an efficient default strategy.
