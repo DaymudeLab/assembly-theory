@@ -396,6 +396,7 @@ pub fn recurse_index_search(
     let mut valid_matches: Vec<(usize, usize)> = Vec::new();
     let mut subgraphs: Vec<(usize, usize)> = Vec::new();
     let mut masks: Vec<Vec<BitSet>> = Vec::new();
+    let mut buckets_by_len: Vec<HashMap<usize, Vec<(usize, usize)>>> = Vec::new();
 
     // Create subgraphs of size 1
     for (state_id, fragment) in state.iter().enumerate() {
@@ -436,11 +437,15 @@ pub fn recurse_index_search(
         }
 
         // Search through buckets and create matches
-        for fragments in buckets.values() {
+        for fragments in buckets.values_mut() {
             let mut has_match = BitSet::with_capacity(fragments.len());
             // Loop over pairs of fragments
             for i in 0..fragments.len() {
                 for j in i+1..fragments.len() {
+                    if has_match.contains(i) && has_match.contains(j) {
+                        continue;
+                    }
+
                     let mut frag1 = (i, fragments[i]);
                     let mut frag2 = (j, fragments[j]);
 
@@ -460,12 +465,11 @@ pub fn recurse_index_search(
                     let frag2_state_id = frag2.1.1;
 
                     // Check for valid match
-                    // TODO: try alternatives to this
                     if let Some(x) = matches.get(&(frag1_id, frag2_id)) {
                         // Only add match if it occurs later in the ordering than
                         // the last removed match
                         if *x >= last_removed {
-                            valid_matches.push((frag1_id, frag2_id));
+                            // valid_matches.push((frag1_id, frag2_id));
 
                             // If this is the first time seeing that this frag has a match,
                             // add it to the new_subgraphs list and modify mask
@@ -483,7 +487,18 @@ pub fn recurse_index_search(
                     }
                 }
             }
+
+            // Remove any matchless fragments from bucket
+            let len = fragments.len();
+            for i in (0..len).rev() {
+                if !has_match.contains(i) {
+                    fragments.remove(i);
+                }
+            }     
         }
+
+        // Add buckets to list
+        buckets_by_len.push(buckets);
 
         // Add mask to list
         masks.push(used_edge_mask);
@@ -491,14 +506,6 @@ pub fn recurse_index_search(
         // Update to new subgraphs
         subgraphs = new_subgraphs;
     }
-
-    // If there are no matches, return
-    if valid_matches.len() == 0 {
-        return (state_index, 1);
-    }
-
-    valid_matches.sort();
-    valid_matches.reverse();
 
     // Let new state be only the edges which can be matched
     let mut state = Vec::new();
@@ -510,6 +517,11 @@ pub fn recurse_index_search(
 
     // Remove frags of size 1 or less
     state.retain(|frag| frag.len() >= 2);
+
+    // Memoization
+    if cache.memoize_state(mol, &state, state_index, &removal_order) {
+        return (state_index, 1);
+    }
 
     let best = best_index.load(Relaxed);
     let mut best_bound = 0;
@@ -539,21 +551,33 @@ pub fn recurse_index_search(
         largest_length += 1;
     }
 
-    // Remove from valid_matches any matches that have size smaller
-    // than largest_length, and thus their removal does not need to be tested
-    if largest_length > 2 {
-        let mut final_idx = 0;
-        while dag[valid_matches[final_idx].0].fragment.len() >= largest_length {
-            final_idx += 1;
+    // Create matches
+    for bucket in buckets_by_len[largest_length-2..].iter().rev() {
+        for fragments in bucket.values() {
+            for i in 0..fragments.len() {
+                for j in i+1..fragments.len() {
+                    let mut frag1_id = fragments[i].0;
+                    let mut frag2_id = fragments[j].0;
+
+                    if frag1_id < frag2_id {
+                        let temp = frag1_id;
+                        frag1_id = frag2_id;
+                        frag2_id = temp;
+                    }
+
+                    if let Some(x) = matches.get(&(frag1_id, frag2_id)){
+                        if *x >= last_removed {
+                            valid_matches.push((frag1_id, frag2_id));
+                        }
+                    }
+                }
+            }
         }
-        valid_matches.truncate(final_idx);
     }
 
-
-    // Memoization
-    if cache.memoize_state(mol, &state, state_index, &removal_order) {
-        return (state_index, 1);
-    }
+    // Sort matches
+    valid_matches.sort();
+    valid_matches.reverse();
 
     // Keep track of the best assembly index found in any of this assembly
     // state's children and the number of states searched, including this one.
