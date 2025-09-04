@@ -389,12 +389,6 @@ pub fn recurse_index_search(
 ) -> (usize, usize) {
     //println!("{:?}", removal_order);
     //println!("{:?}", state);
-
-    let mut bucket_time = Duration::new(0, 0);
-    let mut sort_time = Duration::new(0, 0);
-    let mut create_matches_time = Duration::new(0, 0);
-    let mut mask_time = Duration::new(0, 0);
-    let mut bound_time = Duration::new(0, 0);
     
     // Generate matches
     let num_edges = mol.graph().edge_count();
@@ -428,7 +422,6 @@ pub fn recurse_index_search(
                 let child_frag = &dag[*child_id].fragment;
                 let valid = child_frag.is_subset(state_frag);
 
-                let start = Instant::now();
                 if valid {
                     let canon_id = &dag[*child_id].canon_id;
                     
@@ -437,61 +430,57 @@ pub fn recurse_index_search(
                         .and_modify(|bucket| bucket.push((*child_id, state_id)))
                         .or_insert(vec![(*child_id, state_id)]);
                 }
-                bucket_time += start.elapsed();
             }
         }
 
-        let start = Instant::now();
         // Search through buckets and create matches
         for fragments in buckets.values() {
             let mut has_match = BitSet::with_capacity(fragments.len());
             // Loop over pairs of fragments
-            for pair in fragments.iter().enumerate().combinations(2) {
-                let mut frag1;
-                let mut frag2;
+            for i in 0..fragments.len() {
+                for j in i+1..fragments.len() {
+                    let mut frag1 = (i, fragments[i]);
+                    let mut frag2 = (j, fragments[j]);
 
-                // Order fragments
-                if pair[0].1.0 > pair[1].1.0 {
-                    frag1 = pair[0];
-                    frag2 = pair[1];
-                }
-                else {
-                    frag1 = pair[1];
-                    frag2 = pair[0];
-                }
+                    // Order fragments
+                    if frag1.1.0 < frag2.1.0 {
+                        let temp = frag1;
+                        frag1 = frag2;
+                        frag2 = temp;
+                    }
 
-                let frag1_bucket_idx = frag1.0;
-                let frag1_id = (*frag1.1).0;
-                let frag1_state_id = (*frag1.1).1;
+                    let frag1_bucket_idx = frag1.0;
+                    let frag1_id = frag1.1.0;
+                    let frag1_state_id = frag1.1.1;
 
-                let frag2_bucket_idx = frag2.0;
-                let frag2_id = (*frag2.1).0;
-                let frag2_state_id = (*frag2.1).1;
+                    let frag2_bucket_idx = frag2.0;
+                    let frag2_id = frag2.1.0;
+                    let frag2_state_id = frag2.1.1;
 
-                // Check for valid match
-                // if let Some(x) = matches.get(&(frag1_id, frag2_id)) {
-                if dag[frag1_id].fragment.is_disjoint(&dag[frag2_id].fragment) {
-                    let x = matches.get(&(frag1_id, frag2_id)).unwrap();
-                    // Only add match if it occurs later in the ordering than
-                    // the last removed match
-                    if *x >= last_removed {
-                        valid_matches.push((frag1_id, frag2_id));
+                    // Check for valid match
+                    // if let Some(x) = matches.get(&(frag1_id, frag2_id)) {
+                    if dag[frag1_id].fragment.is_disjoint(&dag[frag2_id].fragment) {
+                        let x = matches.get(&(frag1_id, frag2_id)).unwrap();
+                        // Only add match if it occurs later in the ordering than
+                        // the last removed match
+                        if *x >= last_removed {
+                            valid_matches.push((frag1_id, frag2_id));
 
-                        // If this is the first time seeing that this frag has a match,
-                        // add it to the new_subgraphs list
-                        if !has_match.contains(frag1_bucket_idx) {
-                            new_subgraphs.push((frag1_id, frag1_state_id));
-                            has_match.insert(frag1_bucket_idx);
-                        }
-                        if !has_match.contains(frag2_bucket_idx) {
-                            new_subgraphs.push((frag2_id, frag2_state_id));
-                            has_match.insert(frag2_bucket_idx);
+                            // If this is the first time seeing that this frag has a match,
+                            // add it to the new_subgraphs list
+                            if !has_match.contains(frag1_bucket_idx) {
+                                new_subgraphs.push((frag1_id, frag1_state_id));
+                                has_match.insert(frag1_bucket_idx);
+                            }
+                            if !has_match.contains(frag2_bucket_idx) {
+                                new_subgraphs.push((frag2_id, frag2_state_id));
+                                has_match.insert(frag2_bucket_idx);
+                            }
                         }
                     }
                 }
             }
         }
-        create_matches_time += start.elapsed();
 
 
         // Update to new subgraphs
@@ -503,13 +492,10 @@ pub fn recurse_index_search(
         return (state_index, 1);
     }
 
-    let start = Instant::now();
     valid_matches.sort();
     valid_matches.reverse();
-    sort_time += start.elapsed();
 
     // Modify mask
-    let start = Instant::now();
     let largest_remove = dag[valid_matches[0].0].fragment.len();
     let mut masks = vec![
         vec![BitSet::with_capacity(num_edges); state.len()];
@@ -547,9 +533,7 @@ pub fn recurse_index_search(
 
     // Remove frags of size 1 or less
     state.retain(|frag| frag.len() >= 2);
-    mask_time += start.elapsed();
 
-    let start = Instant::now();
     let best = best_index.load(Relaxed);
     let mut best_bound = 0;
     let mut largest_length = 2;
@@ -587,9 +571,6 @@ pub fn recurse_index_search(
         }
         valid_matches.truncate(final_idx);
     }
-    bound_time += start.elapsed();
-
-    // println!("bucket: {} match: {} sort: {} mask: {} bound: {}", bucket_time.as_nanos(), create_matches_time.as_nanos(), sort_time.as_nanos(), mask_time.as_nanos(), bound_time.as_nanos());
 
 
     // Memoization
