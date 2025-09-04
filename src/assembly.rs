@@ -389,6 +389,11 @@ pub fn recurse_index_search(
 ) -> (usize, usize) {
     //println!("{:?}", removal_order);
     //println!("{:?}", state);
+
+    // Memoization
+    if cache.memoize_state(mol, &state, state_index, &removal_order) {
+        return (state_index, 1);
+    }
     
     // Generate matches
     let num_edges = mol.graph().edge_count();
@@ -518,10 +523,6 @@ pub fn recurse_index_search(
     // Remove frags of size 1 or less
     state.retain(|frag| frag.len() >= 2);
 
-    // Memoization
-    if cache.memoize_state(mol, &state, state_index, &removal_order) {
-        return (state_index, 1);
-    }
 
     let best = best_index.load(Relaxed);
     let mut best_bound = 0;
