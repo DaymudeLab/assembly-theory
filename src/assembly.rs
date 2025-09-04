@@ -28,7 +28,7 @@ use std::{
 use bit_set::BitSet;
 use clap::ValueEnum;
 use graph_canon::canon;
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator, IndexedParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator, IndexedParallelIterator};
 use petgraph::graph::EdgeIndex;
 use itertools::Itertools;
 use std::cmp::{max, min};
@@ -216,7 +216,7 @@ pub fn matches(mol: &Molecule, canonize_mode: CanonizeMode) -> (FxHashMap<(usize
 
                         // Add index to parent's child list
                         let parent_idx = pair[0].1.1;
-                        let mut parent = &mut dag[parent_idx];
+                        let parent = &mut dag[parent_idx];
                         parent.children.push(child_idx);
 
                         // Add dag node to next subgraphs list
@@ -235,7 +235,7 @@ pub fn matches(mol: &Molecule, canonize_mode: CanonizeMode) -> (FxHashMap<(usize
 
                         // Add index to parent's child list
                         let parent_idx = pair[1].1.1;
-                        let mut parent = &mut dag[parent_idx];
+                        let parent = &mut dag[parent_idx];
                         parent.children.push(child_idx);
 
                         // Add dag node to next subgraphs list
@@ -395,6 +395,7 @@ pub fn recurse_index_search(
 
     let mut valid_matches: Vec<(usize, usize)> = Vec::new();
     let mut subgraphs: Vec<(usize, usize)> = Vec::new();
+    let mut masks: Vec<Vec<BitSet>> = Vec::new();
 
     // Create subgraphs of size 1
     for (state_id, fragment) in state.iter().enumerate() {
@@ -407,6 +408,7 @@ pub fn recurse_index_search(
         // Subgraphs to extend in next loop
         let mut buckets: HashMap<usize, Vec<(usize, usize)>> = HashMap::new();
         let mut new_subgraphs = Vec::new();
+        let mut used_edge_mask = vec![BitSet::with_capacity(num_edges); state.len()];
 
         // Extend each subgraph and bucket
         for (frag_id, state_id) in subgraphs {
@@ -458,22 +460,23 @@ pub fn recurse_index_search(
                     let frag2_state_id = frag2.1.1;
 
                     // Check for valid match
-                    // if let Some(x) = matches.get(&(frag1_id, frag2_id)) {
-                    if dag[frag1_id].fragment.is_disjoint(&dag[frag2_id].fragment) {
-                        let x = matches.get(&(frag1_id, frag2_id)).unwrap();
+                    // TODO: try alternatives to this
+                    if let Some(x) = matches.get(&(frag1_id, frag2_id)) {
                         // Only add match if it occurs later in the ordering than
                         // the last removed match
                         if *x >= last_removed {
                             valid_matches.push((frag1_id, frag2_id));
 
                             // If this is the first time seeing that this frag has a match,
-                            // add it to the new_subgraphs list
+                            // add it to the new_subgraphs list and modify mask
                             if !has_match.contains(frag1_bucket_idx) {
                                 new_subgraphs.push((frag1_id, frag1_state_id));
+                                used_edge_mask[frag1_state_id].union_with(&dag[frag1_id].fragment);
                                 has_match.insert(frag1_bucket_idx);
                             }
                             if !has_match.contains(frag2_bucket_idx) {
                                 new_subgraphs.push((frag2_id, frag2_state_id));
+                                used_edge_mask[frag2_state_id].union_with(&dag[frag2_id].fragment);
                                 has_match.insert(frag2_bucket_idx);
                             }
                         }
@@ -482,6 +485,8 @@ pub fn recurse_index_search(
             }
         }
 
+        // Add mask to list
+        masks.push(used_edge_mask);
 
         // Update to new subgraphs
         subgraphs = new_subgraphs;
@@ -494,34 +499,6 @@ pub fn recurse_index_search(
 
     valid_matches.sort();
     valid_matches.reverse();
-
-    // Modify mask
-    let largest_remove = dag[valid_matches[0].0].fragment.len();
-    let mut masks = vec![
-        vec![BitSet::with_capacity(num_edges); state.len()];
-        largest_remove - 1
-    ];
-
-    for m in valid_matches.iter() {
-        // Extract fragments
-        let frag1 = &dag[m.0].fragment;
-        let frag2 = &dag[m.1].fragment;
-        let len = frag1.len() - 2;
-
-        // Find indices of fragments that contain frag1 and frag2
-        let (frag1_idx, _) = state.iter()
-            .enumerate()   
-            .find(|(_, state_frag)| frag1.is_subset(state_frag))
-            .unwrap();
-        let (frag2_idx, _) = state.iter()
-            .enumerate()
-            .find(|(_, state_frag)| frag2.is_subset(state_frag))
-            .unwrap();
-
-        // Union with masks to indicate that these edges are used
-        masks[len][frag1_idx].union_with(frag1);
-        masks[len][frag2_idx].union_with(frag2);
-    }
 
     // Let new state be only the edges which can be matched
     let mut state = Vec::new();
