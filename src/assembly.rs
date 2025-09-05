@@ -580,7 +580,6 @@ pub fn recurse_index_search(
 
 
     let best = best_index.load(Relaxed);
-    let mut best_bound = 0;
     let mut largest_length = 2;
 
     // Use bounding strategy to find the largest length match
@@ -596,46 +595,29 @@ pub fn recurse_index_search(
         }
         bound -= (i as f32).log2().ceil() as usize;
 
-        best_bound = max(best_bound, bound);
-
         // Check if removing at this length can give a more optimal answer
         // If yes, stop and return the largest_length to remove
-        if state_index - best_bound < best {
-            break;
+        if state_index - bound < best {
+            let s: usize = list.iter().map(|frag| frag.len()).sum();
+
+            let mut set = HashSet::new();
+            for frag in list.iter() {
+                for edge in frag.iter() {
+                    set.insert(edgetypes[edge]);
+                }
+            }
+            let z = set.len();
+
+            let bound = (s - z) - ((s - z) as f32 / i as f32).ceil() as usize;
+
+            if state_index - bound < best {
+                break;
+            }
         }
 
         largest_length += 1;
     }
-
-    let mut largest_length2 = 2;
-    let mut best_bound = 0;
-
-    // Vector bounding strategy
-    // Uses edge types of the fragments.
-    for (i, list) in masks.iter().enumerate() {
-        let i = i + 2;
-
-        let mut s: usize = list.iter().map(|frag| frag.len()).sum();
-
-        let mut set = HashSet::new();
-        for frag in list.iter() {
-            for edge in frag.iter() {
-                set.insert(edgetypes[edge]);
-            }
-        }
-        let z = set.len();
-
-        let bound = (s - z) - ((s - z) as f32 / i as f32).ceil() as usize;
-        best_bound = max(best_bound, bound);
-
-        if state_index - best_bound < best {
-            break;
-        }
-
-        largest_length2 += 1;
-    }
-
-    largest_length = max(largest_length, largest_length2);
+    
 
     // Create matches
     for bucket in buckets_by_len[largest_length-2..].iter().rev() {
