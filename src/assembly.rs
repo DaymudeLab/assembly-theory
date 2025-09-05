@@ -32,7 +32,6 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator, IndexedParallelIter
 use petgraph::graph::EdgeIndex;
 use itertools::Itertools;
 use std::cmp::{max, min};
-use ahash::RandomState;
 use fxhash::FxHashMap;
 
 use crate::{
@@ -41,7 +40,7 @@ use crate::{
     enumerate::{EnumerateMode},
     kernels::{KernelMode, deletion_kernel, inclusion_kernel},
     memoize::{MemoizeMode, NewCache},
-    molecule::Molecule,
+    molecule::{Bond, Element, Molecule},
     utils::{connected_components_under_edges, edge_neighbors},
     reductions::CompatGraph,
 };
@@ -117,11 +116,17 @@ impl DagNode {
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct EdgeType {
+    bond: Bond,
+    ends: (Element, Element),
+}
+
 /// Helper function for [`index_search`]; only public for benchmarking.
 ///
 /// Return all pairs of non-overlapping, isomorphic subgraphs in the molecule,
 /// sorted to guarantee deterministic iteration.
-pub fn matches(mol: &Molecule, canonize_mode: CanonizeMode) -> (FxHashMap<(usize, usize), usize>, Vec<DagNode>) {
+pub fn matches(mol: &Molecule, canonize_mode: CanonizeMode) -> (FxHashMap<(usize, usize), usize>, Vec<DagNode>, Vec<usize>) {
     let num_edges = mol.graph().edge_count();
 
     let mut subgraphs: Vec<usize> = Vec::new();
@@ -286,7 +291,48 @@ pub fn matches(mol: &Molecule, canonize_mode: CanonizeMode) -> (FxHashMap<(usize
         next_match_id += 1;
     }
 
-    (match_to_id, dag)
+    // Create edge type ids
+    let graph = mol.graph();
+    let mut edgetype_to_id: HashMap<EdgeType, usize> = HashMap::new();
+    let mut edgetypes: Vec<usize> = vec![0; num_edges];
+    let mut next_id = 0;
+
+    // Create a list of the elements of the nodes
+    // The list can be indexed by NodeIndex-es
+    let mut node_elements: Vec<Element> = Vec::new();
+    for v in graph.node_weights() {
+        node_elements.push(v.element());
+    }
+
+    // Extract bond types
+    let weights: Vec<Bond> = graph.edge_weights().copied().collect();
+
+    // types will hold an element for every unique edge type in fragment
+    for e in graph.edge_indices() {
+        // Extract bond type and endpoint atom types
+        let bond = weights[e.index()];
+        let (end1, end2) = graph.edge_endpoints(e).expect("Edge Endpoint Error");
+
+        let atom1 = node_elements[end1.index()];
+        let atom2 = node_elements[end2.index()];
+
+        // Create edgetype
+        let ends = if atom1 < atom2 {(atom1, atom2)} else {(atom2, atom1)};
+        let edgetype = EdgeType{bond, ends};
+
+        // Find or create id for this edgetype
+        // and store the edgetype id for this edge
+        if let Some(id) = edgetype_to_id.get(&edgetype) {
+            edgetypes[e.index()] = *id;
+        }
+        else {
+            edgetypes[e.index()] = next_id;
+            edgetype_to_id.insert(edgetype, next_id);
+            next_id += 1;
+        }
+    }
+
+    (match_to_id, dag, edgetypes)
 }
 
 /// Determine the fragments produced from the given assembly state by removing
@@ -376,6 +422,7 @@ pub fn recurse_index_search(
     mol: &Molecule,
     matches: &FxHashMap<(usize, usize), usize>,
     dag: &Vec<DagNode>,
+    edgetypes: &Vec<usize>,
     last_removed: usize,
     mut subgraph: BitSet,
     removal_order: Vec<usize>,
@@ -387,8 +434,16 @@ pub fn recurse_index_search(
     parallel_mode: ParallelMode,
     kernel_mode: KernelMode,
 ) -> (usize, usize) {
-    //println!("{:?}", removal_order);
-    //println!("{:?}", state);
+    // println!("{:?}", removal_order);
+    // println!("{:?}", state);
+
+    // let mut memoize_time = Duration::new(0, 0);
+    // let mut bucket_time = Duration::new(0, 0);
+    // let mut component_time = Duration::new(0, 0);
+    // let mut int_time = Duration::new(0, 0);
+    // let mut vec_time = Duration::new(0, 0);
+    // let mut matches_time = Duration::new(0, 0);
+    // let mut sort_time = Duration::new(0, 0);
 
     // Memoization
     if cache.memoize_state(mol, &state, state_index, &removal_order) {
@@ -552,6 +607,36 @@ pub fn recurse_index_search(
         largest_length += 1;
     }
 
+    let mut largest_length2 = 2;
+    let mut best_bound = 0;
+
+    // Vector bounding strategy
+    // Uses edge types of the fragments.
+    for (i, list) in masks.iter().enumerate() {
+        let i = i + 2;
+
+        let mut s: usize = list.iter().map(|frag| frag.len()).sum();
+
+        let mut set = HashSet::new();
+        for frag in list.iter() {
+            for edge in frag.iter() {
+                set.insert(edgetypes[edge]);
+            }
+        }
+        let z = set.len();
+
+        let bound = (s - z) - ((s - z) as f32 / i as f32).ceil() as usize;
+        best_bound = max(best_bound, bound);
+
+        if state_index - best_bound < best {
+            break;
+        }
+
+        largest_length2 += 1;
+    }
+
+    largest_length = max(largest_length, largest_length2);
+
     // Create matches
     for bucket in buckets_by_len[largest_length-2..].iter().rev() {
         for fragments in bucket.values() {
@@ -580,6 +665,14 @@ pub fn recurse_index_search(
     valid_matches.sort();
     valid_matches.reverse();
 
+    // print!("Mem: {} ", memoize_time.as_nanos());
+    // print!("Buk: {} ", bucket_time.as_nanos());
+    // print!("Comp: {} ", component_time.as_nanos());
+    // print!("Int: {} ", int_time.as_nanos());
+    // print!("Vec: {} ", vec_time.as_nanos());
+    // print!("Mat: {} ", matches_time.as_nanos());
+    // print!("Sort: {}\n", sort_time.as_nanos());
+
     // Keep track of the best assembly index found in any of this assembly
     // state's children and the number of states searched, including this one.
     let best_child_index = AtomicUsize::from(state_index);
@@ -587,7 +680,7 @@ pub fn recurse_index_search(
     
     // Define a closure that handles recursing to a new assembly state based on
     // the given (enumerated) pair of non-overlapping isomorphic subgraphs.
-    let  recurse_on_match = |i: usize, v: (usize, usize)| {
+    let recurse_on_match = |i: usize, v: (usize, usize)| {
         //let (h1, h2) = &matches[v];
         let h1 = &dag[v.0].fragment;
         let h2 = &dag[v.1].fragment;
@@ -607,12 +700,13 @@ pub fn recurse_index_search(
                 mol,
                 matches,
                 dag,
+                edgetypes,
                 *matches.get(&v).unwrap(),
                 BitSet::new(),
                 {
                     let mut clone = removal_order.clone();
-                    // clone.push(*matches.get(&v).unwrap());
-                    clone.push(i);
+                    clone.push(*matches.get(&v).unwrap());
+                    // clone.push(i);
                     clone
                 },
                 &fragments,
@@ -727,7 +821,7 @@ pub fn index_search(
     // Catch not-yet-implemented modes.
 
     // Enumerate non-overlapping isomorphic subgraph pairs.
-    let (matches, dag) = matches(mol, canonize_mode);
+    let (matches, dag, edgetypes) = matches(mol, canonize_mode);
 
     // Create memoization cache.
     //let mut cache = Cache::new(memoize_mode, canonize_mode);
@@ -758,6 +852,7 @@ pub fn index_search(
         mol,
         &matches,
         &dag,
+        &edgetypes,
         0,
         subgraph,
         Vec::new(),
