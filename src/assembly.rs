@@ -434,7 +434,7 @@ pub fn recurse_index_search(
     parallel_mode: ParallelMode,
     kernel_mode: KernelMode,
 ) -> (usize, usize) {
-    // println!("{:?}", removal_order);
+    // if removal_order.len() == 1 {println!("{:?}", removal_order);}
     // println!("{:?}", state);
 
     // let mut memoize_time = Duration::new(0, 0);
@@ -579,45 +579,70 @@ pub fn recurse_index_search(
     state.retain(|frag| frag.len() >= 2);
 
 
+    // Use bounding strategy to find the largest length match
+    // to try removing from this state.
     let best = best_index.load(Relaxed);
     let mut largest_length = 2;
 
-    // Use bounding strategy to find the largest length match
-    // to try removing from this state.
     for (i, list) in masks.iter().enumerate() {
-        let mut bound = 0;
-        let i = i + 2;
-        for (j, frag) in list.iter().enumerate() {
-            let mf = masks[0][j].len();
-            let mi = frag.len();
-            let x = mf + (mi % i) - mi;
-            bound += mf - (mi / i) - x / (i-1) - (x % (i-1) != 0) as usize;
-        }
-        bound -= (i as f32).log2().ceil() as usize;
-
-        // Check if removing at this length can give a more optimal answer
-        // If yes, stop and return the largest_length to remove
-        if state_index - bound < best {
-            let s: usize = list.iter().map(|frag| frag.len()).sum();
-
-            let mut set = HashSet::new();
-            for frag in list.iter() {
-                for edge in frag.iter() {
-                    set.insert(edgetypes[edge]);
-                }
-            }
-            let z = set.len();
-
-            let bound = (s - z) - ((s - z) as f32 / i as f32).ceil() as usize;
-
-            if state_index - bound < best {
+        let mut stop = false;
+        for bound_type in bounds {
+            if stop {
                 break;
             }
+
+            match bound_type {
+                Bound::Int => {
+                    let mut bound = 0;
+                    let i = i + 2;
+                    for (j, frag) in list.iter().enumerate() {
+                        let mf = masks[0][j].len();
+                        let mi = frag.len();
+                        let x = mf + (mi % i) - mi;
+                        bound += mf - (mi / i) - (x+i-2) / (i-1);
+                    }
+                    bound -= (i as f32).log2().ceil() as usize;
+
+                    if state_index - bound >= best {
+                        stop = true;
+                    }
+                }
+                Bound::VecSimple => {
+                    let mut set = HashSet::new();
+                    for frag in state.iter() {
+                        for edge in frag.iter() {
+                            set.insert(edgetypes[edge]);
+                        }
+                    }
+                    let z = set.len();
+
+                    let i = i + 2;
+                    let s: usize = state.iter().map(|frag| frag.len()).sum();
+
+                    let bound = if s == 0 {
+                        0
+                    }
+                    else {
+                        (s - z) - ((s - z) as f32 / i as f32).ceil() as usize
+                    };
+
+                    
+                    if state_index - bound >= best {
+                        stop = true;
+                    }                    
+                }
+                _ => ()
+            }
         }
 
-        largest_length += 1;
+        if stop {
+            largest_length += 1;
+        }
+        else {
+            break;
+        }
     }
-    
+
 
     // Create matches
     for bucket in buckets_by_len[largest_length-2..].iter().rev() {
@@ -687,8 +712,8 @@ pub fn recurse_index_search(
                 BitSet::new(),
                 {
                     let mut clone = removal_order.clone();
-                    clone.push(*matches.get(&v).unwrap());
-                    // clone.push(i);
+                    // clone.push(*matches.get(&v).unwrap());
+                    clone.push(i);
                     clone
                 },
                 &fragments,
@@ -847,7 +872,7 @@ pub fn index_search(
         kernel_mode,
     );
 
-    println!("Bounded: {}", cache.count());
+    // println!("Bounded: {}", cache.count());
 
     (index as u32, matches.len() as u32, states_searched)
 }
