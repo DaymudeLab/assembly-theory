@@ -585,6 +585,8 @@ pub fn recurse_index_search(
     let mut largest_length = 2;
 
     for (i, list) in masks.iter().enumerate() {
+        let mut b1 = 0;
+
         let mut stop = false;
         for bound_type in bounds {
             if stop {
@@ -608,25 +610,41 @@ pub fn recurse_index_search(
                     }
                 }
                 Bound::VecSimple => {
-                    let mut set = HashSet::new();
-                    for frag in state.iter() {
-                        for edge in frag.iter() {
-                            set.insert(edgetypes[edge]);
+                    let size_two_list = &masks[0];
+                    let mut total_set = HashSet::new();
+                    let mut small_set = HashSet::new();
+                    
+                    for frag in size_two_list.iter() {
+                        for edge in frag {
+                            total_set.insert(edgetypes[edge]);
                         }
                     }
-                    let z = set.len();
-
-                    let i = i + 2;
-                    let s: usize = state.iter().map(|frag| frag.len()).sum();
-
-                    let bound = if s == 0 {
-                        0
+                    for frag in list {
+                        for edge in frag {
+                            small_set.insert(edgetypes[edge]);
+                        }
                     }
-                    else {
-                        (s - z) - ((s - z) as f32 / i as f32).ceil() as usize
+
+                    let z = total_set.len();
+                    let zi = small_set.len();
+                    let i = i + 2;
+                    let s: usize = size_two_list.iter().map(|frag| frag.len()).sum();
+                    let mi: usize = list.iter().map(|frag| frag.len()).sum();
+                    let mf = s - mi;
+
+                    let bound = s - {
+                        if z < i {
+                            z-1 + (i as f32 / z as f32).log2().ceil() as usize + (mi/i) + ((mi%i)+mf - (z - zi) + i-2)/(i-1)
+                        }
+                        else {
+                            z + (mi-zi)/i + ((mi-zi)%i + mf - (z - zi) + i-2)/(i-1)
+                        }
                     };
 
-                    
+                    if mi == 0 {
+                        break;
+                    }
+
                     if state_index - bound >= best {
                         stop = true;
                     }                    
