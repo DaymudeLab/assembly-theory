@@ -98,9 +98,9 @@ fn main() -> Result<()> {
     // Handle bounding strategy CLI arguments.
     let boundlist: &[Bound] = match (cli.boundsgroup, cli.clique) {
         // If clique not enable, default to a combination of the integer and vector bounds.
-        (None, false) => &[Bound::Int, Bound::VecSimple, Bound::VecSmallFrags],
+        (None, false) => &[Bound::Int, Bound::VecSimple, /*Bound::VecSmallFrags*/],
         // If clique is enabled, default to combination of int, vec, and clique bounds.
-        (None, true) => &[Bound::Int, Bound::VecSimple, Bound::VecSmallFrags, /*Bound::CliqueBudget,*/ Bound::CoverNoSort],
+        (None, true) => &[Bound::Int, Bound::VecSimple],
         // If --no-bounds is set, do not use any bounds.
         (Some(BoundsGroup {
             no_bounds: true, ..

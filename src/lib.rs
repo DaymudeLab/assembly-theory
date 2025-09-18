@@ -53,6 +53,7 @@ pub mod enumerate;
 pub mod kernels;
 pub mod memoize;
 pub mod reductions;
+pub mod matches;
 mod vf3;
 
 // Python wrapper.
