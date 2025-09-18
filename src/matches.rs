@@ -5,7 +5,7 @@ use fxhash::FxHashMap;
 use itertools::Itertools;
 use petgraph::graph::EdgeIndex;
 
-use crate::{bounds::Bound, canonize::{canonize, CanonizeMode, Labeling}, molecule::{Bond, Element, Molecule}, reductions::CompatGraph, utils::{connected_components_under_edges, edge_neighbors}};
+use crate::{bounds::Bound, canonize::{canonize, CanonizeMode, Labeling}, molecule::{Bond, Element, Molecule}, reductions::CompatGraph, state::State, utils::{connected_components_under_edges, edge_neighbors}};
 
 pub struct DagNode {
     fragment: BitSet,
@@ -258,8 +258,11 @@ impl Matches {
         }
     }
 
-    pub fn generate_matches(&self, mol: &Molecule, state: &[BitSet], state_index: usize, last_removed: usize, best: usize, bounds: &[Bound]) -> Vec<(usize, usize)> {
+    pub fn generate_matches(&self, mol: &Molecule, state: &State, best: usize, bounds: &[Bound]) -> (Vec<BitSet>, Vec<(usize, usize)>) {
         let num_edges = mol.graph().edge_count();
+        let state_frags = state.fragments();
+        let state_index = state.index();
+        let last_removed = state.last_removed();
 
         let mut valid_matches: Vec<(usize, usize)> = Vec::new();
         let mut subgraphs: Vec<(usize, usize)> = Vec::new();
@@ -267,7 +270,7 @@ impl Matches {
         let mut buckets_by_len: Vec<HashMap<usize, Vec<(usize, usize)>>> = Vec::new();
 
         // Create subgraphs of size 1
-        for (state_id, fragment) in state.iter().enumerate() {
+        for (state_id, fragment) in state_frags.iter().enumerate() {
             for edge_idx in fragment.iter() {
                 subgraphs.push((edge_idx, state_id));
             }
@@ -277,12 +280,12 @@ impl Matches {
             // Subgraphs to extend in next loop
             let mut buckets: HashMap<usize, Vec<(usize, usize)>> = HashMap::new();
             let mut new_subgraphs = Vec::new();
-            let mut used_edge_mask = vec![BitSet::with_capacity(num_edges); state.len()];
+            let mut used_edge_mask = vec![BitSet::with_capacity(num_edges); state_frags.len()];
 
             // Extend each subgraph and bucket
             for (frag_id, state_id) in subgraphs {
                 // Get state frament that this subgraph is contained in
-                let state_frag = &state[state_id];
+                let state_frag = &state_frags[state_id];
 
                 // Get ids of extensions of this subgraph
                 let children_ids = &self.dag[frag_id].children;
@@ -494,7 +497,7 @@ impl Matches {
         valid_matches.sort();
         valid_matches.reverse();
 
-        valid_matches
+        (state, valid_matches)
     }
 
     pub fn len(&self) -> usize {
@@ -505,7 +508,7 @@ impl Matches {
         &self.dag[id].fragment
     }
 
-    pub fn get_match_id(&self, mat: &(usize, usize)) -> Option<usize> {
+    pub fn match_id(&self, mat: &(usize, usize)) -> Option<usize> {
         self.match_to_id.get(mat).copied()
     }
 }

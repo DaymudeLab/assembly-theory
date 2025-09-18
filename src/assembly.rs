@@ -30,7 +30,7 @@ use clap::ValueEnum;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator, IndexedParallelIterator};
 
 use crate::{
-    bounds::Bound, canonize::CanonizeMode, enumerate::EnumerateMode, kernels::KernelMode, matches::Matches, memoize::{MemoizeMode, NewCache}, molecule:: Molecule, utils::{connected_components_under_edges}
+    bounds::Bound, canonize::CanonizeMode, enumerate::EnumerateMode, kernels::KernelMode, matches::Matches, memoize::{MemoizeMode, NewCache}, molecule:: Molecule, state::State, utils::connected_components_under_edges
 };
 
 /// Parallelization strategy for the recursive search phase.
@@ -173,37 +173,25 @@ fn _is_usable(state: &[BitSet], h1: &BitSet, h2: &BitSet, masks: &mut Vec<Vec<Bi
 pub fn recurse_index_search(
     mol: &Molecule,
     matches: &Matches,
-    last_removed: usize,
-    removal_order: Vec<usize>,
-    state: &[BitSet],
-    state_index: usize,
+    state: &State,
     best_index: Arc<AtomicUsize>,
     bounds: &[Bound],
     cache: &mut NewCache,
     parallel_mode: ParallelMode,
-    kernel_mode: KernelMode,
 ) -> (usize, usize) {
     // if removal_order.len() == 1 {println!("{:?}", removal_order);}
     // println!("{:?}", state);
 
-    // let mut memoize_time = Duration::new(0, 0);
-    // let mut bucket_time = Duration::new(0, 0);
-    // let mut component_time = Duration::new(0, 0);
-    // let mut int_time = Duration::new(0, 0);
-    // let mut vec_time = Duration::new(0, 0);
-    // let mut matches_time = Duration::new(0, 0);
-    // let mut sort_time = Duration::new(0, 0);
-
     // Memoization
-    if cache.memoize_state(mol, &state, state_index, &removal_order) {
-        return (state_index, 1);
+    if cache.memoize_state(mol, state) {
+        return (state.index(), 1);
     }
 
-    let valid_matches = matches.generate_matches(mol, state, state_index, last_removed, best_index.load(Relaxed), bounds);
+    let (frags, valid_matches) = matches.generate_matches(mol, state, best_index.load(Relaxed), bounds);
 
     // Keep track of the best assembly index found in any of this assembly
     // state's children and the number of states searched, including this one.
-    let best_child_index = AtomicUsize::from(state_index);
+    let best_child_index = AtomicUsize::from(state.index());
     let states_searched = AtomicUsize::from(1);
     
     // Define a closure that handles recursing to a new assembly state based on
@@ -214,7 +202,7 @@ pub fn recurse_index_search(
         let h2 = matches.get_frag(v.1);
         
         // TODO: try keeping track of fragment to elimate some some search
-        if let Some(fragments) = fragments(mol, &state, h1, h2) {
+        if let Some(fragments) = fragments(mol, &frags, h1, h2) {
             // If using depth-one parallelism, all descendant states should be
             // computed serially.
             let new_parallel = if parallel_mode == ParallelMode::DepthOne {
@@ -223,24 +211,17 @@ pub fn recurse_index_search(
                 parallel_mode
             };
 
+            let new_state = state.update(fragments, h1.len(), i, matches.match_id(&v).unwrap());
+
             // Recurse using the remaining matches and updated fragments.
             let (child_index, child_states_searched) = recurse_index_search(
                 mol,
                 matches,
-                matches.get_match_id(&v).unwrap(),
-                {
-                    let mut clone = removal_order.clone();
-                    // clone.push(*matches.get(&v).unwrap());
-                    clone.push(i);
-                    clone
-                },
-                &fragments,
-                state_index - h1.len() + 1,
+                &new_state,
                 best_index.clone(),
                 bounds,
                 &mut cache.clone(),
                 new_parallel,
-                kernel_mode,
             );
 
             // Update the best assembly indices (across children states and
@@ -339,47 +320,29 @@ pub fn index_search(
     canonize_mode: CanonizeMode,
     parallel_mode: ParallelMode,
     memoize_mode: MemoizeMode,
-    kernel_mode: KernelMode,
+    _kernel_mode: KernelMode,
     bounds: &[Bound],
     _clique: bool,
 ) -> (u32, u32, usize) {
-    // Catch not-yet-implemented modes.
-
     // Enumerate non-overlapping isomorphic subgraph pairs.
     let matches = Matches::new(mol, canonize_mode);
 
     // Create memoization cache.
-    //let mut cache = Cache::new(memoize_mode, canonize_mode);
     let mut cache = NewCache::new(memoize_mode);
 
-    /*let graph = {
-        if clique {
-            Some(CompatGraph::new(&matches, &dag))
-        }
-        else {
-            None
-        }
-    };*/
-
-    // Initialize the first fragment as the entire graph.
-    let mut init = BitSet::new();
-    init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
+    // Initialize state
+    let state = State::new(mol);
 
     // Search for the shortest assembly pathway recursively.
-    let edge_count = mol.graph().edge_count();
-    let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
+    let best_index = Arc::new(AtomicUsize::from(mol.graph().edge_count() - 1));
     let (index, states_searched) = recurse_index_search(
         mol,
         &matches,
-        0,
-        Vec::new(),
-        &[init],
-        edge_count - 1,
+        &state,
         best_index,
         bounds,
         &mut cache,
         parallel_mode,
-        kernel_mode,
     );
 
     // println!("Bounded: {}", cache.count());

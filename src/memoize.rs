@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 
 use crate::{
     canonize::{canonize, CanonizeMode, Labeling},
-    molecule::Molecule,
+    molecule::Molecule, state::State,
 };
 
 /// Strategy for memoizing assembly states in the search phase.
@@ -160,13 +160,17 @@ impl NewCache {
         }
     }
 
-    pub fn memoize_state(&mut self, mol: &Molecule, state: &[BitSet], state_index: usize, removal_order: &Vec<usize>) -> bool {
+    pub fn memoize_state(&mut self, mol: &Molecule, state: &State) -> bool {
+        let fragments = state.fragments();
+        let state_index = state.index();
+        let removal_order = state.removal_order();
+        
         if self.memoize_mode == MemoizeMode::None {
             return false;
         }
         
         let mut frag_ids = Vec::new();
-        for frag in state {
+        for frag in fragments {
             let id = self.get_canon_id(mol, frag);
             frag_ids.push(id);
         }

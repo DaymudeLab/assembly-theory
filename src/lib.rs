@@ -54,6 +54,7 @@ pub mod kernels;
 pub mod memoize;
 pub mod reductions;
 pub mod matches;
+pub mod state;
 mod vf3;
 
 // Python wrapper.
