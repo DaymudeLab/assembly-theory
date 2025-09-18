@@ -392,7 +392,43 @@ impl Matches {
 
         // Use bounding strategy to find the largest length match
         // to try removing from this state.
+        let largest_length = self.bound(state_index, best, &masks, bounds);
+
+        // Create matches
+        for bucket in buckets_by_len[largest_length-2..].iter().rev() {
+            for fragments in bucket.values() {
+                for i in 0..fragments.len() {
+                    for j in i+1..fragments.len() {
+                        let mut frag1_id = fragments[i].0;
+                        let mut frag2_id = fragments[j].0;
+
+                        if frag1_id < frag2_id {
+                            let temp = frag1_id;
+                            frag1_id = frag2_id;
+                            frag2_id = temp;
+                        }
+
+                        if let Some(x) = self.match_to_id.get(&(frag1_id, frag2_id)){
+                            if *x >= last_removed {
+                                valid_matches.push((frag1_id, frag2_id));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Sort matches
+        valid_matches.sort();
+        valid_matches.reverse();
+
+        (state, valid_matches)
+    }
+
+    // Return the largest size removal that can possible result in savings
+    pub fn bound(&self, state_index: usize, best: usize, masks: &Vec<Vec<BitSet>>, bounds: &[Bound]) -> usize {        
         let mut largest_length = 2;
+
 
         for (i, list) in masks.iter().enumerate() {
             let mut stop = false;
@@ -469,35 +505,7 @@ impl Matches {
             }
         }
 
-        // Create matches
-        for bucket in buckets_by_len[largest_length-2..].iter().rev() {
-            for fragments in bucket.values() {
-                for i in 0..fragments.len() {
-                    for j in i+1..fragments.len() {
-                        let mut frag1_id = fragments[i].0;
-                        let mut frag2_id = fragments[j].0;
-
-                        if frag1_id < frag2_id {
-                            let temp = frag1_id;
-                            frag1_id = frag2_id;
-                            frag2_id = temp;
-                        }
-
-                        if let Some(x) = self.match_to_id.get(&(frag1_id, frag2_id)){
-                            if *x >= last_removed {
-                                valid_matches.push((frag1_id, frag2_id));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Sort matches
-        valid_matches.sort();
-        valid_matches.reverse();
-
-        (state, valid_matches)
+        largest_length
     }
 
     pub fn len(&self) -> usize {

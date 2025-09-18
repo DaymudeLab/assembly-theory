@@ -187,6 +187,7 @@ pub fn recurse_index_search(
         return (state.index(), 1);
     }
 
+    // Generate matches
     let (frags, valid_matches) = matches.generate_matches(mol, state, best_index.load(Relaxed), bounds);
 
     // Keep track of the best assembly index found in any of this assembly
