@@ -17,7 +17,7 @@ impl State {
                 init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
                 vec![init]
             },
-            index: mol.graph().edge_count(),
+            index: mol.graph().edge_count() - 1,
             removal_order: Vec::new(),
             last_removed: 0,
         }
