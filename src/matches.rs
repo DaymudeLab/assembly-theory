@@ -23,7 +23,7 @@ pub struct Matches {
     id_to_match: Vec<(usize, usize)>,
     match_to_id: FxHashMap<(usize, usize), usize>,
     dag: Vec<DagNode>,
-    clique: CompatGraph,
+    clique: Option<CompatGraph>,
     // clique_offset: usize,
     edge_types: Vec<usize>,
 }
@@ -49,7 +49,7 @@ impl DagNode {
 
 impl Matches {
     // Generate DAG, clique, and other info from the base molecule.
-    pub fn new(mol: &Molecule, canonize_mode: CanonizeMode) -> Self {
+    pub fn new(mol: &Molecule, canonize_mode: CanonizeMode, use_clique: bool) -> Self {
         let num_edges = mol.graph().edge_count();
 
         let mut subgraphs: Vec<usize> = Vec::new();
@@ -258,7 +258,12 @@ impl Matches {
             }
         }
 
-        let clique = CompatGraph::new(&dag, &id_to_match, 2);
+        let clique = if use_clique {
+            Some(CompatGraph::new(&dag, &id_to_match, 2))
+        }
+        else {
+            None
+        };
 
         Self {
             id_to_match,

@@ -323,10 +323,10 @@ pub fn index_search(
     memoize_mode: MemoizeMode,
     _kernel_mode: KernelMode,
     bounds: &[Bound],
-    _clique: bool,
+    clique: bool,
 ) -> (u32, u32, usize) {
     // Enumerate non-overlapping isomorphic subgraph pairs.
-    let matches = Matches::new(mol, canonize_mode);
+    let matches = Matches::new(mol, canonize_mode, clique);
 
     // Create memoization cache.
     let mut cache = NewCache::new(memoize_mode);
