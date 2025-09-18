@@ -23,7 +23,7 @@ pub struct Matches {
     id_to_match: Vec<(usize, usize)>,
     match_to_id: FxHashMap<(usize, usize), usize>,
     dag: Vec<DagNode>,
-    // clique: CompatGraph,
+    clique: CompatGraph,
     // clique_offset: usize,
     edge_types: Vec<usize>,
 }
@@ -36,6 +36,14 @@ impl DagNode {
             canon_id,
             children: Vec::new(),
         }
+    }
+
+    pub fn fragment(&self) -> &BitSet {
+        &self.fragment
+    }
+
+    pub fn len(&self) -> usize {
+        self.fragment.len()
     }
 }
 
@@ -250,10 +258,13 @@ impl Matches {
             }
         }
 
+        let clique = CompatGraph::new(&dag, &id_to_match, 2);
+
         Self {
             id_to_match,
             match_to_id,
             dag,
+            clique,
             edge_types,
         }
     }

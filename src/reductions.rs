@@ -11,35 +11,46 @@
 
 use bit_set::BitSet;
 use std::time::Instant;
-use std::collections::HashMap;
+
+use crate::matches::DagNode;
 
 /// Graph representation of the compatibility of duplicatable subgraph pairs.
 pub struct CompatGraph {
     /// The graph is implemented as an adjacency matrix. The ith element of graph
     /// has a 1 at position j if {i, j} is an edge.
     graph: Vec<BitSet>,
+    offset: usize,
 }
 
 impl CompatGraph {
     /// Constructs a compatibility graph given a set of matches.
-    pub fn new(init_matches: &Vec<(usize, usize)>, dag: &HashMap<usize, (BitSet, Vec<usize>)>) -> Self {
+    pub fn new(dag: &Vec<DagNode>, matches: &Vec<(usize, usize)>, largest_len: usize) -> Self {
         let start = Instant::now();
-        let size = init_matches.len();
+
+        // Find the index of the first match in the clique
+        // TODO: what if largest_len < maximum length in dag?
+        let mut offset = 0;
+        while dag[matches[offset].0].len() < largest_len {
+            offset += 1;
+        }
+
+        // Compute number of nodes in clique
+        let size = matches.len() - offset;
 
         // Initialize weights and empty graph
         let mut init_graph: Vec<BitSet> = Vec::with_capacity(size);
-        for _ in 0..init_matches.len() {
+        for _ in 0..size {
             init_graph.push(BitSet::with_capacity(size));
         }
 
         // Populate graph
-        for (idx1, (h1, h2)) in init_matches.iter().enumerate() {
-            for (idx2, (h1p, h2p)) in init_matches[idx1 + 1..].iter().enumerate() {
+        for (idx1, match1) in matches[offset..].iter().enumerate() {
+            for (idx2, match2) in matches[offset + idx1 + 1..].iter().enumerate() {
                 let idx2 = idx2 + idx1 + 1;
-                let h1 = &dag.get(h1).unwrap().0;
-                let h1p = &dag.get(h1p).unwrap().0;
-                let h2 = &dag.get(h2).unwrap().0;
-                let h2p = &dag.get(h2p).unwrap().0;
+                let h1 = dag[match1.0].fragment();
+                let h2 = dag[match1.1].fragment();
+                let h1p = dag[match2.0].fragment();
+                let h2p = dag[match2.1].fragment();
 
                 let forward_compatible = {
                     h2.is_disjoint(h1p) && 
@@ -59,6 +70,7 @@ impl CompatGraph {
 
         Self {
             graph: init_graph,
+            offset,
         }
     }
 
