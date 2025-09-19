@@ -1,9 +1,10 @@
 use bit_set::BitSet;
 
-use crate::molecule::Molecule;
+use crate::{matches::Matches, molecule::Molecule};
 
 pub struct State {
     fragments: Vec<BitSet>,
+    clique_subgraph: Option<BitSet>,
     index: usize,
     removal_order: Vec<usize>,
     last_removed: usize,
@@ -17,22 +18,33 @@ impl State {
                 init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
                 vec![init]
             },
+            clique_subgraph: None,
             index: mol.graph().edge_count() - 1,
             removal_order: Vec::new(),
             last_removed: 0,
         }
     }
 
-    pub fn update(&self, fragments: Vec<BitSet>, removed_len: usize, removed_idx: usize, last_removed: usize) -> Self {
+    pub fn update(&self, matches: &Matches, fragments: Vec<BitSet>, mat: &(usize, usize), order_idx: usize, subgraph: &Option<BitSet>) -> Self {        
+        let match_len = matches.get_frag(mat.0).len();
+        
         Self {
             fragments,
-            index: self.index - removed_len + 1,
+            index: self.index - match_len + 1,
             removal_order: {
                 let mut clone = self.removal_order.clone();
-                clone.push(removed_idx);
+                clone.push(order_idx);
                 clone
             },
-            last_removed,
+            last_removed: matches.match_id(mat).unwrap(),
+            clique_subgraph: {
+                if *subgraph != None && match_len <= matches.clique_max_len() {
+                    Some(subgraph.as_ref().unwrap().clone())
+                }
+                else {
+                    None
+                }
+            }
         }
     }
 
@@ -50,5 +62,9 @@ impl State {
 
     pub fn last_removed(&self) -> usize {
         self.last_removed
+    }
+
+    pub fn use_subgraph(&self) -> bool {
+        self.clique_subgraph != None
     }
 }

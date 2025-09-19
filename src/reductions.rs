@@ -19,18 +19,19 @@ pub struct CompatGraph {
     /// The graph is implemented as an adjacency matrix. The ith element of graph
     /// has a 1 at position j if {i, j} is an edge.
     graph: Vec<BitSet>,
+    max_len: usize,
     offset: usize,
 }
 
 impl CompatGraph {
     /// Constructs a compatibility graph given a set of matches.
-    pub fn new(dag: &Vec<DagNode>, matches: &Vec<(usize, usize)>, largest_len: usize) -> Self {
+    pub fn new(dag: &Vec<DagNode>, matches: &Vec<(usize, usize)>, max_len: usize) -> Self {
         let start = Instant::now();
 
         // Find the index of the first match in the clique
-        // TODO: what if largest_len < maximum length in dag?
+        // TODO: what if max_len < maximum length in dag?
         let mut offset = 0;
-        while dag[matches[offset].0].len() < largest_len {
+        while dag[matches[offset].0].len() < max_len {
             offset += 1;
         }
 
@@ -70,6 +71,7 @@ impl CompatGraph {
 
         Self {
             graph: init_graph,
+            max_len,
             offset,
         }
     }
@@ -77,6 +79,19 @@ impl CompatGraph {
     /// Returns the number of vertices in the graph.
     pub fn len(&self) -> usize {
         self.graph.len()
+    }
+
+    pub fn max_len(&self) -> usize {
+        self.max_len
+    }
+
+    pub fn clique_id(&self, match_id: usize) -> isize {
+        if match_id < self.offset {
+            -1
+        }
+        else {
+            (match_id - self.offset) as isize
+        }
     }
 
     /// Returns the degree vertex v in the subgraph

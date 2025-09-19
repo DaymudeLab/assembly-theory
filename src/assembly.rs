@@ -181,14 +181,17 @@ pub fn recurse_index_search(
 ) -> (usize, usize) {
     // if removal_order.len() == 1 {println!("{:?}", removal_order);}
     // println!("{:?}", state);
-
+    
     // Memoization
     if cache.memoize_state(mol, state) {
         return (state.index(), 1);
     }
 
     // Generate matches
-    let (frags, valid_matches) = matches.generate_matches(mol, state, best_index.load(Relaxed), bounds);
+    // Some additional fragmentation of the state may happen while generating matches, returned as frags
+    // Valid matches is list of matches to remove as pairs of fragment ids
+    // Clique subgraph is the nodes present in the clique at this state
+    let (frags, valid_matches, clique_subgraph) = matches.generate_matches(mol, state, best_index.load(Relaxed), bounds);
 
     // Keep track of the best assembly index found in any of this assembly
     // state's children and the number of states searched, including this one.
@@ -212,7 +215,7 @@ pub fn recurse_index_search(
                 parallel_mode
             };
 
-            let new_state = state.update(fragments, h1.len(), i, matches.match_id(&v).unwrap());
+            let new_state = state.update(matches, fragments, &v, i, &clique_subgraph);
 
             // Recurse using the remaining matches and updated fragments.
             let (child_index, child_states_searched) = recurse_index_search(

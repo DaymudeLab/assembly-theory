@@ -49,6 +49,7 @@ impl DagNode {
 
 impl Matches {
     // Generate DAG, clique, and other info from the base molecule.
+    // TODO: generate and return state framework instaed of triplet
     pub fn new(mol: &Molecule, canonize_mode: CanonizeMode, use_clique: bool) -> Self {
         let num_edges = mol.graph().edge_count();
 
@@ -274,7 +275,18 @@ impl Matches {
         }
     }
 
-    pub fn generate_matches(&self, mol: &Molecule, state: &State, best: usize, bounds: &[Bound]) -> (Vec<BitSet>, Vec<(usize, usize)>) {
+    pub fn generate_matches(&self, mol: &Molecule, state: &State, best: usize, bounds: &[Bound]) -> (Vec<BitSet>, Vec<(usize, usize)>, Option<BitSet>) {
+        self.valid_matches_dag(mol, state, best, bounds)
+        
+        // if state.use_subgraph() {
+        //     self.valid_matches_subgraph()
+        // }
+        // else {
+        //     self.valid_matches_dag()
+        // }
+    }
+
+    fn valid_matches_dag(&self, mol: &Molecule, state: &State, best: usize, bounds: &[Bound]) -> (Vec<BitSet>, Vec<(usize, usize)>, Option<BitSet>) {
         let num_edges = mol.graph().edge_count();
         let state_frags = state.fragments();
         let state_index = state.index();
@@ -410,8 +422,28 @@ impl Matches {
         // to try removing from this state.
         let largest_length = self.bound(state_index, best, &masks, bounds);
 
-        // Create matches
-        for bucket in buckets_by_len[largest_length-2..].iter().rev() {
+        // Clique reduction subgraph from this state. If none we do not create a subgraph
+        let mut clique_subgraph = 
+            if let Some(clique) = &self.clique {
+                if clique.max_len() >= largest_length {
+                    Some(BitSet::with_capacity(clique.len()))
+                }
+                else {
+                    None
+                }
+            } else {
+                None
+            };  
+
+        // Create valid matches and subgraph if needed
+        for (bucket_idx, bucket) in buckets_by_len.iter().enumerate().rev() {
+            // If we do not have to create the subgraph, and buckets with this size
+            // have been bounded, then we can stop generating valid matches
+            let match_len = bucket_idx + 2;
+            if clique_subgraph == None && match_len < largest_length {
+                break;
+            }
+
             for fragments in bucket.values() {
                 for i in 0..fragments.len() {
                     for j in i+1..fragments.len() {
@@ -424,9 +456,17 @@ impl Matches {
                             frag2_id = temp;
                         }
 
-                        if let Some(x) = self.match_to_id.get(&(frag1_id, frag2_id)){
-                            if *x >= last_removed {
+                        if let Some(match_id) = self.match_to_id.get(&(frag1_id, frag2_id)) {
+                            if *match_id >= last_removed {
                                 valid_matches.push((frag1_id, frag2_id));
+                                
+                                // Add to subgraph if conditions are met
+                                if let Some(sub) = clique_subgraph.as_mut() {
+                                    let clique_id = self.clique.as_ref().unwrap().clique_id(*match_id);
+                                    if clique_id != -1 {
+                                        sub.insert(clique_id as usize);
+                                    }
+                                }
                             }
                         }
                     }
@@ -438,7 +478,11 @@ impl Matches {
         valid_matches.sort();
         valid_matches.reverse();
 
-        (state, valid_matches)
+        (state, valid_matches, clique_subgraph)
+    }
+
+    fn valid_matches_subgraph(&self) {
+        
     }
 
     // Return the largest size removal that can possible result in savings
@@ -528,12 +572,21 @@ impl Matches {
         self.id_to_match.len()
     }
 
-    pub fn get_frag(&self, id: usize) -> &BitSet {
-        &self.dag[id].fragment
+    pub fn get_frag(&self, frag_id: usize) -> &BitSet {
+        &self.dag[frag_id].fragment
     }
 
     pub fn match_id(&self, mat: &(usize, usize)) -> Option<usize> {
         self.match_to_id.get(mat).copied()
+    }
+
+    pub fn clique_max_len(&self) -> usize {
+        if let Some(clique) = &self.clique {
+            clique.max_len()
+        }
+        else {
+            0
+        }
     }
 }
 
