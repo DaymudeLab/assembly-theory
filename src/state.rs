@@ -39,7 +39,7 @@ impl State {
             last_removed: matches.match_id(mat).unwrap(),
             clique_subgraph: {
                 if *subgraph != None && match_len <= matches.clique_max_len() {
-                    Some(subgraph.as_ref().unwrap().clone())
+                    subgraph.clone()
                 }
                 else {
                     None

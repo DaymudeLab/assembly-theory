@@ -31,7 +31,7 @@ impl CompatGraph {
         // Find the index of the first match in the clique
         // TODO: what if max_len < maximum length in dag?
         let mut offset = 0;
-        while dag[matches[offset].0].len() < max_len {
+        while dag[matches[offset].0].len() > max_len {
             offset += 1;
         }
 
@@ -85,6 +85,8 @@ impl CompatGraph {
         self.max_len
     }
 
+    // Takes a match id and returns its id in the clique
+    // Returns -1 if the match is not used in the clique
     pub fn clique_id(&self, match_id: usize) -> isize {
         if match_id < self.offset {
             -1
