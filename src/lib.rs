@@ -52,6 +52,8 @@ pub mod canonize;
 pub mod enumerate;
 pub mod kernels;
 pub mod memoize;
+pub mod matches;
+pub mod state;
 mod nauty;
 mod vf3;
 
