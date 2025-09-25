@@ -8,7 +8,7 @@ use dashmap::DashMap;
 
 use crate::{
     canonize::{canonize, CanonizeMode, Labeling},
-    molecule::Molecule,
+    molecule::Molecule, state::State,
 };
 
 /// Strategy for memoizing assembly states in the search phase.
@@ -97,12 +97,14 @@ impl Cache {
     pub fn memoize_state(
         &self,
         mol: &Molecule,
-        state: &[BitSet],
-        state_index: usize,
-        removal_order: &Vec<usize>,
+        state: &State,
     ) -> bool {
+        let fragments = state.fragments();
+        let state_index = state.index();
+        let removal_order = state.removal_order();
+
         // If memoization is enabled, get this assembly state's cache key.
-        if let Some(cache_key) = self.key(mol, state) {
+        if let Some(cache_key) = self.key(mol, fragments) {
             // Do all of the following atomically: Access the cache entry. If
             // the cached entry has a worse index upper bound or later removal
             // order than this state, or if it does not exist, then cache this

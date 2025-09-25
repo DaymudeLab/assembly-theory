@@ -165,7 +165,6 @@ pub fn recurse_index_search(
 ) -> (usize, usize) {
     let frags = state.fragments();
     let state_index = state.index();
-    let removal_order = state.removal_order();
     let last_removed = state.last_removed();
 
     // If any bounds would prune this assembly state or if memoization is
@@ -175,7 +174,7 @@ pub fn recurse_index_search(
         state,
         best_index.load(Relaxed),
         bounds,
-    ) || cache.memoize_state(mol, frags, state_index, removal_order)
+    ) || cache.memoize_state(mol, state)
     {
         return (state_index, 1);
     }
