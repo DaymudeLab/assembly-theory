@@ -51,10 +51,10 @@ pub mod bounds;
 pub mod canonize;
 pub mod enumerate;
 pub mod kernels;
-pub mod memoize;
 pub mod matches;
-pub mod state;
+pub mod memoize;
 mod nauty;
+pub mod state;
 mod vf3;
 
 // Python wrapper.

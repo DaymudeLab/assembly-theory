@@ -14,7 +14,10 @@
 use bit_set::BitSet;
 use clap::ValueEnum;
 
-use crate::{molecule::{Bond, Element, Molecule}, state::State};
+use crate::{
+    molecule::{Bond, Element, Molecule},
+    state::State,
+};
 
 /// Type of upper bound on the "savings" possible from an assembly state.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
@@ -64,12 +67,7 @@ struct EdgeType {
 }
 
 /// Returns `true` iff any of the given bounds would prune this assembly state.
-pub fn bound_exceeded(
-    mol: &Molecule,
-    state: &State,
-    best_index: usize,
-    bounds: &[Bound],
-) -> bool {
+pub fn bound_exceeded(mol: &Molecule, state: &State, best_index: usize, bounds: &[Bound]) -> bool {
     let fragments = state.fragments();
     let state_index = state.index();
     let largest_removed = state.largest_removed();

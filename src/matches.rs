@@ -2,9 +2,15 @@ use bit_set::BitSet;
 use dashmap::DashMap;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
-use crate::{assembly::ParallelMode, canonize::{canonize, CanonizeMode, Labeling}, enumerate::{enumerate_subgraphs, EnumerateMode}, molecule::Molecule, state::State};
+use crate::{
+    assembly::ParallelMode,
+    canonize::{canonize, CanonizeMode, Labeling},
+    enumerate::{enumerate_subgraphs, EnumerateMode},
+    molecule::Molecule,
+    state::State,
+};
 
-/// Manages all pairs of non-overlapping, isomorphic 
+/// Manages all pairs of non-overlapping, isomorphic
 /// subgraphs in the molecule, sorted to guarantee deterministic iteration.
 pub struct Matches {
     /// Pairs of duplicate subgraphs, i.e., non-overlapping, isomorphic subgraphs
@@ -68,14 +74,17 @@ impl Matches {
             ord[i]
         });
 
-        Self {
-            matches
-        }
+        Self { matches }
     }
 
     /// Return number of matching duplicate subgraph pairs.
     pub fn len(&self) -> usize {
         self.matches.len()
+    }
+
+    /// Returns `true` if there are no matching duplicate subgraph pairs.
+    pub fn is_empty(&self) -> bool {
+        self.matches.is_empty()
     }
 
     /// Returns all matches that should be tried to be removed from a state.

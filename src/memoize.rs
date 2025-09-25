@@ -8,7 +8,8 @@ use dashmap::DashMap;
 
 use crate::{
     canonize::{canonize, CanonizeMode, Labeling},
-    molecule::Molecule, state::State,
+    molecule::Molecule,
+    state::State,
 };
 
 /// Strategy for memoizing assembly states in the search phase.
@@ -94,11 +95,7 @@ impl Cache {
     /// Return `true` iff memoization is enabled and this assembly state is
     /// preempted by the cached assembly state.
     /// See https://github.com/DaymudeLab/assembly-theory/pull/95 for details.
-    pub fn memoize_state(
-        &self,
-        mol: &Molecule,
-        state: &State,
-    ) -> bool {
+    pub fn memoize_state(&self, mol: &Molecule, state: &State) -> bool {
         let fragments = state.fragments();
         let state_index = state.index();
         let removal_order = state.removal_order();

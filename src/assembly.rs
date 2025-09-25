@@ -28,7 +28,15 @@ use clap::ValueEnum;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
-    bounds::{bound_exceeded, Bound}, canonize::CanonizeMode, enumerate::EnumerateMode, kernels::KernelMode, matches::Matches, memoize::{Cache, MemoizeMode}, molecule::Molecule, state::State, utils::connected_components_under_edges
+    bounds::{bound_exceeded, Bound},
+    canonize::CanonizeMode,
+    enumerate::EnumerateMode,
+    kernels::KernelMode,
+    matches::Matches,
+    memoize::{Cache, MemoizeMode},
+    molecule::Molecule,
+    state::State,
+    utils::connected_components_under_edges,
 };
 
 /// Parallelization strategy for the recursive search phase.
@@ -161,12 +169,8 @@ pub fn recurse_index_search(
 ) -> (usize, usize) {
     // If any bounds would prune this assembly state or if memoization is
     // enabled and this assembly state is preempted by the cached state, halt.
-    if bound_exceeded(
-        mol,
-        state,
-        best_index.load(Relaxed),
-        bounds,
-    ) || cache.memoize_state(mol, state)
+    if bound_exceeded(mol, state, best_index.load(Relaxed), bounds)
+        || cache.memoize_state(mol, state)
     {
         return (state.index(), 1);
     }
