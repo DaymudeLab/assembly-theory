@@ -75,4 +75,9 @@ impl Matches {
     pub fn len(&self) -> usize {
         self.matches.len()
     }
+
+    pub fn valid_matches(&self, last_removed: isize) -> &[(BitSet, BitSet)] {
+        let idx = (last_removed + 1) as usize;
+        &self.matches[idx..]
+    }
 }

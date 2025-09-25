@@ -157,6 +157,7 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Opti
 pub fn recurse_index_search(
     mol: &Molecule,
     matches: &Matches,
+    last_removed: isize,
     removal_order: Vec<usize>,
     state: &[BitSet],
     state_index: usize,
@@ -180,6 +181,9 @@ pub fn recurse_index_search(
         return (state_index, 1);
     }
 
+    // Generate list of matches to try removing from this state
+    let valid_matches = matches.valid_matches(last_removed);
+
     // Keep track of the best assembly index found in any of this assembly
     // state's children and the number of states searched, including this one.
     let best_child_index = AtomicUsize::from(state_index);
@@ -200,7 +204,8 @@ pub fn recurse_index_search(
             // Recurse using the remaining matches and updated fragments.
             let (child_index, child_states_searched) = recurse_index_search(
                 mol,
-                &matches[i + 1..],
+                matches,
+                last_removed + (i as isize) + 1,
                 {
                     let mut clone = removal_order.clone();
                     clone.push(i);
@@ -225,12 +230,12 @@ pub fn recurse_index_search(
 
     // Use the iterator type corresponding to the specified parallelism mode.
     if parallel_mode == ParallelMode::None {
-        matches
+        valid_matches
             .iter()
             .enumerate()
             .for_each(|(i, (h1, h2))| recurse_on_match(i, h1, h2));
     } else {
-        matches
+        valid_matches
             .par_iter()
             .enumerate()
             .for_each(|(i, (h1, h2))| recurse_on_match(i, h1, h2));
@@ -335,6 +340,7 @@ pub fn index_search(
     let (index, states_searched) = recurse_index_search(
         mol,
         &matches,
+        -1,
         Vec::new(),
         &[init],
         edge_count - 1,
