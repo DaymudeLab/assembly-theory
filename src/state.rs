@@ -2,15 +2,28 @@ use bit_set::BitSet;
 
 use crate::molecule::Molecule;
 
+/// Struct containing information local to a state in the search space.
 pub struct State {
+    /// List of connected components in this state.
     fragments: Vec<BitSet>,
+    /// This assembly state's upper bound on the assembly index,
+    /// i.e., edges(mol) - 1 - [edges(subgraphs removed) - #(subgraphs removed)].
     index: usize,
+    /// List of indices, one for each removed duplicate subgraph.
+    /// Allows two states to be compared to determine which comes first in the serial removal order.
+    /// Used to prevent memoization bugs.
     removal_order: Vec<usize>,
+    /// Size of largest removed duplicatable subgraph up to this point.
+    /// Since matches are removed in decreasing size, provides an upper bound
+    /// on the largest subgraph to be removed from this state.
     largest_removed: usize,
+    /// Index of the last removed duplicate subgraph match.
+    /// Initialized to -1 before any match removals.
     last_removed: isize,
 }
 
 impl State {
+    /// Initializes new state struct
     pub fn new(mol: &Molecule) -> Self {
         Self {
             fragments: {
@@ -25,6 +38,7 @@ impl State {
         }
     }
 
+    /// Creates a struct for a new child state after a duplicate subgraph match removal.
     pub fn update(&self, fragments: Vec<BitSet>, remove_idx: usize, remove_len: usize) -> Self {
         Self {
             fragments,

@@ -136,16 +136,12 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Opti
 ///
 /// Inputs:
 /// - `mol`: The molecule whose assembly index is being calculated.
-/// - `matches`: The remaining non-overlapping isomorphic subgraph pairs.
-/// - `removal_order`: TODO
-/// - `state`: The current assembly state, i.e., a list of fragments.
-/// - `state_index`: This assembly state's upper bound on the assembly index,
-///   i.e., edges(mol) - 1 - [edges(subgraphs removed) - #(subgraphs removed)].
+/// - `matches`: Struct to manage the non-overlapping isomorphic subgraph pairs.
+/// - `state`: The current assembly state.
 /// - `best_index`: The smallest assembly index for all assembly states so far.
-/// - `largest_remove`: An upper bound on the size of fragments that can be
-///   removed from this or any descendant assembly state.
 /// - `bounds`: The list of bounding strategies to apply.
-/// - `cache`: TODO
+/// - `cache`: Memoization struct used to prune states that are isomoprhic to previously
+///    searched states
 /// - `parallel_mode`: The parallelism mode for this state's match iteration.
 ///
 /// Returns, from this assembly state and any of its descendents:

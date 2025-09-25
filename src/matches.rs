@@ -4,14 +4,15 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::{assembly::ParallelMode, canonize::{canonize, CanonizeMode, Labeling}, enumerate::{enumerate_subgraphs, EnumerateMode}, molecule::Molecule, state::State};
 
-/// TODO
-// This structure will change dramatically in the future
-// so I'm not adding docstrings for now - GP
+/// Manages all pairs of non-overlapping, isomorphic 
+/// subgraphs in the molecule, sorted to guarantee deterministic iteration.
 pub struct Matches {
+    /// Pairs of duplicate subgraphs, i.e., non-overlapping, isomorphic subgraphs
     matches: Vec<(BitSet, BitSet)>,
 }
 
 impl Matches {
+    /// Generates matches and returns a new struct.
     pub fn new(
         mol: &Molecule,
         enumerate_mode: EnumerateMode,
@@ -72,10 +73,12 @@ impl Matches {
         }
     }
 
+    /// Return number of matching duplicate subgraph pairs.
     pub fn len(&self) -> usize {
         self.matches.len()
     }
 
+    /// Returns all matches that should be tried to be removed from a state.
     pub fn valid_matches(&self, state: &State) -> &[(BitSet, BitSet)] {
         let idx = (state.last_removed() + 1) as usize;
         &self.matches[idx..]
