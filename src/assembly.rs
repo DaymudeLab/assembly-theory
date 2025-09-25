@@ -25,17 +25,10 @@ use std::sync::{
 
 use bit_set::BitSet;
 use clap::ValueEnum;
-use dashmap::DashMap;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
-    bounds::{bound_exceeded, Bound},
-    canonize::{canonize, CanonizeMode, Labeling},
-    enumerate::{enumerate_subgraphs, EnumerateMode},
-    kernels::KernelMode,
-    memoize::{Cache, MemoizeMode},
-    molecule::Molecule,
-    utils::connected_components_under_edges,
+    bounds::{bound_exceeded, Bound}, canonize::CanonizeMode, enumerate::{EnumerateMode}, kernels::KernelMode, matches::Matches, memoize::{Cache, MemoizeMode}, molecule::Molecule, utils::connected_components_under_edges
 };
 
 /// Parallelization strategy for the recursive search phase.
@@ -90,68 +83,6 @@ pub fn depth(mol: &Molecule) -> u32 {
         ix = ix.min(l.max(r) + 1)
     }
     ix
-}
-
-/// Helper function for [`index_search`]; only public for benchmarking.
-///
-/// Return all pairs of non-overlapping, isomorphic subgraphs in the molecule,
-/// sorted to guarantee deterministic iteration.
-pub fn matches(
-    mol: &Molecule,
-    enumerate_mode: EnumerateMode,
-    canonize_mode: CanonizeMode,
-    parallel_mode: ParallelMode,
-) -> Vec<(BitSet, BitSet)> {
-    // Enumerate all connected, non-induced subgraphs with at most |E|/2 edges
-    // and bin them into isomorphism classes using canonization.
-    let isomorphism_classes = DashMap::<Labeling, Vec<BitSet>>::new();
-    let bin_subgraph = |subgraph: &BitSet| {
-        isomorphism_classes
-            .entry(canonize(mol, subgraph, canonize_mode))
-            .and_modify(|bucket| bucket.push(subgraph.clone()))
-            .or_insert(vec![subgraph.clone()]);
-    };
-    if parallel_mode == ParallelMode::None {
-        enumerate_subgraphs(mol, enumerate_mode)
-            .iter()
-            .for_each(bin_subgraph);
-    } else {
-        enumerate_subgraphs(mol, enumerate_mode)
-            .par_iter()
-            .for_each(bin_subgraph);
-    }
-
-    // In each isomorphism class, collect non-overlapping pairs of subgraphs.
-    let mut matches = Vec::new();
-    for bucket in isomorphism_classes.iter() {
-        for (i, first) in bucket.iter().enumerate() {
-            for second in &bucket[i..] {
-                if first.is_disjoint(second) {
-                    if first > second {
-                        matches.push((first.clone(), second.clone()));
-                    } else {
-                        matches.push((second.clone(), first.clone()));
-                    }
-                }
-            }
-        }
-    }
-
-    // Sort pairs in a deterministic order and return.
-    matches.sort_by(|e1, e2| {
-        let ord = [
-            e2.0.len().cmp(&e1.0.len()), // Decreasing subgraph size.
-            e1.0.cmp(&e2.0),             // First subgraph lexicographical.
-            e1.1.cmp(&e2.1),             // Second subgraph lexicographical.
-        ];
-        let mut i = 0;
-        while ord[i] == std::cmp::Ordering::Equal {
-            i += 1;
-        }
-        ord[i]
-    });
-
-    matches
 }
 
 /// Determine the fragments produced from the given assembly state by removing
@@ -225,7 +156,7 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Opti
 #[allow(clippy::too_many_arguments)]
 pub fn recurse_index_search(
     mol: &Molecule,
-    matches: &[(BitSet, BitSet)],
+    matches: &Matches,
     removal_order: Vec<usize>,
     state: &[BitSet],
     state_index: usize,
@@ -389,7 +320,7 @@ pub fn index_search(
     }
 
     // Enumerate non-overlapping isomorphic subgraph pairs.
-    let matches = matches(mol, enumerate_mode, canonize_mode, parallel_mode);
+    let matches = Matches::new(mol, enumerate_mode, canonize_mode, parallel_mode);
 
     // Create memoization cache.
     let mut cache = Cache::new(memoize_mode, canonize_mode);
