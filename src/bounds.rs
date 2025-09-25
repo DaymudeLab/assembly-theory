@@ -66,7 +66,7 @@ struct EdgeType {
     ends: (Element, Element),
 }
 
-/// Returns `true` iff any of the given bounds would prune this assembly state.
+/// Return `true` iff any of the given bounds would prune this assembly state.
 pub fn bound_exceeded(mol: &Molecule, state: &State, best_index: usize, bounds: &[Bound]) -> bool {
     let fragments = state.fragments();
     let state_index = state.index();

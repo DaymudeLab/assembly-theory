@@ -1,3 +1,5 @@
+//! Pairs of non-overlapping, isomorphic subgraphs in a molecule.
+
 use bit_set::BitSet;
 use dashmap::DashMap;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -10,23 +12,22 @@ use crate::{
     state::State,
 };
 
-/// Manages all pairs of non-overlapping, isomorphic
-/// subgraphs in the molecule, sorted to guarantee deterministic iteration.
+/// Pairs of non-overlapping, isomorphic subgraphs in a molecule, sorted to
+/// guarantee deterministic iteration.
 pub struct Matches {
-    /// Pairs of duplicate subgraphs, i.e., non-overlapping, isomorphic subgraphs
     matches: Vec<(BitSet, BitSet)>,
 }
 
 impl Matches {
-    /// Generates matches and returns a new struct.
+    /// Generate [`Matches`] from the given molecule with the specified modes.
     pub fn new(
         mol: &Molecule,
         enumerate_mode: EnumerateMode,
         canonize_mode: CanonizeMode,
         parallel_mode: ParallelMode,
     ) -> Self {
-        // Enumerate all connected, non-induced subgraphs with at most |E|/2 edges
-        // and bin them into isomorphism classes using canonization.
+        // Enumerate all connected, non-induced subgraphs with at most |E|/2
+        // edges and bin them into isomorphism classes using canonization.
         let isomorphism_classes = DashMap::<Labeling, Vec<BitSet>>::new();
         let bin_subgraph = |subgraph: &BitSet| {
             isomorphism_classes
@@ -44,7 +45,7 @@ impl Matches {
                 .for_each(bin_subgraph);
         }
 
-        // In each isomorphism class, collect non-overlapping pairs of subgraphs.
+        // In each isomorphism class, get non-overlapping pairs of subgraphs.
         let mut matches = Vec::new();
         for bucket in isomorphism_classes.iter() {
             for (i, first) in bucket.iter().enumerate() {
@@ -77,18 +78,19 @@ impl Matches {
         Self { matches }
     }
 
-    /// Return number of matching duplicate subgraph pairs.
+    /// Return the number of matches.
     pub fn len(&self) -> usize {
         self.matches.len()
     }
 
-    /// Returns `true` if there are no matching duplicate subgraph pairs.
+    /// Return `true` if there are no matches.
     pub fn is_empty(&self) -> bool {
         self.matches.is_empty()
     }
 
-    /// Returns all matches that should be tried to be removed from a state.
-    pub fn valid_matches(&self, state: &State) -> &[(BitSet, BitSet)] {
+    /// Return all matches that are later than the last-removed match in the
+    /// given assembly state.
+    pub fn later_matches(&self, state: &State) -> &[(BitSet, BitSet)] {
         let idx = (state.last_removed() + 1) as usize;
         &self.matches[idx..]
     }

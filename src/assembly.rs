@@ -144,12 +144,11 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Opti
 ///
 /// Inputs:
 /// - `mol`: The molecule whose assembly index is being calculated.
-/// - `matches`: Struct to manage the non-overlapping isomorphic subgraph pairs.
+/// - `matches`: The non-overlapping isomorphic subgraph pairs left to check.
 /// - `state`: The current assembly state.
 /// - `best_index`: The smallest assembly index for all assembly states so far.
 /// - `bounds`: The list of bounding strategies to apply.
-/// - `cache`: Memoization struct used to prune states that are isomoprhic to previously
-///    searched states
+/// - `cache`: Memoization cache storing previously searched assembly states.
 /// - `parallel_mode`: The parallelism mode for this state's match iteration.
 ///
 /// Returns, from this assembly state and any of its descendents:
@@ -157,7 +156,6 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Opti
 ///   state is pruned by bounds or deemed redundant by memoization, then the
 ///   upper bound returned is unchanged.)
 /// - `usize`: The number of assembly states searched.
-#[allow(clippy::too_many_arguments)]
 pub fn recurse_index_search(
     mol: &Molecule,
     matches: &Matches,
@@ -176,7 +174,7 @@ pub fn recurse_index_search(
     }
 
     // Generate list of matches to try removing from this state
-    let valid_matches = matches.valid_matches(state);
+    let later_matches = matches.later_matches(state);
 
     // Keep track of the best assembly index found in any of this assembly
     // state's children and the number of states searched, including this one.
@@ -195,14 +193,11 @@ pub fn recurse_index_search(
                 parallel_mode
             };
 
-            // Generate struct for next state
-            let new_state = state.update(fragments, i, h1.len());
-
             // Recurse using the remaining matches and updated fragments.
             let (child_index, child_states_searched) = recurse_index_search(
                 mol,
                 matches,
-                &new_state,
+                &state.update(fragments, i, h1.len()),
                 best_index.clone(),
                 bounds,
                 &mut cache.clone(),
@@ -219,12 +214,12 @@ pub fn recurse_index_search(
 
     // Use the iterator type corresponding to the specified parallelism mode.
     if parallel_mode == ParallelMode::None {
-        valid_matches
+        later_matches
             .iter()
             .enumerate()
             .for_each(|(i, (h1, h2))| recurse_on_match(i, h1, h2));
     } else {
-        valid_matches
+        later_matches
             .par_iter()
             .enumerate()
             .for_each(|(i, (h1, h2))| recurse_on_match(i, h1, h2));
@@ -319,7 +314,7 @@ pub fn index_search(
     // Create memoization cache.
     let mut cache = Cache::new(memoize_mode, canonize_mode);
 
-    // Initialize state
+    // Create the initial assembly state.
     let state = State::new(mol);
 
     // Search for the shortest assembly pathway recursively.

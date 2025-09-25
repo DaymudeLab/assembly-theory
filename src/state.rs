@@ -1,29 +1,29 @@
+//! Assembly state of the top-down recursive search algorithm.
+
 use bit_set::BitSet;
 
 use crate::molecule::Molecule;
 
-/// Struct containing information local to a state in the search space.
+/// Assembly state of the top-down recursive search algorithm.
 pub struct State {
     /// List of connected components in this state.
     fragments: Vec<BitSet>,
-    /// This assembly state's upper bound on the assembly index,
-    /// i.e., edges(mol) - 1 - [edges(subgraphs removed) - #(subgraphs removed)].
+    /// The current upper bound on the assembly index, i.e., edges(mol) - 1 -
+    /// [edges(subgraphs removed) - #(subgraphs removed)].
     index: usize,
-    /// List of indices, one for each removed duplicate subgraph.
-    /// Allows two states to be compared to determine which comes first in the serial removal order.
-    /// Used to prevent memoization bugs.
+    /// The indices of previously removed duplicate subgraphs. Used for
+    /// disambiguating the serial order of two states during memoization.
     removal_order: Vec<usize>,
-    /// Size of largest removed duplicatable subgraph up to this point.
-    /// Since matches are removed in decreasing size, provides an upper bound
-    /// on the largest subgraph to be removed from this state.
+    /// Size of the largest duplicatable subgraph removed up to this point.
+    /// Since matches are removed in decreasing size, this provides an upper
+    /// bound on the largest subgraph that can be removed from this state.
     largest_removed: usize,
-    /// Index of the last removed duplicate subgraph match.
-    /// Initialized to -1 before any match removals.
+    /// Index of the last removed match; initially `-1`.
     last_removed: isize,
 }
 
 impl State {
-    /// Initializes new state struct
+    /// Construct the initial [`State`] for the given molecule.
     pub fn new(mol: &Molecule) -> Self {
         Self {
             fragments: {
@@ -38,7 +38,8 @@ impl State {
         }
     }
 
-    /// Creates a struct for a new child state after a duplicate subgraph match removal.
+    /// Construct the child [`State`] resulting from removing the specified
+    /// match from this [`State`].
     pub fn update(&self, fragments: Vec<BitSet>, remove_idx: usize, remove_len: usize) -> Self {
         Self {
             fragments,
@@ -53,22 +54,29 @@ impl State {
         }
     }
 
+    /// Return a reference to this [`State`]'s list of connected components.
     pub fn fragments(&self) -> &Vec<BitSet> {
         &self.fragments
     }
 
+    /// Return this [`State`]'s upper bound on the assembly index.
     pub fn index(&self) -> usize {
         self.index
     }
 
+    /// Return a reference to this [`State`]'s removal order (used for
+    /// disambiguating state ordering during memoization).
     pub fn removal_order(&self) -> &Vec<usize> {
         &self.removal_order
     }
 
+    /// Return the size of this [`State`]'s largest duplicatable subgraph
+    /// removed so far.
     pub fn largest_removed(&self) -> usize {
         self.largest_removed
     }
 
+    /// Return the index of this [`State`]'s last removed match.
     pub fn last_removed(&self) -> isize {
         self.last_removed
     }
