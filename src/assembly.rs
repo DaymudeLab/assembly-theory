@@ -165,7 +165,6 @@ pub fn recurse_index_search(
 ) -> (usize, usize) {
     let frags = state.fragments();
     let state_index = state.index();
-    let largest_remove = state.largest_removed();
     let removal_order = state.removal_order();
     let last_removed = state.last_removed();
 
@@ -173,10 +172,8 @@ pub fn recurse_index_search(
     // enabled and this assembly state is preempted by the cached state, halt.
     if bound_exceeded(
         mol,
-        frags,
-        state_index,
+        state,
         best_index.load(Relaxed),
-        largest_remove,
         bounds,
     ) || cache.memoize_state(mol, frags, state_index, removal_order)
     {
