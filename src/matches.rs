@@ -2,7 +2,7 @@ use bit_set::BitSet;
 use dashmap::DashMap;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
-use crate::{assembly::ParallelMode, canonize::{canonize, CanonizeMode, Labeling}, enumerate::{enumerate_subgraphs, EnumerateMode}, molecule::Molecule};
+use crate::{assembly::ParallelMode, canonize::{canonize, CanonizeMode, Labeling}, enumerate::{enumerate_subgraphs, EnumerateMode}, molecule::Molecule, state::State};
 
 /// TODO
 // This structure will change dramatically in the future
@@ -76,8 +76,8 @@ impl Matches {
         self.matches.len()
     }
 
-    pub fn valid_matches(&self, last_removed: isize) -> &[(BitSet, BitSet)] {
-        let idx = (last_removed + 1) as usize;
+    pub fn valid_matches(&self, state: &State) -> &[(BitSet, BitSet)] {
+        let idx = (state.last_removed() + 1) as usize;
         &self.matches[idx..]
     }
 }

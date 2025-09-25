@@ -163,10 +163,6 @@ pub fn recurse_index_search(
     cache: &mut Cache,
     parallel_mode: ParallelMode,
 ) -> (usize, usize) {
-    let frags = state.fragments();
-    let state_index = state.index();
-    let last_removed = state.last_removed();
-
     // If any bounds would prune this assembly state or if memoization is
     // enabled and this assembly state is preempted by the cached state, halt.
     if bound_exceeded(
@@ -176,21 +172,21 @@ pub fn recurse_index_search(
         bounds,
     ) || cache.memoize_state(mol, state)
     {
-        return (state_index, 1);
+        return (state.index(), 1);
     }
 
     // Generate list of matches to try removing from this state
-    let valid_matches = matches.valid_matches(last_removed);
+    let valid_matches = matches.valid_matches(state);
 
     // Keep track of the best assembly index found in any of this assembly
     // state's children and the number of states searched, including this one.
-    let best_child_index = AtomicUsize::from(state_index);
+    let best_child_index = AtomicUsize::from(state.index());
     let states_searched = AtomicUsize::from(1);
 
     // Define a closure that handles recursing to a new assembly state based on
     // the given (enumerated) pair of non-overlapping isomorphic subgraphs.
     let recurse_on_match = |i: usize, h1: &BitSet, h2: &BitSet| {
-        if let Some(fragments) = fragments(mol, frags, h1, h2) {
+        if let Some(fragments) = fragments(mol, state.fragments(), h1, h2) {
             // If using depth-one parallelism, all descendant states should be
             // computed serially.
             let new_parallel = if parallel_mode == ParallelMode::DepthOne {
