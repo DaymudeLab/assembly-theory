@@ -28,7 +28,7 @@ use clap::ValueEnum;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
-    bounds::{bound_exceeded, Bound}, canonize::CanonizeMode, enumerate::{EnumerateMode}, kernels::KernelMode, matches::Matches, memoize::{Cache, MemoizeMode}, molecule::Molecule, utils::connected_components_under_edges
+    bounds::{bound_exceeded, Bound}, canonize::CanonizeMode, enumerate::EnumerateMode, kernels::KernelMode, matches::Matches, memoize::{Cache, MemoizeMode}, molecule::Molecule, state::State, utils::connected_components_under_edges
 };
 
 /// Parallelization strategy for the recursive search phase.
@@ -157,26 +157,28 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Opti
 pub fn recurse_index_search(
     mol: &Molecule,
     matches: &Matches,
-    last_removed: isize,
-    removal_order: Vec<usize>,
-    state: &[BitSet],
-    state_index: usize,
+    state: &State,
     best_index: Arc<AtomicUsize>,
-    largest_remove: usize,
     bounds: &[Bound],
     cache: &mut Cache,
     parallel_mode: ParallelMode,
 ) -> (usize, usize) {
+    let frags = state.fragments();
+    let state_index = state.index();
+    let largest_remove = state.largest_removed();
+    let removal_order = state.removal_order();
+    let last_removed = state.last_removed();
+
     // If any bounds would prune this assembly state or if memoization is
     // enabled and this assembly state is preempted by the cached state, halt.
     if bound_exceeded(
         mol,
-        state,
+        frags,
         state_index,
         best_index.load(Relaxed),
         largest_remove,
         bounds,
-    ) || cache.memoize_state(mol, state, state_index, &removal_order)
+    ) || cache.memoize_state(mol, frags, state_index, removal_order)
     {
         return (state_index, 1);
     }
@@ -192,7 +194,7 @@ pub fn recurse_index_search(
     // Define a closure that handles recursing to a new assembly state based on
     // the given (enumerated) pair of non-overlapping isomorphic subgraphs.
     let recurse_on_match = |i: usize, h1: &BitSet, h2: &BitSet| {
-        if let Some(fragments) = fragments(mol, state, h1, h2) {
+        if let Some(fragments) = fragments(mol, frags, h1, h2) {
             // If using depth-one parallelism, all descendant states should be
             // computed serially.
             let new_parallel = if parallel_mode == ParallelMode::DepthOne {
@@ -201,20 +203,15 @@ pub fn recurse_index_search(
                 parallel_mode
             };
 
+            // Generate struct for next state
+            let new_state = state.update(fragments, i, h1.len());
+
             // Recurse using the remaining matches and updated fragments.
             let (child_index, child_states_searched) = recurse_index_search(
                 mol,
                 matches,
-                last_removed + (i as isize) + 1,
-                {
-                    let mut clone = removal_order.clone();
-                    clone.push(i);
-                    clone
-                },
-                &fragments,
-                state_index - h1.len() + 1,
+                &new_state,
                 best_index.clone(),
-                h1.len(),
                 bounds,
                 &mut cache.clone(),
                 new_parallel,
@@ -330,9 +327,8 @@ pub fn index_search(
     // Create memoization cache.
     let mut cache = Cache::new(memoize_mode, canonize_mode);
 
-    // Initialize the first fragment as the entire graph.
-    let mut init = BitSet::new();
-    init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
+    // Initialize state
+    let state = State::new(mol);
 
     // Search for the shortest assembly pathway recursively.
     let edge_count = mol.graph().edge_count();
@@ -340,12 +336,8 @@ pub fn index_search(
     let (index, states_searched) = recurse_index_search(
         mol,
         &matches,
-        -1,
-        Vec::new(),
-        &[init],
-        edge_count - 1,
+        &state,
         best_index,
-        edge_count,
         bounds,
         &mut cache,
         parallel_mode,
