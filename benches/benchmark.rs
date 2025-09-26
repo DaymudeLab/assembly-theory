@@ -11,13 +11,15 @@ use bit_set::BitSet;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 
 use assembly_theory::{
-    assembly::{matches, recurse_index_search, ParallelMode},
+    assembly::{recurse_index_search, ParallelMode},
     bounds::Bound,
     canonize::{canonize, CanonizeMode},
     enumerate::{enumerate_subgraphs, EnumerateMode},
     loader::parse_molfile_str,
+    matches::Matches,
     memoize::{Cache, MemoizeMode},
     molecule::Molecule,
+    state::State,
 };
 
 /// Parse all .mol files in `dataset` as [`Molecule`]s.
@@ -110,12 +112,12 @@ pub fn bench_canonize(c: &mut Criterion) {
                             for _ in 0..iters {
                                 let start = Instant::now();
                                 let mut isomorphism_classes = HashMap::<_, Vec<BitSet>>::new();
-                                subgraphs.iter().for_each(|subgraph| {
+                                for subgraph in &subgraphs {
                                     isomorphism_classes
-                                        .entry(canonize(mol, subgraph, *canonize_mode))
+                                        .entry(canonize(mol, &subgraph, *canonize_mode))
                                         .and_modify(|bucket| bucket.push(subgraph.clone()))
                                         .or_insert(vec![subgraph.clone()]);
-                                });
+                                }
                                 total_time += start.elapsed();
                             }
                         }
@@ -161,14 +163,13 @@ pub fn bench_bounds(c: &mut Criterion) {
                         let mut total_time = Duration::new(0, 0);
                         for mol in &mol_list {
                             // Precompute the molecule's matches and setup.
-                            let matches = matches(
+                            let matches = Matches::new(
                                 mol,
                                 EnumerateMode::GrowErode,
                                 CanonizeMode::TreeNauty,
                                 ParallelMode::DepthOne,
                             );
-                            let mut init = BitSet::new();
-                            init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
+                            let state = State::new(mol);
                             let edge_count = mol.graph().edge_count();
 
                             // Benchmark the search phase.
@@ -180,11 +181,8 @@ pub fn bench_bounds(c: &mut Criterion) {
                                 recurse_index_search(
                                     mol,
                                     &matches,
-                                    Vec::new(),
-                                    &[init.clone()],
-                                    edge_count - 1,
+                                    &state,
                                     best_index,
-                                    edge_count,
                                     bounds,
                                     &mut cache,
                                     ParallelMode::DepthOne,
@@ -236,14 +234,13 @@ pub fn bench_memoize(c: &mut Criterion) {
                         let mut total_time = Duration::new(0, 0);
                         for mol in &mol_list {
                             // Precompute the molecule's matches and setup.
-                            let matches = matches(
+                            let matches = Matches::new(
                                 mol,
                                 EnumerateMode::GrowErode,
                                 CanonizeMode::TreeNauty,
                                 ParallelMode::DepthOne,
                             );
-                            let mut init = BitSet::new();
-                            init.extend(mol.graph().edge_indices().map(|ix| ix.index()));
+                            let state = State::new(mol);
                             let edge_count = mol.graph().edge_count();
 
                             // Benchmark the search phase.
@@ -254,11 +251,8 @@ pub fn bench_memoize(c: &mut Criterion) {
                                 recurse_index_search(
                                     mol,
                                     &matches,
-                                    Vec::new(),
-                                    &[init.clone()],
-                                    edge_count - 1,
+                                    &state,
                                     best_index,
-                                    edge_count,
                                     &[Bound::Int, Bound::VecSimple, Bound::VecSmallFrags],
                                     &mut cache,
                                     ParallelMode::DepthOne,

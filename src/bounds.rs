@@ -14,7 +14,10 @@
 use bit_set::BitSet;
 use clap::ValueEnum;
 
-use crate::molecule::{Bond, Element, Molecule};
+use crate::{
+    molecule::{Bond, Element, Molecule},
+    state::State,
+};
 
 /// Type of upper bound on the "savings" possible from an assembly state.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
@@ -63,24 +66,21 @@ struct EdgeType {
     ends: (Element, Element),
 }
 
-/// Returns `true` iff any of the given bounds would prune this assembly state.
-pub fn bound_exceeded(
-    mol: &Molecule,
-    fragments: &[BitSet],
-    state_index: usize,
-    best_index: usize,
-    largest_remove: usize,
-    bounds: &[Bound],
-) -> bool {
+/// Return `true` iff any of the given bounds would prune this assembly state.
+pub fn bound_exceeded(mol: &Molecule, state: &State, best_index: usize, bounds: &[Bound]) -> bool {
+    let fragments = state.fragments();
+    let state_index = state.index();
+    let largest_removed = state.largest_removed();
+
     for bound_type in bounds {
         let exceeds = match bound_type {
             Bound::Log => state_index - log_bound(fragments) >= best_index,
-            Bound::Int => state_index - int_bound(fragments, largest_remove) >= best_index,
+            Bound::Int => state_index - int_bound(fragments, largest_removed) >= best_index,
             Bound::VecSimple => {
-                state_index - vec_simple_bound(fragments, largest_remove, mol) >= best_index
+                state_index - vec_simple_bound(fragments, largest_removed, mol) >= best_index
             }
             Bound::VecSmallFrags => {
-                state_index - vec_small_frags_bound(fragments, largest_remove, mol) >= best_index
+                state_index - vec_small_frags_bound(fragments, largest_removed, mol) >= best_index
             }
             _ => {
                 panic!("One of the chosen bounds is not implemented yet!")
