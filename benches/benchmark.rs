@@ -11,7 +11,15 @@ use bit_set::BitSet;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 
 use assembly_theory::{
-    assembly::{recurse_index_search, ParallelMode}, bounds::Bound, canonize::{canonize, CanonizeMode}, enumerate::{enumerate_subgraphs, EnumerateMode}, loader::parse_molfile_str, matches::Matches, memoize::{Cache, MemoizeMode}, molecule::Molecule, state::State
+    assembly::{recurse_index_search, ParallelMode},
+    bounds::Bound,
+    canonize::{canonize, CanonizeMode},
+    enumerate::{enumerate_subgraphs, EnumerateMode},
+    loader::parse_molfile_str,
+    matches::Matches,
+    memoize::{Cache, MemoizeMode},
+    molecule::Molecule,
+    state::State,
 };
 
 /// Parse all .mol files in `dataset` as [`Molecule`]s.
@@ -155,8 +163,12 @@ pub fn bench_bounds(c: &mut Criterion) {
                         let mut total_time = Duration::new(0, 0);
                         for mol in &mol_list {
                             // Precompute the molecule's matches and setup.
-                            let matches =
-                                Matches::new(mol, EnumerateMode::GrowErode, CanonizeMode::TreeNauty, ParallelMode::DepthOne);
+                            let matches = Matches::new(
+                                mol,
+                                EnumerateMode::GrowErode,
+                                CanonizeMode::TreeNauty,
+                                ParallelMode::DepthOne,
+                            );
                             let state = State::new(mol);
                             let edge_count = mol.graph().edge_count();
 
@@ -188,7 +200,7 @@ pub fn bench_bounds(c: &mut Criterion) {
     bench_group.finish();
 }
 
-/// Benchmark the search step of [`index_search`] using different\
+/// Benchmark the search step of [`index_search`] using different
 /// [`MemoizeMode`]s.
 ///
 /// This benchmark precomputes the enumeration and isomorphism steps using the
@@ -222,8 +234,12 @@ pub fn bench_memoize(c: &mut Criterion) {
                         let mut total_time = Duration::new(0, 0);
                         for mol in &mol_list {
                             // Precompute the molecule's matches and setup.
-                            let matches =
-                                Matches::new(mol, EnumerateMode::GrowErode, CanonizeMode::TreeNauty, ParallelMode::DepthOne);
+                            let matches = Matches::new(
+                                mol,
+                                EnumerateMode::GrowErode,
+                                CanonizeMode::TreeNauty,
+                                ParallelMode::DepthOne,
+                            );
                             let state = State::new(mol);
                             let edge_count = mol.graph().edge_count();
 
