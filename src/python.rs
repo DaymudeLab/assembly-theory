@@ -79,7 +79,6 @@ enum PyParallelMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum PyMemoizeMode {
     None,
-    FragsIndex,
     CanonIndex,
 }
 
@@ -162,7 +161,6 @@ impl FromStr for PyMemoizeMode {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "none" => Ok(PyMemoizeMode::None),
-            "frags-index" => Ok(PyMemoizeMode::FragsIndex),
             "canon-index" => Ok(PyMemoizeMode::CanonIndex),
             _ => Err(PyValueError::new_err(format!(
                 "Invalid memoization mode \"{s}\", options are: \
@@ -450,7 +448,6 @@ pub fn _index_search(
     };
     let memoize_mode = match PyMemoizeMode::from_str(memoize_str) {
         Ok(PyMemoizeMode::None) => MemoizeMode::None,
-        Ok(PyMemoizeMode::FragsIndex) => MemoizeMode::FragsIndex,
         Ok(PyMemoizeMode::CanonIndex) => MemoizeMode::CanonIndex,
         Err(e) => return Err(e),
     };

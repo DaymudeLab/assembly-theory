@@ -1,6 +1,6 @@
 //! Memoize assembly states to avoid redundant recursive search.
 
-use std::sync::{atomic::AtomicUsize, Arc};
+use std::sync::{atomic::{AtomicUsize, Ordering::Relaxed}, Arc};
 
 use bit_set::BitSet;
 use clap::ValueEnum;
@@ -17,8 +17,6 @@ use crate::{
 pub enum MemoizeMode {
     /// Do not use memoization.
     None,
-    /// Cache states by fragments and store their assembly index upper bounds.
-    FragsIndex,
     /// Like `FragsIndex`, but cache states by fragments' canonical labelings,
     /// allowing isomorphic assembly states to hash to the same value.
     CanonIndex,
@@ -61,27 +59,42 @@ impl Cache {
     /// sorted fragment [`BitSet`]s. If using [`MemoizeMode::CanonIndex`], keys
     /// are lexicographically sorted fragment canonical labelings created using
     /// the specified [`CanonizeMode`]. These labelings are stored for reuse.
-    fn key(&self, mol: &Molecule, state: &[BitSet]) -> Option<CacheKey> {
+    fn key(&mut self, mol: &Molecule, state: &State) -> Option<Vec<usize>> {
         match self.memoize_mode {
             MemoizeMode::None => None,
-            MemoizeMode::FragsIndex => {
-                let mut fragments = state.to_vec();
-                fragments.sort_by_key(|a| a.iter().next());
-                Some(CacheKey::Frags(fragments))
-            }
             MemoizeMode::CanonIndex => {
-                let mut labelings: Vec<Labeling> = state
-                    .iter()
-                    .map(|fragment| {
-                        self.fragment_labels
-                            .entry(fragment.clone())
-                            .or_insert(canonize(mol, fragment, self.canonize_mode))
-                            .value()
-                            .clone()
-                    })
-                    .collect();
-                labelings.sort();
-                Some(CacheKey::Canon(labelings))
+                let mut frag_ids = Vec::new();
+                for frag in state.fragments() {
+                    let id = self.get_canon_id(mol, frag);
+                    frag_ids.push(id);
+                }
+                frag_ids.sort();
+
+                Some(frag_ids)
+            }
+        }
+    }
+
+    fn get_canon_id(&mut self, mol: &Molecule, frag: &BitSet) -> usize {
+        // If frag has id, use it
+        if let Some(x) = self.frag_to_canon_id.get(frag) {
+            *x
+        }
+        // Otherwise canonize to get labeling
+        else {
+            let canon = canonize(mol, frag, self.canonize_mode);
+            // If label has id, use it
+            if let Some(x) = self.label_to_canon_id.get(&canon) {
+                let id = *x;
+                self.frag_to_canon_id.insert(frag.clone(), id);
+                id
+            }
+            // Otherwise asign new id
+            else {
+                let id = self.next_id.fetch_add(1, Relaxed);
+                self.label_to_canon_id.insert(canon, id);
+                self.frag_to_canon_id.insert(frag.clone(), id);
+                id
             }
         }
     }
