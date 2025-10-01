@@ -1,6 +1,6 @@
 //! Memoize assembly states to avoid redundant recursive search.
 
-use std::sync::Arc;
+use std::sync::{atomic::AtomicUsize, Arc};
 
 use bit_set::BitSet;
 use clap::ValueEnum;
@@ -24,16 +24,6 @@ pub enum MemoizeMode {
     CanonIndex,
 }
 
-/// Key type for the memoization cache.
-#[derive(Clone, PartialEq, Eq, Hash)]
-enum CacheKey {
-    /// Use fragments as keys, as in [`MemoizeMode::FragsIndex`].
-    Frags(Vec<BitSet>),
-    /// Use fragments' canonical labelings as keys, as in
-    /// [`MemoizeMode::CanonIndex`].
-    Canon(Vec<Labeling>),
-}
-
 /// Struct for the memoization cache.
 #[derive(Clone)]
 pub struct Cache {
@@ -44,10 +34,12 @@ pub struct Cache {
     /// A parallel-aware cache mapping keys (either fragments or canonical
     /// labelings, depending on the memoization mode) to their assembly index
     /// upper bounds and match removal order.
-    cache: Arc<DashMap<CacheKey, (usize, Vec<usize>)>>,
+    cache: Arc<DashMap<Vec<usize>, (usize, Vec<usize>)>>,
     /// A parallel-aware map from fragments to their canonical labelings; only
     /// used with [`MemoizeMode::CanonIndex`].
-    fragment_labels: Arc<DashMap<BitSet, Labeling>>,
+    label_to_canon_id: Arc<DashMap<Labeling, usize>>,
+    frag_to_canon_id: Arc<DashMap<BitSet, usize>>,
+    next_id: Arc<AtomicUsize>,
 }
 
 impl Cache {
@@ -56,8 +48,10 @@ impl Cache {
         Self {
             memoize_mode,
             canonize_mode,
-            cache: Arc::new(DashMap::<CacheKey, (usize, Vec<usize>)>::new()),
-            fragment_labels: Arc::new(DashMap::<BitSet, Labeling>::new()),
+            cache: Arc::new(DashMap::<Vec<usize>, (usize, Vec<usize>)>::new()),
+            label_to_canon_id: Arc::new(DashMap::<Labeling, usize>::new()),
+            frag_to_canon_id: Arc::new(DashMap::<BitSet, usize>::new()),
+            next_id: Arc::new(AtomicUsize::from(0)),
         }
     }
 
