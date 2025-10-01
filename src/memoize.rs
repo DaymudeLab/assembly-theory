@@ -102,18 +102,20 @@ impl Cache {
     /// Return `true` iff memoization is enabled and this assembly state is
     /// preempted by the cached assembly state.
     /// See https://github.com/DaymudeLab/assembly-theory/pull/95 for details.
-    pub fn memoize_state(&self, mol: &Molecule, state: &State) -> bool {
+    pub fn memoize_state(&mut self, mol: &Molecule, state: &State) -> bool {
         let state_index = state.index();
         let removal_order = state.removal_order();
 
+        let mut stop = false;
+
         // If memoization is enabled, get this assembly state's cache key.
-        if let Some(cache_key) = self.key(mol, state.fragments()) {
+        if let Some(cache_key) = self.key(mol, state) {
             // Do all of the following atomically: Access the cache entry. If
             // the cached entry has a worse index upper bound or later removal
             // order than this state, or if it does not exist, then cache this
             // state's values and return `false`. Otherwise, the cached entry
             // preempts this assembly state, so return `true`.
-            let (cached_index, cached_order) = self
+            self
                 .cache
                 .entry(cache_key)
                 .and_modify(|val| {
@@ -121,14 +123,13 @@ impl Cache {
                         val.0 = state_index;
                         val.1 = removal_order.clone();
                     }
+                    else {
+                        stop = true;
+                    }
                 })
-                .or_insert((state_index, removal_order.clone()))
-                .value()
-                .clone();
-            if cached_index <= state_index && cached_order < *removal_order {
-                return true;
-            }
+                .or_insert((state_index, removal_order.clone()));
         }
-        false
+        
+        stop
     }
 }
