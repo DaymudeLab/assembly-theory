@@ -1,6 +1,9 @@
 //! Memoize assembly states to avoid redundant recursive search.
 
-use std::sync::{atomic::{AtomicUsize, Ordering::Relaxed}, Arc};
+use std::sync::{
+    atomic::{AtomicUsize, Ordering::Relaxed},
+    Arc,
+};
 
 use bit_set::BitSet;
 use clap::ValueEnum;
@@ -17,8 +20,8 @@ use crate::{
 pub enum MemoizeMode {
     /// Do not use memoization.
     None,
-    /// Like `FragsIndex`, but cache states by fragments' canonical labelings,
-    /// allowing isomorphic assembly states to hash to the same value.
+    /// Cache states by fragments' canonical labelings, allowing isomorphic
+    /// assembly states to hash to the same value.
     CanonIndex,
 }
 
@@ -29,14 +32,17 @@ pub struct Cache {
     memoize_mode: MemoizeMode,
     /// Canonization mode; only used with [`MemoizeMode::CanonIndex`].
     canonize_mode: CanonizeMode,
-    /// A parallel-aware cache mapping keys (either fragments or canonical
-    /// labelings, depending on the memoization mode) to their assembly index
-    /// upper bounds and match removal order.
+    /// A parallel-aware cache mapping keys (lists of canon ids) to their
+    /// assembly index upper bounds and match removal order.
     cache: Arc<DashMap<Vec<usize>, (usize, Vec<usize>)>>,
-    /// A parallel-aware map from fragments to their canonical labelings; only
-    /// used with [`MemoizeMode::CanonIndex`].
+    /// A parallel-aware map from a graph canonization labeling to a canon id.
+    /// These ids are used as keys into the cache since hashing a usize is much
+    /// faster than hashing the labelings directly.
     label_to_canon_id: Arc<DashMap<Labeling, usize>>,
+    /// A parallel-aware map from fragments (represented as bitsets) to canon
+    /// ids. Two fragments have the same id iff they are isomorphic.
     frag_to_canon_id: Arc<DashMap<BitSet, usize>>,
+    /// A counter for what id should be given to the next unique labeling seen.
     next_id: Arc<AtomicUsize>,
 }
 
@@ -53,12 +59,9 @@ impl Cache {
         }
     }
 
-    /// Create a [`CacheKey`] for the given assembly state.
+    /// Create a key into the cache for the given assembly state.
     ///
-    /// If using [`MemoizeMode::FragsIndex`], keys are the lexicographically
-    /// sorted fragment [`BitSet`]s. If using [`MemoizeMode::CanonIndex`], keys
-    /// are lexicographically sorted fragment canonical labelings created using
-    /// the specified [`CanonizeMode`]. These labelings are stored for reuse.
+    /// If using [`MemoizeMode::CanonIndex`], keys are sorted lists of canon ids.
     fn key(&mut self, mol: &Molecule, state: &State) -> Option<Vec<usize>> {
         match self.memoize_mode {
             MemoizeMode::None => None,
@@ -75,6 +78,8 @@ impl Cache {
         }
     }
 
+    /// Takes a fragment and canonizes it using the specified [`CanonizeMode`],
+    /// then returns the corresponding canon id.
     fn get_canon_id(&mut self, mol: &Molecule, frag: &BitSet) -> usize {
         // If frag has id, use it
         if let Some(x) = self.frag_to_canon_id.get(frag) {
@@ -106,7 +111,9 @@ impl Cache {
         let state_index = state.index();
         let removal_order = state.removal_order();
 
-        let mut stop = false;
+        // true if this state has been memoized by the cache and thus we can
+        // stop computation along this path.
+        let mut prune_state = false;
 
         // If memoization is enabled, get this assembly state's cache key.
         if let Some(cache_key) = self.key(mol, state) {
@@ -115,21 +122,19 @@ impl Cache {
             // order than this state, or if it does not exist, then cache this
             // state's values and return `false`. Otherwise, the cached entry
             // preempts this assembly state, so return `true`.
-            self
-                .cache
+            self.cache
                 .entry(cache_key)
                 .and_modify(|val| {
                     if val.0 > state_index || val.1 > *removal_order {
                         val.0 = state_index;
                         val.1 = removal_order.clone();
-                    }
-                    else {
-                        stop = true;
+                    } else {
+                        prune_state = true;
                     }
                 })
                 .or_insert((state_index, removal_order.clone()));
         }
-        
-        stop
+
+        prune_state
     }
 }
