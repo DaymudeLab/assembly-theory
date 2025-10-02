@@ -32,17 +32,18 @@ pub struct Cache {
     memoize_mode: MemoizeMode,
     /// Canonization mode; only used with [`MemoizeMode::CanonIndex`].
     canonize_mode: CanonizeMode,
-    /// A parallel-aware cache mapping keys (lists of canon ids) to their
-    /// assembly index upper bounds and match removal order.
+    /// A parallel-aware cache mapping keys (lists of usize canonical IDs) to
+    /// their assembly index upper bounds and match removal order.
     cache: Arc<DashMap<Vec<usize>, (usize, Vec<usize>)>>,
-    /// A parallel-aware map from a graph canonization labeling to a canon id.
-    /// These ids are used as keys into the cache since hashing a usize is much
-    /// faster than hashing the labelings directly.
-    label_to_canon_id: Arc<DashMap<Labeling, usize>>,
-    /// A parallel-aware map from fragments (represented as bitsets) to canon
-    /// ids. Two fragments have the same id iff they are isomorphic.
-    frag_to_canon_id: Arc<DashMap<BitSet, usize>>,
-    /// A counter for what id should be given to the next unique labeling seen.
+    /// A parallel-aware map from canonical labelings to canonical IDs. Lists
+    /// of these IDs are used as memoization cache keys since usizes are much
+    /// faster to hash than canonical labelings.
+    labeling_to_id: Arc<DashMap<Labeling, usize>>,
+    /// A parallel-aware map from fragments to canonical IDs. Two fragments
+    /// have the same canonical ID iff they are isomorphic.
+    fragment_to_id: Arc<DashMap<BitSet, usize>>,
+    /// A parallel-aware counter for assigning a unique ID to the next unique
+    /// canonical labeling seen.
     next_id: Arc<AtomicUsize>,
 }
 
@@ -53,24 +54,25 @@ impl Cache {
             memoize_mode,
             canonize_mode,
             cache: Arc::new(DashMap::<Vec<usize>, (usize, Vec<usize>)>::new()),
-            label_to_canon_id: Arc::new(DashMap::<Labeling, usize>::new()),
-            frag_to_canon_id: Arc::new(DashMap::<BitSet, usize>::new()),
+            labeling_to_id: Arc::new(DashMap::<Labeling, usize>::new()),
+            fragment_to_id: Arc::new(DashMap::<BitSet, usize>::new()),
             next_id: Arc::new(AtomicUsize::from(0)),
         }
     }
 
-    /// Create a key into the cache for the given assembly state.
+    /// Create a memoization cache key for the given assembly state.
     ///
-    /// If using [`MemoizeMode::CanonIndex`], keys are sorted lists of canon ids.
+    /// If using [`MemoizeMode::CanonIndex`], keys are sorted lists of
+    /// canonical IDs.
     fn key(&mut self, mol: &Molecule, state: &State) -> Option<Vec<usize>> {
         match self.memoize_mode {
             MemoizeMode::None => None,
             MemoizeMode::CanonIndex => {
-                let mut frag_ids = Vec::new();
-                for frag in state.fragments() {
-                    let id = self.get_canon_id(mol, frag);
-                    frag_ids.push(id);
-                }
+                let mut frag_ids: Vec<usize> = state
+                    .fragments()
+                    .iter()
+                    .map(|fragment| self.canonical_id(mol, fragment))
+                    .collect();
                 frag_ids.sort();
 
                 Some(frag_ids)
@@ -78,30 +80,15 @@ impl Cache {
         }
     }
 
-    /// Takes a fragment and canonizes it using the specified [`CanonizeMode`],
-    /// then returns the corresponding canon id.
-    fn get_canon_id(&mut self, mol: &Molecule, frag: &BitSet) -> usize {
-        // If frag has id, use it
-        if let Some(x) = self.frag_to_canon_id.get(frag) {
-            *x
-        }
-        // Otherwise canonize to get labeling
-        else {
-            let canon = canonize(mol, frag, self.canonize_mode);
-            // If label has id, use it
-            if let Some(x) = self.label_to_canon_id.get(&canon) {
-                let id = *x;
-                self.frag_to_canon_id.insert(frag.clone(), id);
-                id
-            }
-            // Otherwise asign new id
-            else {
-                let id = self.next_id.fetch_add(1, Relaxed);
-                self.label_to_canon_id.insert(canon, id);
-                self.frag_to_canon_id.insert(frag.clone(), id);
-                id
-            }
-        }
+    /// Obtain the canonical ID of the given fragment, canonizing it using the
+    /// specified [`CanonizeMode`] if this has not already been done.
+    fn canonical_id(&mut self, mol: &Molecule, fragment: &BitSet) -> usize {
+        *self.fragment_to_id.entry(fragment.clone()).or_insert(
+            *self
+                .labeling_to_id
+                .entry(canonize(mol, fragment, self.canonize_mode))
+                .or_insert(self.next_id.fetch_add(1, Relaxed)),
+        )
     }
 
     /// Return `true` iff memoization is enabled and this assembly state is
@@ -110,10 +97,7 @@ impl Cache {
     pub fn memoize_state(&mut self, mol: &Molecule, state: &State) -> bool {
         let state_index = state.index();
         let removal_order = state.removal_order();
-
-        // true if this state has been memoized by the cache and thus we can
-        // stop computation along this path.
-        let mut prune_state = false;
+        let mut result = false;
 
         // If memoization is enabled, get this assembly state's cache key.
         if let Some(cache_key) = self.key(mol, state) {
@@ -129,12 +113,12 @@ impl Cache {
                         val.0 = state_index;
                         val.1 = removal_order.clone();
                     } else {
-                        prune_state = true;
+                        result = true;
                     }
                 })
                 .or_insert((state_index, removal_order.clone()));
         }
 
-        prune_state
+        result
     }
 }
