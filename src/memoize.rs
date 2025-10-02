@@ -69,14 +69,14 @@ impl Cache {
         match self.memoize_mode {
             MemoizeMode::None => None,
             MemoizeMode::CanonIndex => {
-                let mut frag_ids: Vec<usize> = state
+                let mut fragment_ids: Vec<usize> = state
                     .fragments()
                     .iter()
                     .map(|fragment| self.canonical_id(mol, fragment))
                     .collect();
-                frag_ids.sort();
+                fragment_ids.sort();
 
-                Some(frag_ids)
+                Some(fragment_ids)
             }
         }
     }
@@ -84,12 +84,20 @@ impl Cache {
     /// Obtain the canonical ID of the given fragment, canonizing it using the
     /// specified [`CanonizeMode`] if this has not already been done.
     fn canonical_id(&mut self, mol: &Molecule, fragment: &BitSet) -> usize {
-        *self.fragment_to_id.entry(fragment.clone()).or_insert(
-            *self
-                .labeling_to_id
-                .entry(canonize(mol, fragment, self.canonize_mode))
-                .or_insert(self.next_id.fetch_add(1, Relaxed)),
-        )
+        if let Some(id) = self.fragment_to_id.get(fragment) {
+            *id
+        } else {
+            let labeling = canonize(mol, fragment, self.canonize_mode);
+            if let Some(id) = self.labeling_to_id.get(&labeling) {
+                self.fragment_to_id.insert(fragment.clone(), *id);
+                *id
+            } else {
+                let id = self.next_id.fetch_add(1, Relaxed);
+                self.fragment_to_id.insert(fragment.clone(), id);
+                self.labeling_to_id.insert(labeling, id);
+                id
+            }
+        }
     }
 
     /// Return `true` iff memoization is enabled and this assembly state is
