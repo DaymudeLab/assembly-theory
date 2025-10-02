@@ -213,7 +213,6 @@ pub fn bench_memoize(c: &mut Criterion) {
     let datasets = ["gdb13_1201", "gdb17_200", "checks", "coconut_55"];
     let memoize_modes = [
         (MemoizeMode::None, CanonizeMode::Nauty, "no-memoize"),
-        (MemoizeMode::FragsIndex, CanonizeMode::Nauty, "frags-index"),
         (MemoizeMode::CanonIndex, CanonizeMode::Nauty, "nauty-index"),
         (
             MemoizeMode::CanonIndex,
