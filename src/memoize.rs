@@ -34,6 +34,7 @@ pub struct Cache {
     canonize_mode: CanonizeMode,
     /// A parallel-aware cache mapping keys (lists of usize canonical IDs) to
     /// their assembly index upper bounds and match removal order.
+    #[allow(clippy::type_complexity)]
     cache: Arc<DashMap<Vec<usize>, (usize, Vec<usize>)>>,
     /// A parallel-aware map from canonical labelings to canonical IDs. Lists
     /// of these IDs are used as memoization cache keys since usizes are much
