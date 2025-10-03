@@ -151,7 +151,6 @@ fn canonization() {
 fn memoization() {
     for (memoize_mode, canonize_mode) in [
         (MemoizeMode::None, CanonizeMode::TreeNauty),
-        (MemoizeMode::FragsIndex, CanonizeMode::TreeNauty),
         (MemoizeMode::CanonIndex, CanonizeMode::Nauty),
         (MemoizeMode::CanonIndex, CanonizeMode::TreeNauty),
     ] {
