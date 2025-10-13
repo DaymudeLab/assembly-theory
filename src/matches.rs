@@ -12,10 +12,34 @@ use crate::{
     state::State,
 };
 
+struct DagNode {
+    fragment: BitSet,
+    canonical_id: usize,
+    children: Vec<usize>,
+}
+
 /// Pairs of non-overlapping, isomorphic subgraphs in a molecule, sorted to
 /// guarantee deterministic iteration.
 pub struct Matches {
     matches: Vec<(BitSet, BitSet)>,
+}
+
+impl DagNode {
+    pub fn new(fragment: BitSet, canonical_id: usize) -> Self {
+        Self {
+            fragment,
+            canonical_id,
+            children: Vec::new(),
+        }
+    }
+
+    pub fn fragment(&self) -> &BitSet {
+        &self.fragment
+    }
+
+    pub fn len(&self) -> usize {
+        self.fragment.len()
+    }
 }
 
 impl Matches {
