@@ -60,7 +60,6 @@ impl Matches {
 
         let mut subgraph_ids: Vec<usize> = Vec::new();
         let mut constructed_frags: HashSet<BitSet> = HashSet::new();
-        let mut dag_ids: HashMap<BitSet, usize> = HashMap::new();
         let mut dag: Vec<DagNode> = Vec::with_capacity(num_edges);
         let mut matches: Vec<(usize, usize)> = Vec::new();
         let mut next_canonical_id = 1;
@@ -157,31 +156,32 @@ impl Matches {
             for isomorphic_frags in buckets.values() {
                 // Variables to track if a match has been found
                 let mut frag_has_match = BitSet::with_capacity(isomorphic_frags.len());
+                let mut index_to_id = HashMap::<usize, usize>::new();
 
                 // Loop through pairs of fragments
-                for frag1_id in 0..isomorphic_frags.len() {
-                    for frag2_id in frag1_id + 1..isomorphic_frags.len() {
-                        let (frag1, parent1_id) = &isomorphic_frags[frag1_id];
-                        let (frag2, parent2_id) = &isomorphic_frags[frag2_id];
+                for frag1_index in 0..isomorphic_frags.len() {
+                    for frag2_index in frag1_index + 1..isomorphic_frags.len() {
+                        let (frag1, parent1_id) = &isomorphic_frags[frag1_index];
+                        let (frag2, parent2_id) = &isomorphic_frags[frag2_index];
 
                         if frag1.is_disjoint(&frag2) {
                             // If this is the first match for a fragment, create a dag node
-                            if !frag_has_match.contains(frag1_id) {
+                            if !frag_has_match.contains(frag1_index) {
                                 let child_id =
                                     add_to_dag(&mut dag, &frag1, *parent1_id, next_canonical_id);
                                 child_subgraph_ids.push(child_id);
-                                dag_ids.insert(frag1.clone(), child_id);
+                                index_to_id.insert(frag1_index, child_id);
                             }
-                            if !frag_has_match.contains(frag2_id) {
+                            if !frag_has_match.contains(frag2_index) {
                                 let child_id =
                                     add_to_dag(&mut dag, &frag2, *parent2_id, next_canonical_id);
                                 child_subgraph_ids.push(child_id);
-                                dag_ids.insert(frag1.clone(), child_id);
+                                index_to_id.insert(frag2_index, child_id);
                             }
 
                             // Get fragment ids and add to matches
-                            let frag1_dag_id = dag_ids.get(&frag1).unwrap();
-                            let frag2_dag_id = dag_ids.get(&frag2).unwrap();
+                            let frag1_dag_id = index_to_id.get(&frag1_index).unwrap();
+                            let frag2_dag_id = index_to_id.get(&frag2_index).unwrap();
 
                             if frag1_dag_id > frag2_dag_id {
                                 matches.push((*frag1_dag_id, *frag2_dag_id));
@@ -190,8 +190,8 @@ impl Matches {
                             }
 
                             // Mark that these fragments have matches
-                            frag_has_match.insert(frag1_id);
-                            frag_has_match.insert(frag2_id);
+                            frag_has_match.insert(frag1_index);
+                            frag_has_match.insert(frag2_index);
                         }
                     }
                 }
@@ -346,5 +346,13 @@ impl Matches {
 
         valid_matches.sort();
         valid_matches
+    }
+
+    pub fn match_fragments(&self, match_id: usize) -> (&BitSet, &BitSet) {
+        let (frag1_dag_id, frag2_dag_id) = self.id_to_match[match_id];
+        let frag1 = &self.dag[frag1_dag_id].fragment;
+        let frag2 = &self.dag[frag2_dag_id].fragment;
+
+        (frag1, frag2)
     }
 }
