@@ -5,7 +5,6 @@ use assembly_theory::{
     assembly::{depth, index_search, ParallelMode},
     bounds::Bound,
     canonize::CanonizeMode,
-    enumerate::EnumerateMode,
     kernels::KernelMode,
     loader::parse_molfile_str,
     memoize::MemoizeMode,
@@ -31,10 +30,6 @@ struct Cli {
     /// search space size is nondeterministic owing to some `HashMap` details.
     #[arg(long)]
     verbose: bool,
-
-    /// Strategy for enumerating connected, non-induced subgraphs.
-    #[arg(long, value_enum, default_value_t = EnumerateMode::GrowErode)]
-    enumerate: EnumerateMode,
 
     /// Algorithm for graph canonization.
     #[arg(long, value_enum, default_value_t = CanonizeMode::TreeNauty)]
@@ -110,7 +105,6 @@ fn main() -> Result<()> {
     // Call index calculation with all the various options.
     let (index, num_matches, states_searched) = index_search(
         &mol,
-        cli.enumerate,
         cli.canonize,
         cli.parallel,
         cli.memoize,

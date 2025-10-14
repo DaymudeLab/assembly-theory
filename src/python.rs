@@ -35,7 +35,6 @@ use crate::{
     assembly::{depth, index, index_search, ParallelMode},
     bounds::Bound as OurBound,
     canonize::CanonizeMode,
-    enumerate::EnumerateMode,
     kernels::KernelMode,
     loader::{parse_molfile_str, ParserError},
     memoize::MemoizeMode,
@@ -410,10 +409,9 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 /// print(f"Assembly States Searched: {states_searched}")  # 2562
 /// ```
 #[pyfunction(name = "index_search")]
-#[pyo3(signature = (mol_block, enumerate_str="grow-erode", canonize_str="tree-nauty", parallel_str="depth-one", memoize_str="canon-index", kernel_str="none", bound_strs=vec!["int".to_string(), "vec-simple".to_string(), "vec-small-frags".to_string()]), text_signature = "(mol_block, enumerate_str=\"grow-erode\", canonize_str=\"tree-nauty\", parallel_str=\"depth-one\", memoize_str=\"canon-index\", kernel_str=\"none\", bound_strs=[\"int\", \"vec-simple\", \"vec-small-frags\"]))")]
+#[pyo3(signature = (mol_block, canonize_str="tree-nauty", parallel_str="depth-one", memoize_str="canon-index", kernel_str="none", bound_strs=vec!["int".to_string(), "vec-simple".to_string(), "vec-small-frags".to_string()]), text_signature = "(mol_block, enumerate_str=\"grow-erode\", canonize_str=\"tree-nauty\", parallel_str=\"depth-one\", memoize_str=\"canon-index\", kernel_str=\"none\", bound_strs=[\"int\", \"vec-simple\", \"vec-small-frags\"]))")]
 pub fn _index_search(
     mol_block: &str,
-    enumerate_str: &str,
     canonize_str: &str,
     parallel_str: &str,
     memoize_str: &str,
@@ -428,11 +426,6 @@ pub fn _index_search(
     };
 
     // Parse the various modes and bound options.
-    let enumerate_mode = match PyEnumerateMode::from_str(enumerate_str) {
-        Ok(PyEnumerateMode::Extend) => EnumerateMode::Extend,
-        Ok(PyEnumerateMode::GrowErode) => EnumerateMode::GrowErode,
-        Err(e) => return Err(e),
-    };
     let canonize_mode = match PyCanonizeMode::from_str(canonize_str) {
         Ok(PyCanonizeMode::Nauty) => CanonizeMode::Nauty,
         Ok(PyCanonizeMode::Faulon) => CanonizeMode::Faulon,
@@ -464,7 +457,6 @@ pub fn _index_search(
     // Compute assembly index.
     Ok(index_search(
         &mol,
-        enumerate_mode,
         canonize_mode,
         parallel_mode,
         memoize_mode,

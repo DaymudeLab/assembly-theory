@@ -30,7 +30,6 @@ use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIter
 use crate::{
     bounds::{bound_exceeded, Bound},
     canonize::CanonizeMode,
-    enumerate::EnumerateMode,
     kernels::KernelMode,
     matches::Matches,
     memoize::{Cache, MemoizeMode},
@@ -298,7 +297,6 @@ pub fn recurse_index_search(
 /// ```
 pub fn index_search(
     mol: &Molecule,
-    enumerate_mode: EnumerateMode,
     canonize_mode: CanonizeMode,
     parallel_mode: ParallelMode,
     memoize_mode: MemoizeMode,
@@ -311,7 +309,7 @@ pub fn index_search(
     }
 
     // Enumerate non-overlapping isomorphic subgraph pairs.
-    let matches = Matches::new(mol, enumerate_mode, canonize_mode, parallel_mode);
+    let matches = Matches::new(mol, canonize_mode);
 
     // Create memoization cache.
     let mut cache = Cache::new(memoize_mode, canonize_mode);
@@ -357,7 +355,6 @@ pub fn index_search(
 pub fn index(mol: &Molecule) -> u32 {
     index_search(
         mol,
-        EnumerateMode::GrowErode,
         CanonizeMode::TreeNauty,
         ParallelMode::DepthOne,
         MemoizeMode::CanonIndex,

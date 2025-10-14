@@ -3,14 +3,10 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use bit_set::BitSet;
-use dashmap::DashMap;
 use petgraph::graph::EdgeIndex;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
-    assembly::ParallelMode,
     canonize::{canonize, CanonizeMode, Labeling},
-    enumerate::{enumerate_subgraphs, EnumerateMode},
     molecule::Molecule,
     state::State,
     utils::edge_neighbors,
@@ -38,23 +34,13 @@ impl DagNode {
             children: Vec::new(),
         }
     }
-
-    pub fn fragment(&self) -> &BitSet {
-        &self.fragment
-    }
-
-    pub fn len(&self) -> usize {
-        self.fragment.len()
-    }
 }
 
 impl Matches {
     /// Generate [`Matches`] from the given molecule with the specified modes.
     pub fn new(
         mol: &Molecule,
-        enumerate_mode: EnumerateMode,
         canonize_mode: CanonizeMode,
-        parallel_mode: ParallelMode,
     ) -> Self {
         let num_edges = mol.graph().edge_count();
 
