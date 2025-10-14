@@ -183,7 +183,9 @@ pub fn recurse_index_search(
 
     // Define a closure that handles recursing to a new assembly state based on
     // the given (enumerated) pair of non-overlapping isomorphic subgraphs.
-    let recurse_on_match = |i: usize, h1: &BitSet, h2: &BitSet| {
+    let recurse_on_match = |i: usize, match_id: usize| {
+        let (h1, h2) = matches.match_fragments(match_id);
+
         if let Some(fragments) = fragments(mol, state.fragments(), h1, h2) {
             // If using depth-one parallelism, all descendant states should be
             // computed serially.
@@ -217,12 +219,12 @@ pub fn recurse_index_search(
         later_matches
             .iter()
             .enumerate()
-            .for_each(|(i, (h1, h2))| recurse_on_match(i, h1, h2));
+            .for_each(|(i, match_id)| recurse_on_match(i, *match_id));
     } else {
         later_matches
             .par_iter()
             .enumerate()
-            .for_each(|(i, (h1, h2))| recurse_on_match(i, h1, h2));
+            .for_each(|(i, match_id)| recurse_on_match(i, *match_id));
     }
 
     (
