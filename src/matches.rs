@@ -96,9 +96,7 @@ impl Matches {
             let mut buckets: BTreeMap<Labeling, Vec<(BitSet, usize)>> = BTreeMap::new();
             let num_edges = mol.graph().edge_count();
 
-            // Extend and bucket new subgraphs
             for parent_id in subgraph_ids.iter() {
-                // Get fragment to be extended
                 let fragment = &dag[*parent_id].fragment;
 
                 // Construct edge neighborhood of fragment
@@ -244,7 +242,109 @@ impl Matches {
 
     /// Return all matches that are later than the last-removed match in the
     /// given assembly state.
-    pub fn later_matches(&self, state: &State) -> &[(BitSet, BitSet)] {
-        // TODO
+    pub fn later_matches(&self, state: &State) -> Vec<usize> {
+        let state_fragments = state.fragments();
+        let last_removed = state.last_removed();
+
+        let mut valid_matches: Vec<usize> = Vec::new();
+        let mut subgraphs: Vec<(usize, usize)> = Vec::new();
+
+        // Helper function
+        fn create_buckets(
+            subgraphs: &Vec<(usize, usize)>,
+            fragments: &Vec<BitSet>,
+            dag: &Vec<DagNode>,
+        ) -> BTreeMap<usize, Vec<(usize, usize)>> {
+            let mut buckets: BTreeMap<usize, Vec<(usize, usize)>> = BTreeMap::new();
+
+            // Extend each subgraph and bucket
+            for (dag_id, state_id) in subgraphs {
+                let state_fragment = &fragments[*state_id];
+                let children_ids = &dag[*dag_id].children;
+
+                for child_id in children_ids {
+                    let child_node = &dag[*child_id];
+
+                    // Check if this extension is valid
+                    // i.e. the extended subgraph is contained in a fragment of state
+                    let child_fragment = &child_node.fragment;
+                    let valid = child_fragment.is_subset(state_fragment);
+
+                    // Add child fragment to bucket
+                    if valid {
+                        let canonical_id = &child_node.canonical_id;
+                        buckets
+                            .entry(*canonical_id)
+                            .and_modify(|bucket| bucket.push((*child_id, *state_id)))
+                            .or_insert(vec![(*child_id, *state_id)]);
+                    }
+                }
+            }
+
+            buckets
+        }
+
+        // Create subgraphs of size 1
+        for (state_id, fragment) in state_fragments.iter().enumerate() {
+            for edge_idx in fragment.iter() {
+                subgraphs.push((edge_idx, state_id));
+            }
+        }
+
+        while subgraphs.len() > 0 {
+            let mut new_subgraphs = Vec::new();
+            let mut buckets = create_buckets(&subgraphs, state_fragments, &self.dag);
+
+            for isomorphic_frags in buckets.values_mut() {
+                // Variables to track if a match has been found
+                let mut has_match = BitSet::with_capacity(isomorphic_frags.len());
+
+                // Loop over pairs of fragments
+                for i in 0..isomorphic_frags.len() {
+                    for j in i + 1..isomorphic_frags.len() {
+                        let mut frag1 = (i, isomorphic_frags[i]);
+                        let mut frag2 = (j, isomorphic_frags[j]);
+
+                        // Order fragments
+                        if frag1.1 .0 < frag2.1 .0 {
+                            let temp = frag1;
+                            frag1 = frag2;
+                            frag2 = temp;
+                        }
+
+                        let frag1_bucket_id = frag1.0;
+                        let frag1_dag_id = frag1.1 .0;
+                        let frag1_state_id = frag1.1 .1;
+
+                        let frag2_bucket_id = frag2.0;
+                        let frag2_dag_id = frag2.1 .0;
+                        let frag2_state_id = frag2.1 .1;
+
+                        // Check for valid match
+                        if let Some(match_id) = self.match_to_id.get(&(frag1_dag_id, frag2_dag_id))
+                        {
+                            if *match_id as isize > last_removed {
+                                valid_matches.push(*match_id);
+
+                                // If this is the first time seeing that this frag has a match, add it to the new_subgraphs list
+                                if !has_match.contains(frag1_bucket_id) {
+                                    new_subgraphs.push((frag1_dag_id, frag1_state_id));
+                                    has_match.insert(frag1_bucket_id);
+                                }
+                                if !has_match.contains(frag2_bucket_id) {
+                                    new_subgraphs.push((frag2_dag_id, frag2_state_id));
+                                    has_match.insert(frag2_bucket_id);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            subgraphs = new_subgraphs;
+        }
+
+        valid_matches.sort();
+        valid_matches
     }
 }
