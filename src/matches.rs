@@ -1,4 +1,5 @@
-//! Pairs of non-overlapping, isomorphic subgraphs in a molecule.
+//! Strucutral information on matches in the molecular graph - pairs of
+//! non-overlapping, isomorphic subgraphs
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -12,21 +13,35 @@ use crate::{
     utils::edge_neighbors,
 };
 
+/// Holds data for nodes of the dag
 struct DagNode {
+    /// Connected subgraph of the molecule
     fragment: BitSet,
+    /// IDs for isomorphism. Two DagNodes have the same canonical_id iff their
+    /// fragments are ismorphic.
     canonical_id: usize,
+    /// List of indices of this nodes children. If A is a child of B then
+    /// A.fragment is B.fragment with an additional edge.
     children: Vec<usize>,
 }
 
-/// Pairs of non-overlapping, isomorphic subgraphs in a molecule, sorted to
-/// guarantee deterministic iteration.
+/// Structural information on the molecules matches - pairs of nonoverlapping
+/// isomorphic subgraph.
 pub struct Matches {
+    /// Each node of the dag holds information on a duplicatable subgraph (i.e.
+    /// subgraphs such that there exists a disjoint ismorphic copy of the
+    /// subgraph in the molecule).
     dag: Vec<DagNode>,
+    /// List of all possible matches stored as a pair of fragment IDs (the
+    /// index of the fragment in the dag).
     id_to_match: Vec<(usize, usize)>,
+    /// Given a match (as a pair of fragment IDs) returns its match ID, i.e.,
+    /// its index in id_to_match
     match_to_id: HashMap<(usize, usize), usize>,
 }
 
 impl DagNode {
+    /// Create new [`DagNode`] object.
     pub fn new(fragment: BitSet, canonical_id: usize) -> Self {
         Self {
             fragment,
@@ -38,10 +53,7 @@ impl DagNode {
 
 impl Matches {
     /// Generate [`Matches`] from the given molecule with the specified modes.
-    pub fn new(
-        mol: &Molecule,
-        canonize_mode: CanonizeMode,
-    ) -> Self {
+    pub fn new(mol: &Molecule, canonize_mode: CanonizeMode) -> Self {
         let num_edges = mol.graph().edge_count();
 
         let mut subgraph_ids: Vec<usize> = Vec::new();
@@ -73,8 +85,8 @@ impl Matches {
 
         fn create_buckets(
             mol: &Molecule,
-            subgraph_ids: &Vec<usize>,
-            dag: &Vec<DagNode>,
+            subgraph_ids: &[usize],
+            dag: &[DagNode],
             constructed_frags: &mut HashSet<BitSet>,
             canonize_mode: CanonizeMode,
         ) -> BTreeMap<Labeling, Vec<(BitSet, usize)>> {
@@ -128,7 +140,7 @@ impl Matches {
         }
 
         // Generate subgraphs with one more edge than the previous iteration
-        while subgraph_ids.len() > 0 {
+        while !subgraph_ids.is_empty() {
             let mut child_subgraph_ids: Vec<usize> = Vec::new();
             let buckets = create_buckets(
                 mol,
@@ -150,17 +162,17 @@ impl Matches {
                         let (frag1, parent1_id) = &isomorphic_frags[frag1_index];
                         let (frag2, parent2_id) = &isomorphic_frags[frag2_index];
 
-                        if frag1.is_disjoint(&frag2) {
+                        if frag1.is_disjoint(frag2) {
                             // If this is the first match for a fragment, create a dag node
                             if !frag_has_match.contains(frag1_index) {
                                 let child_id =
-                                    add_to_dag(&mut dag, &frag1, *parent1_id, next_canonical_id);
+                                    add_to_dag(&mut dag, frag1, *parent1_id, next_canonical_id);
                                 child_subgraph_ids.push(child_id);
                                 index_to_id.insert(frag1_index, child_id);
                             }
                             if !frag_has_match.contains(frag2_index) {
                                 let child_id =
-                                    add_to_dag(&mut dag, &frag2, *parent2_id, next_canonical_id);
+                                    add_to_dag(&mut dag, frag2, *parent2_id, next_canonical_id);
                                 child_subgraph_ids.push(child_id);
                                 index_to_id.insert(frag2_index, child_id);
                             }
@@ -199,14 +211,12 @@ impl Matches {
         matches.reverse();
 
         // Give ids to matches
-        let mut next_match_id = 0;
         let mut id_to_match = Vec::new();
         let mut match_to_id: HashMap<(usize, usize), usize> = HashMap::default();
 
-        for m in matches {
-            id_to_match.push(m);
-            match_to_id.insert(m, next_match_id);
-            next_match_id += 1;
+        for (next_match_id, m) in matches.iter().enumerate() {
+            id_to_match.push(*m);
+            match_to_id.insert(*m, next_match_id);
         }
 
         Self {
@@ -237,9 +247,9 @@ impl Matches {
 
         // Helper function
         fn create_buckets(
-            subgraphs: &Vec<(usize, usize)>,
-            fragments: &Vec<BitSet>,
-            dag: &Vec<DagNode>,
+            subgraphs: &[(usize, usize)],
+            fragments: &[BitSet],
+            dag: &[DagNode],
         ) -> BTreeMap<usize, Vec<(usize, usize)>> {
             let mut buckets: BTreeMap<usize, Vec<(usize, usize)>> = BTreeMap::new();
 
@@ -277,7 +287,7 @@ impl Matches {
             }
         }
 
-        while subgraphs.len() > 0 {
+        while !subgraphs.is_empty() {
             let mut new_subgraphs = Vec::new();
             let mut buckets = create_buckets(&subgraphs, state_fragments, &self.dag);
 
@@ -293,9 +303,7 @@ impl Matches {
 
                         // Order fragments
                         if frag1.1 .0 < frag2.1 .0 {
-                            let temp = frag1;
-                            frag1 = frag2;
-                            frag2 = temp;
+                            std::mem::swap(&mut frag1, &mut frag2);
                         }
 
                         let frag1_bucket_id = frag1.0;
@@ -334,6 +342,8 @@ impl Matches {
         valid_matches
     }
 
+    /// Takes a match ID and returns the two disjoint isomoprhic fragments
+    /// composing this match.
     pub fn match_fragments(&self, match_id: usize) -> (&BitSet, &BitSet) {
         let (frag1_dag_id, frag2_dag_id) = self.id_to_match[match_id];
         let frag1 = &self.dag[frag1_dag_id].fragment;
