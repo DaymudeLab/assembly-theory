@@ -50,13 +50,6 @@ impl From<ParserError> for PyErr {
 // TODO: Is there a clean way of avoiding the duplication of all our various
 // algorithm variant enums?
 
-/// Mirrors the [`EnumerateMode`] enum.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum PyEnumerateMode {
-    Extend,
-    GrowErode,
-}
-
 /// Mirrors the [`CanonizeMode`] enum.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum PyCanonizeMode {
@@ -100,22 +93,6 @@ enum PyBound {
     CoverSort,
     CoverNoSort,
     CliqueBudget,
-}
-
-/// Converts bound options in `&str` format to `PyEnumerateMode`.
-impl FromStr for PyEnumerateMode {
-    type Err = PyErr;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "extend" => Ok(PyEnumerateMode::Extend),
-            "grow-erode" => Ok(PyEnumerateMode::GrowErode),
-            _ => Err(PyValueError::new_err(format!(
-                "Invalid enumeration mode \"{s}\", options are: \
-                [\"extend\", \"grow-erode\"]"
-            ))),
-        }
-    }
 }
 
 /// Converts bound options in `&str` format to `PyCanonizeMode`.
@@ -361,8 +338,6 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 /// # Python Parameters
 ///
 /// - `mol_block`: The contents of a `.mol` file as a `str`.
-/// - `enumerate_str`: An enumeration mode from [`"extend"`, `"grow-erode"`
-/// (default)]. See [`EnumerateMode`] for details.
 /// - `canonize_str`: A canonization mode from [`"nauty"`, `"faulon"`,
 /// `"tree-nauty"` (default), `"tree-faulon"`]. See [`CanonizeMode`] for
 /// details.
@@ -397,7 +372,6 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 /// # Calculate the molecule's assembly index using the specified options.
 /// (index, num_matches, states_searched) = at.index_search(
 ///     mol_block,
-///     "grow-erode",
 ///     "tree-nauty",
 ///     "none",
 ///     "none",
@@ -409,7 +383,7 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 /// print(f"Assembly States Searched: {states_searched}")  # 2562
 /// ```
 #[pyfunction(name = "index_search")]
-#[pyo3(signature = (mol_block, canonize_str="tree-nauty", parallel_str="depth-one", memoize_str="canon-index", kernel_str="none", bound_strs=vec!["int".to_string(), "vec-simple".to_string(), "vec-small-frags".to_string()]), text_signature = "(mol_block, enumerate_str=\"grow-erode\", canonize_str=\"tree-nauty\", parallel_str=\"depth-one\", memoize_str=\"canon-index\", kernel_str=\"none\", bound_strs=[\"int\", \"vec-simple\", \"vec-small-frags\"]))")]
+#[pyo3(signature = (mol_block, canonize_str="tree-nauty", parallel_str="depth-one", memoize_str="canon-index", kernel_str="none", bound_strs=vec!["int".to_string(), "vec-simple".to_string(), "vec-small-frags".to_string()]), text_signature = "(mol_block, canonize_str=\"tree-nauty\", parallel_str=\"depth-one\", memoize_str=\"canon-index\", kernel_str=\"none\", bound_strs=[\"int\", \"vec-simple\", \"vec-small-frags\"]))")]
 pub fn _index_search(
     mol_block: &str,
     canonize_str: &str,

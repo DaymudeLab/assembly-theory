@@ -172,7 +172,7 @@ pub fn recurse_index_search(
         return (state.index(), 1);
     }
 
-    // Generate list of matches to try removing from this state
+    // Generate list of matches to try removing from this state.
     let later_matches = matches.later_matches(state);
 
     // Keep track of the best assembly index found in any of this assembly
@@ -181,7 +181,7 @@ pub fn recurse_index_search(
     let states_searched = AtomicUsize::from(1);
 
     // Define a closure that handles recursing to a new assembly state based on
-    // the given (enumerated) pair of non-overlapping isomorphic subgraphs.
+    // the given match (i.e., pair of non-overlapping isomorphic subgraphs).
     let recurse_on_match = |i: usize, match_id: usize| {
         let (h1, h2) = matches.match_fragments(match_id);
 
@@ -235,10 +235,10 @@ pub fn recurse_index_search(
 /// Compute a molecule's assembly index and related information using a
 /// top-down recursive algorithm, parameterized by the specified options.
 ///
-/// See [`EnumerateMode`], [`CanonizeMode`], [`ParallelMode`], [`KernelMode`],
-/// and [`Bound`] for details on how to customize the algorithm. Notably,
-/// bounds are applied in the order they appear in the `bounds` slice. It is
-/// generally better to provide bounds that are quick to compute first.
+/// See [`CanonizeMode`], [`ParallelMode`], [`KernelMode`], and [`Bound`] for
+/// details on how to customize the algorithm. Notably, bounds are applied in
+/// the order they appear in the `bounds` slice. It is generally better to
+/// provide bounds that are quick to compute first.
 ///
 /// The results returned are:
 /// - The molecule's `u32` assembly index.
@@ -254,7 +254,6 @@ pub fn recurse_index_search(
 ///     assembly::{index_search, ParallelMode},
 ///     bounds::Bound,
 ///     canonize::CanonizeMode,
-///     enumerate::EnumerateMode,
 ///     kernels::KernelMode,
 ///     loader::parse_molfile_str,
 ///     memoize::MemoizeMode,
@@ -270,7 +269,6 @@ pub fn recurse_index_search(
 /// // kernelization, or bounds.
 /// let (slow_index, _, _) = index_search(
 ///     &anthracene,
-///     EnumerateMode::GrowErode,
 ///     CanonizeMode::TreeNauty,
 ///     ParallelMode::None,
 ///     MemoizeMode::None,
@@ -282,7 +280,6 @@ pub fn recurse_index_search(
 /// // some bounds.
 /// let (fast_index, _, _) = index_search(
 ///     &anthracene,
-///     EnumerateMode::GrowErode,
 ///     CanonizeMode::TreeNauty,
 ///     ParallelMode::DepthOne,
 ///     MemoizeMode::CanonIndex,
