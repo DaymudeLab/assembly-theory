@@ -1,5 +1,5 @@
-//! Strucutral information on matches in the molecular graph - pairs of
-//! non-overlapping, isomorphic subgraphs
+//! Strucutral information on "matches" in a molecular graph, i.e., pairs of
+//! edge-disjoint, isomorphic subgraphs.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -13,35 +13,38 @@ use crate::{
     utils::edge_neighbors,
 };
 
-/// Holds data for nodes of the dag
+/// A node in the DAG storing fragment information; see [`Matches`].
 struct DagNode {
-    /// Connected subgraph of the molecule
+    /// The fragment (i.e., connected molecular subgraph) this node represents.
     fragment: BitSet,
-    /// IDs for isomorphism. Two DagNodes have the same canonical_id iff their
-    /// fragments are ismorphic.
+    /// The canonical ID of this node's fragment. Two [`DagNode`]s have the
+    /// same canonical ID iff their fragments are isomorphic.
     canonical_id: usize,
-    /// List of indices of this nodes children. If A is a child of B then
-    /// A.fragment is B.fragment with an additional edge.
+    /// Indices of this node's children/out-neighbors in the DAG. If u is a
+    /// child of v then u.fragment is v.fragment with an additional edge.
     children: Vec<usize>,
 }
 
-/// Structural information on the molecules matches - pairs of nonoverlapping
-/// isomorphic subgraph.
+/// Structural information on "matches" in a molecular graph, i.e., pairs of
+/// edge-disjoint, isomorphic subgraphs.
 pub struct Matches {
-    /// Each node of the dag holds information on a duplicatable subgraph (i.e.
-    /// subgraphs such that there exists a disjoint ismorphic copy of the
-    /// subgraph in the molecule).
+    /// Seet et al. (2024) perform match enumeration by constructing a directed
+    /// acyclic graph (DAG). Each node in this DAG is a fragment (i.e., a
+    /// connected molecular subgraph) that is duplicatable (i.e., there exists
+    /// some other edge-disjoint fragment it is isomorphic to). If there is an
+    /// edge from u to v, then fragment v is fragment u with one added edge
+    /// (note: this new edge may be between two existing nodes in u or "extend"
+    /// from one existing node in u to a new node).
     dag: Vec<DagNode>,
-    /// List of all possible matches stored as a pair of fragment IDs (the
-    /// index of the fragment in the dag).
-    id_to_match: Vec<(usize, usize)>,
-    /// Given a match (as a pair of fragment IDs) returns its match ID, i.e.,
-    /// its index in id_to_match
-    match_to_id: HashMap<(usize, usize), usize>,
+    /// All possible matches (i.e., pairs of edge-disjoint, isomorphic
+    /// fragments) stored as pairs of fragment (i.e., DAG node) indices.
+    matches: Vec<(usize, usize)>,
+    /// Maps pairs of matched fragment indices to their indices in `matches`.
+    match_to_ix: HashMap<(usize, usize), usize>,
 }
 
 impl DagNode {
-    /// Create new [`DagNode`] object.
+    /// Create a new [`DagNode`].
     pub fn new(fragment: BitSet, canonical_id: usize) -> Self {
         Self {
             fragment,
@@ -52,282 +55,220 @@ impl DagNode {
 }
 
 impl Matches {
-    /// Generate [`Matches`] from the given molecule with the specified modes.
+    /// Generate [`Matches`] from the given molecule and canonization mode.
     pub fn new(mol: &Molecule, canonize_mode: CanonizeMode) -> Self {
         let num_edges = mol.graph().edge_count();
-
-        let mut subgraph_ids: Vec<usize> = Vec::new();
-        let mut constructed_frags: HashSet<BitSet> = HashSet::new();
         let mut dag: Vec<DagNode> = Vec::with_capacity(num_edges);
         let mut matches: Vec<(usize, usize)> = Vec::new();
-        let mut next_canonical_id = 1;
 
-        // Helper functions
-        fn add_to_dag(
-            dag: &mut Vec<DagNode>,
-            fragment: &BitSet,
-            parent_id: usize,
-            canonical_id: usize,
-        ) -> usize {
-            // Create new dag node
-            let new_dag_node = DagNode::new(fragment.clone(), canonical_id);
-            let child_id = dag.len();
+        // Generate all singleton edge fragments and add them to the DAG.
+        let mut parent_frag_ixs: Vec<usize> = Vec::new();
+        for i in 0..num_edges {
+            // Create a fragment for the i-th edge in the molecule.
+            let mut frag = BitSet::with_capacity(num_edges);
+            frag.insert(i);
 
-            // Add child to dag list
-            dag.push(new_dag_node);
-
-            // Add index to parent's child list
-            let parent = &mut dag[parent_id];
-            parent.children.push(child_id);
-
-            child_id
+            // Add the fragment to the DAG. Since all singleton edge fragments
+            // are trivially isomorphic, give them the same canonical ID.
+            dag.push(DagNode::new(frag, 0));
+            parent_frag_ixs.push(i);
         }
 
-        fn create_buckets(
-            mol: &Molecule,
-            subgraph_ids: &[usize],
-            dag: &[DagNode],
-            constructed_frags: &mut HashSet<BitSet>,
-            canonize_mode: CanonizeMode,
-        ) -> BTreeMap<Labeling, Vec<(BitSet, usize)>> {
-            let mut buckets: BTreeMap<Labeling, Vec<(BitSet, usize)>> = BTreeMap::new();
-            let num_edges = mol.graph().edge_count();
-
-            for parent_id in subgraph_ids.iter() {
-                let fragment = &dag[*parent_id].fragment;
-
-                // Construct edge neighborhood of fragment
-                let mut neighborhood = BitSet::with_capacity(num_edges);
-                for e in fragment {
-                    neighborhood
+        // Iteratively extend all parent fragments by a single edge to form
+        // child fragments. Add any child fragment that has an edge-disjoint
+        // isomorphic match to the DAG.
+        let mut explored_frags: HashSet<BitSet> = HashSet::new();
+        let mut next_canonical_id = 1;
+        while !parent_frag_ixs.is_empty() {
+            // Extend all parent fragments by one edge and bin them into
+            // isomorphism classes using canonization.
+            let mut isomorphism_classes: BTreeMap<Labeling, Vec<(BitSet, usize)>> = BTreeMap::new();
+            for parent_frag_ix in parent_frag_ixs {
+                // Get this parent fragment's indcident edges.
+                let parent_frag = &dag[parent_frag_ix].fragment;
+                let mut incident_edges = BitSet::with_capacity(num_edges);
+                for e in parent_frag {
+                    incident_edges
                         .extend(edge_neighbors(mol.graph(), EdgeIndex::new(e)).map(|x| x.index()));
                 }
-                neighborhood.difference_with(fragment);
+                incident_edges.difference_with(parent_frag);
 
-                // Extend fragment with edges from neighborhood
-                for e in neighborhood.iter() {
-                    let mut new_fragment = fragment.clone();
-                    new_fragment.insert(e);
+                // Form child fragments by extending this parent fragment by
+                // each of its incident edges one by one, avoiding redundancy.
+                for e in &incident_edges {
+                    let mut child_fragment = parent_frag.clone();
+                    child_fragment.insert(e);
 
-                    // Check if fragment has already been created
-                    // If yes, continue
-                    if constructed_frags.contains(&new_fragment) {
-                        continue;
-                    } else {
-                        constructed_frags.insert(new_fragment.clone());
+                    if explored_frags.insert(child_fragment.clone()) {
+                        isomorphism_classes
+                            .entry(canonize(mol, &child_fragment, canonize_mode))
+                            .and_modify(|c| c.push((child_fragment.clone(), parent_frag_ix)))
+                            .or_insert(vec![(child_fragment, parent_frag_ix)]);
                     }
-
-                    // Bucket subgraph
-                    let canonical_id = canonize(mol, &new_fragment, canonize_mode);
-                    buckets
-                        .entry(canonical_id)
-                        .and_modify(|bucket| bucket.push((new_fragment.clone(), *parent_id)))
-                        .or_insert(vec![(new_fragment, *parent_id)]);
                 }
             }
 
-            buckets
-        }
-
-        // Generate subgraphs with one edge
-        for i in 0..num_edges {
-            let mut new_bitset = BitSet::with_capacity(num_edges);
-            new_bitset.insert(i);
-
-            let node = DagNode::new(new_bitset, 0);
-            dag.push(node);
-            subgraph_ids.push(i);
-        }
-
-        // Generate subgraphs with one more edge than the previous iteration
-        while !subgraph_ids.is_empty() {
-            let mut child_subgraph_ids: Vec<usize> = Vec::new();
-            let buckets = create_buckets(
-                mol,
-                &subgraph_ids,
-                &dag,
-                &mut constructed_frags,
-                canonize_mode,
-            );
-
-            // Go through buckets to create matches
-            for isomorphic_frags in buckets.values() {
-                // Variables to track if a match has been found
+            // Iterate through each isomorphism class, adding fragments forming
+            // a match (i.e., an edge-disjoint isomorphic pair) to the DAG.
+            let mut child_frag_ixs: Vec<usize> = Vec::new();
+            for isomorphic_frags in isomorphism_classes.values() {
+                // Track which fragments in this isomorphism class are matched
+                // and what their fragment (DAG node) indices are.
                 let mut frag_has_match = BitSet::with_capacity(isomorphic_frags.len());
-                let mut index_to_id = HashMap::<usize, usize>::new();
+                let mut iso_to_frag_ix = HashMap::<usize, usize>::new();
 
-                // Loop through pairs of fragments
-                for frag1_index in 0..isomorphic_frags.len() {
-                    for frag2_index in frag1_index + 1..isomorphic_frags.len() {
-                        let (frag1, parent1_id) = &isomorphic_frags[frag1_index];
-                        let (frag2, parent2_id) = &isomorphic_frags[frag2_index];
+                // Check if pairs of isomorphic fragments form a match.
+                for iso_ix1 in 0..isomorphic_frags.len() {
+                    for iso_ix2 in (iso_ix1 + 1)..isomorphic_frags.len() {
+                        let (frag1, frag1_parent_ix) = &isomorphic_frags[iso_ix1];
+                        let (frag2, frag2_parent_ix) = &isomorphic_frags[iso_ix2];
 
+                        // If fragments are edge-disjoint, they are a match.
                         if frag1.is_disjoint(frag2) {
-                            // If this is the first match for a fragment, create a dag node
-                            if !frag_has_match.contains(frag1_index) {
-                                let child_id =
-                                    add_to_dag(&mut dag, frag1, *parent1_id, next_canonical_id);
-                                child_subgraph_ids.push(child_id);
-                                index_to_id.insert(frag1_index, child_id);
+                            // Add matched fragments to the DAG on first match.
+                            if frag_has_match.insert(iso_ix1) {
+                                let frag1_ix = dag.len();
+                                dag.push(DagNode::new(frag1.clone(), next_canonical_id));
+                                dag[*frag1_parent_ix].children.push(frag1_ix);
+                                iso_to_frag_ix.insert(iso_ix1, frag1_ix);
+                                child_frag_ixs.push(frag1_ix);
                             }
-                            if !frag_has_match.contains(frag2_index) {
-                                let child_id =
-                                    add_to_dag(&mut dag, frag2, *parent2_id, next_canonical_id);
-                                child_subgraph_ids.push(child_id);
-                                index_to_id.insert(frag2_index, child_id);
+                            if frag_has_match.insert(iso_ix2) {
+                                let frag2_ix = dag.len();
+                                dag.push(DagNode::new(frag2.clone(), next_canonical_id));
+                                dag[*frag2_parent_ix].children.push(frag2_ix);
+                                iso_to_frag_ix.insert(iso_ix2, frag2_ix);
+                                child_frag_ixs.push(frag2_ix);
                             }
 
-                            // Get fragment ids and add to matches
-                            let frag1_dag_id = index_to_id.get(&frag1_index).unwrap();
-                            let frag2_dag_id = index_to_id.get(&frag2_index).unwrap();
-
-                            if frag1_dag_id > frag2_dag_id {
-                                matches.push((*frag1_dag_id, *frag2_dag_id));
+                            // Store the match using the fragment indices.
+                            let frag1_ix = iso_to_frag_ix.get(&iso_ix1).unwrap();
+                            let frag2_ix = iso_to_frag_ix.get(&iso_ix2).unwrap();
+                            if frag1_ix > frag2_ix {
+                                matches.push((*frag1_ix, *frag2_ix));
                             } else {
-                                matches.push((*frag2_dag_id, *frag1_dag_id));
+                                matches.push((*frag2_ix, *frag1_ix));
                             }
-
-                            // Mark that these fragments have matches
-                            frag_has_match.insert(frag1_index);
-                            frag_has_match.insert(frag2_index);
                         }
                     }
                 }
 
-                // If there was a match, increment canon_id counter
+                // If there was a match, increment to the next canonical ID.
                 if !frag_has_match.is_empty() {
                     next_canonical_id += 1;
                 }
             }
 
-            // Update to the new subgraphs
-            subgraph_ids = child_subgraph_ids;
+            // Use the child fragments as the parents in the next iteration.
+            parent_frag_ixs = child_frag_ixs;
         }
 
-        // Sort matches
-        // Larger frag_ids get a smaller match_id
-        // Thus fragments with many edges have small ids
-        matches.sort();
-        matches.reverse();
+        // Sort matches in descending order of their fragment index pairs. This
+        // puts matches containing fragments with the most edges first.
+        matches.sort_by_key(|m| std::cmp::Reverse(*m));
 
-        // Give ids to matches
-        let mut id_to_match = Vec::new();
-        let mut match_to_id: HashMap<(usize, usize), usize> = HashMap::default();
-
-        for (next_match_id, m) in matches.iter().enumerate() {
-            id_to_match.push(*m);
-            match_to_id.insert(*m, next_match_id);
-        }
+        // Store matches and their indices for easy lookup later.
+        let mut match_to_ix: HashMap<(usize, usize), usize> = HashMap::new();
+        match_to_ix.extend(matches.iter().enumerate().map(|(ix, m)| (*m, ix)));
 
         Self {
             dag,
-            id_to_match,
-            match_to_id,
+            matches,
+            match_to_ix,
         }
     }
 
     /// Return the number of matches.
     pub fn len(&self) -> usize {
-        self.id_to_match.len()
+        self.matches.len()
     }
 
     /// Return `true` if there are no matches.
     pub fn is_empty(&self) -> bool {
-        self.id_to_match.is_empty()
+        self.matches.is_empty()
     }
 
-    /// Return all matches that are later than the last-removed match in the
-    /// given assembly state.
-    pub fn later_matches(&self, state: &State) -> Vec<usize> {
-        let state_fragments = state.fragments();
-        let last_removed = state.last_removed();
+    /// Return all removable matches for the given assembly state.
+    ///
+    /// A match (i.e., two edge-disjoint isomorphic fragments) is removable
+    /// from an assembly state if (1) each match fragment is a subgraph of some
+    /// assembly state fragment, and (2) the match's index is strictly greater
+    /// than that of the last match removed from this assembly state.
+    pub fn matches_to_remove(&self, state: &State) -> Vec<usize> {
+        let mut removable_matches: Vec<usize> = Vec::new();
 
-        let mut valid_matches: Vec<usize> = Vec::new();
-        let mut subgraphs: Vec<(usize, usize)> = Vec::new();
+        // The search for removable matches uses the DAG of duplicatable
+        // fragments, starting with singleton edge fragments (the DAG's source
+        // nodes). Because removable fragments are subgraphs of assembly state
+        // fragments, we track both a fragment's index (in the DAG) and the
+        // indices of assembly state fragments that contain it.
+        let mut frag_state_ixs: Vec<(usize, usize)> = Vec::new();
+        for (state_ix, frag) in state.fragments().iter().enumerate() {
+            frag_state_ixs.extend(frag.iter().map(|e| (e, state_ix)));
+        }
 
-        // Helper function
-        fn create_buckets(
-            subgraphs: &[(usize, usize)],
-            fragments: &[BitSet],
-            dag: &[DagNode],
-        ) -> BTreeMap<usize, Vec<(usize, usize)>> {
-            let mut buckets: BTreeMap<usize, Vec<(usize, usize)>> = BTreeMap::new();
+        // Search for removable matches using BFS over the DAG, only extending
+        // search paths that include fragments contained in removable matches.
+        // (If some duplicatable fragment is not in a removable match, then no
+        // child fragment that extends it with additional edges can be either.)
+        while !frag_state_ixs.is_empty() {
+            // Extend the search by one additional level in the DAG, binning
+            // relevant child fragments into isomorphism classes.
+            let mut isomorphism_classes: BTreeMap<usize, Vec<(usize, usize)>> = BTreeMap::new();
+            for (frag_ix, state_ix) in frag_state_ixs {
+                // Get this fragment's children in the DAG and the assembly
+                // state's fragment that contains it.
+                let child_frag_ixs = &self.dag[frag_ix].children;
+                let state_frag = &state.fragments()[state_ix];
 
-            // Extend each subgraph and bucket
-            for (dag_id, state_id) in subgraphs {
-                let state_fragment = &fragments[*state_id];
-                let children_ids = &dag[*dag_id].children;
-
-                for child_id in children_ids {
-                    let child_node = &dag[*child_id];
-
-                    // Check if this extension is valid
-                    // i.e. the extended subgraph is contained in a fragment of state
-                    let child_fragment = &child_node.fragment;
-                    let valid = child_fragment.is_subset(state_fragment);
-
-                    // Add child fragment to bucket
-                    if valid {
-                        let canonical_id = &child_node.canonical_id;
-                        buckets
-                            .entry(*canonical_id)
-                            .and_modify(|bucket| bucket.push((*child_id, *state_id)))
-                            .or_insert(vec![(*child_id, *state_id)]);
+                // Collect all child fragments that are subgraphs of the state
+                // fragment and bin them into isomorphism classes.
+                for child_frag_ix in child_frag_ixs {
+                    let child_dag_node = &self.dag[*child_frag_ix];
+                    if child_dag_node.fragment.is_subset(state_frag) {
+                        isomorphism_classes
+                            .entry(child_dag_node.canonical_id)
+                            .and_modify(|c| c.push((*child_frag_ix, state_ix)))
+                            .or_insert(vec![(*child_frag_ix, state_ix)]);
                     }
                 }
             }
 
-            buckets
-        }
+            // Iterate through each isomorphism class (containing isomorphic
+            // removable fragments) to identify removable matches.
+            let mut next_frag_state_ixs: Vec<(usize, usize)> = Vec::new();
+            for isomorphic_frags in isomorphism_classes.values_mut() {
+                // Track which fragments in this isomorphism class are matched.
+                let mut frag_has_match = BitSet::with_capacity(isomorphic_frags.len());
 
-        // Create subgraphs of size 1
-        for (state_id, fragment) in state_fragments.iter().enumerate() {
-            for edge_idx in fragment.iter() {
-                subgraphs.push((edge_idx, state_id));
-            }
-        }
-
-        while !subgraphs.is_empty() {
-            let mut new_subgraphs = Vec::new();
-            let mut buckets = create_buckets(&subgraphs, state_fragments, &self.dag);
-
-            for isomorphic_frags in buckets.values_mut() {
-                // Variables to track if a match has been found
-                let mut has_match = BitSet::with_capacity(isomorphic_frags.len());
-
-                // Loop over pairs of fragments
-                for i in 0..isomorphic_frags.len() {
-                    for j in i + 1..isomorphic_frags.len() {
-                        let mut frag1 = (i, isomorphic_frags[i]);
-                        let mut frag2 = (j, isomorphic_frags[j]);
-
-                        // Order fragments
-                        if frag1.1 .0 < frag2.1 .0 {
-                            std::mem::swap(&mut frag1, &mut frag2);
+                // Check if pairs of isomorphic fragments form a match.
+                for iso_ix1 in 0..isomorphic_frags.len() {
+                    for iso_ix2 in (iso_ix1 + 1)..isomorphic_frags.len() {
+                        // Order the fragments by descending fragment index.
+                        let mut frag1_ixs = (isomorphic_frags[iso_ix1], iso_ix1);
+                        let mut frag2_ixs = (isomorphic_frags[iso_ix2], iso_ix2);
+                        if isomorphic_frags[iso_ix1].0 < isomorphic_frags[iso_ix2].0 {
+                            std::mem::swap(&mut frag1_ixs, &mut frag2_ixs);
                         }
 
-                        let frag1_bucket_id = frag1.0;
-                        let frag1_dag_id = frag1.1 .0;
-                        let frag1_state_id = frag1.1 .1;
+                        // Unpack fragment indices.
+                        let ((frag1_ix, frag1_state_ix), frag1_iso_ix) = frag1_ixs;
+                        let ((frag2_ix, frag2_state_ix), frag2_iso_ix) = frag2_ixs;
 
-                        let frag2_bucket_id = frag2.0;
-                        let frag2_dag_id = frag2.1 .0;
-                        let frag2_state_id = frag2.1 .1;
+                        // If these fragments match and occur strictly later
+                        // in the match order than the last match removed by
+                        // this assembly state, they are a removable match.
+                        if let Some(match_ix) = self.match_to_ix.get(&(frag1_ix, frag2_ix)) {
+                            if *match_ix as isize > state.last_removed() {
+                                removable_matches.push(*match_ix);
 
-                        // Check for valid match
-                        if let Some(match_id) = self.match_to_id.get(&(frag1_dag_id, frag2_dag_id))
-                        {
-                            if *match_id as isize > last_removed {
-                                valid_matches.push(*match_id);
-
-                                // If this is the first time seeing that this frag has a match, add it to the new_subgraphs list
-                                if !has_match.contains(frag1_bucket_id) {
-                                    new_subgraphs.push((frag1_dag_id, frag1_state_id));
-                                    has_match.insert(frag1_bucket_id);
+                                // Extend the search for removable matches with
+                                // these fragments on first match.
+                                if frag_has_match.insert(frag1_iso_ix) {
+                                    next_frag_state_ixs.push((frag1_ix, frag1_state_ix));
                                 }
-                                if !has_match.contains(frag2_bucket_id) {
-                                    new_subgraphs.push((frag2_dag_id, frag2_state_id));
-                                    has_match.insert(frag2_bucket_id);
+                                if frag_has_match.insert(frag2_iso_ix) {
+                                    next_frag_state_ixs.push((frag2_ix, frag2_state_ix));
                                 }
                             }
                         }
@@ -335,20 +276,20 @@ impl Matches {
                 }
             }
 
-            subgraphs = new_subgraphs;
+            // Use the updated fragment/state indices in the next iteration.
+            frag_state_ixs = next_frag_state_ixs;
         }
 
-        valid_matches.sort();
-        valid_matches
+        // Sort removable matches in ascending order of match index (i.e.,
+        // those with larger fragments first).
+        removable_matches.sort();
+        removable_matches
     }
 
-    /// Takes a match ID and returns the two disjoint isomoprhic fragments
-    /// composing this match.
-    pub fn match_fragments(&self, match_id: usize) -> (&BitSet, &BitSet) {
-        let (frag1_dag_id, frag2_dag_id) = self.id_to_match[match_id];
-        let frag1 = &self.dag[frag1_dag_id].fragment;
-        let frag2 = &self.dag[frag2_dag_id].fragment;
+    /// Return the two edge-disjoint isomorphic fragments composing this match.
+    pub fn match_fragments(&self, match_ix: usize) -> (&BitSet, &BitSet) {
+        let (frag1_ix, frag2_ix) = self.matches[match_ix];
 
-        (frag1, frag2)
+        (&self.dag[frag1_ix].fragment, &self.dag[frag2_ix].fragment)
     }
 }

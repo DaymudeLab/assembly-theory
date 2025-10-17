@@ -173,7 +173,7 @@ pub fn recurse_index_search(
     }
 
     // Generate list of matches to try removing from this state.
-    let later_matches = matches.later_matches(state);
+    let matches_to_remove = matches.matches_to_remove(state);
 
     // Keep track of the best assembly index found in any of this assembly
     // state's children and the number of states searched, including this one.
@@ -182,8 +182,8 @@ pub fn recurse_index_search(
 
     // Define a closure that handles recursing to a new assembly state based on
     // the given match (i.e., pair of non-overlapping isomorphic subgraphs).
-    let recurse_on_match = |i: usize, match_id: usize| {
-        let (h1, h2) = matches.match_fragments(match_id);
+    let recurse_on_match = |i: usize, match_ix: usize| {
+        let (h1, h2) = matches.match_fragments(match_ix);
 
         if let Some(fragments) = fragments(mol, state.fragments(), h1, h2) {
             // If using depth-one parallelism, all descendant states should be
@@ -215,15 +215,15 @@ pub fn recurse_index_search(
 
     // Use the iterator type corresponding to the specified parallelism mode.
     if parallel_mode == ParallelMode::None {
-        later_matches
+        matches_to_remove
             .iter()
             .enumerate()
-            .for_each(|(i, match_id)| recurse_on_match(i, *match_id));
+            .for_each(|(i, match_ix)| recurse_on_match(i, *match_ix));
     } else {
-        later_matches
+        matches_to_remove
             .par_iter()
             .enumerate()
-            .for_each(|(i, match_id)| recurse_on_match(i, *match_id));
+            .for_each(|(i, match_ix)| recurse_on_match(i, *match_ix));
     }
 
     (
