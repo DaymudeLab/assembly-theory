@@ -10,13 +10,15 @@ readme = "python/README.md"
 requires-python = ">=3.10"
 authors = [
   {name = "Devansh Vimal", email = "dvpatel5@asu.edu"},
-  {name = "Cole Mathis", email = "cole.mathis@asu.edu"},
+  {name = "Garrett Parzych", email = "gparzych@asu.edu"},
   {name = "Joshua Daymude", email = "jdaymude@asu.edu"},
+  {name = "Cole Mathis", email = "cole.mathis@asu.edu"},
 ]
 maintainers = [
   {name = "Devansh Vimal", email = "dvpatel5@asu.edu"},
-  {name = "Cole Mathis", email = "cole.mathis@asu.edu"},
+  {name = "Garrett Parzych", email = "gparzych@asu.edu"},
   {name = "Joshua Daymude", email = "jdaymude@asu.edu"},
+  {name = "Cole Mathis", email = "cole.mathis@asu.edu"},
 ]
 
 [project.urls]
