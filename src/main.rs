@@ -25,7 +25,7 @@ struct Cli {
     #[arg(long)]
     depth: bool,
 
-    /// Print the assembly index, assembly depth, number of non-overlapping
+    /// Print the assembly index, assembly depth, number of edge-disjoint
     /// isomorphic subgraph pairs, and size of the search space. Note that the
     /// search space size is nondeterministic owing to some `HashMap` details.
     #[arg(long)]
@@ -115,7 +115,7 @@ fn main() -> Result<()> {
     // Print final output, depending on --verbose.
     if cli.verbose {
         println!("Assembly Index: {index}");
-        println!("Non-Overlapping Isomorphic Subgraph Pairs: {num_matches}");
+        println!("Edge-Disjoint Isomorphic Subgraph Pairs: {num_matches}");
         println!("Assembly States Searched: {states_searched}");
     } else {
         println!("{index}");

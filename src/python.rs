@@ -357,7 +357,7 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 ///
 /// A 3-tuple containing:
 /// - The molecule's `int` assembly index.
-/// - The molecule's `int` number of non-overlapping isomorphic subgraph pairs.
+/// - The molecule's `int` number of edge-disjoint isomorphic subgraph pairs.
 /// - The `int` number of assembly states searched.
 ///
 /// # Python Example
@@ -379,8 +379,8 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 ///     ["int", "vec-simple", "vec-small-frags"])
 ///
 /// print(f"Assembly Index: {index}")  # 6
-/// print(f"Non-Overlapping Isomorphic Subgraph Pairs: {num_matches}")  # 466
-/// print(f"Assembly States Searched: {states_searched}")  # 2562
+/// print(f"Edge-Disjoint Isomorphic Subgraph Pairs: {num_matches}")  # 466
+/// print(f"Assembly States Searched: {states_searched}")  # 2462
 /// ```
 #[pyfunction(name = "index_search")]
 #[pyo3(signature = (mol_block, canonize_str="tree-nauty", parallel_str="depth-one", memoize_str="canon-index", kernel_str="none", bound_strs=vec!["int".to_string(), "vec-simple".to_string(), "vec-small-frags".to_string()]), text_signature = "(mol_block, canonize_str=\"tree-nauty\", parallel_str=\"depth-one\", memoize_str=\"canon-index\", kernel_str=\"none\", bound_strs=[\"int\", \"vec-simple\", \"vec-small-frags\"]))")]
