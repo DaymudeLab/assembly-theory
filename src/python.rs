@@ -35,7 +35,6 @@ use crate::{
     assembly::{depth, index, index_search, ParallelMode},
     bounds::Bound as OurBound,
     canonize::CanonizeMode,
-    enumerate::EnumerateMode,
     kernels::KernelMode,
     loader::{parse_molfile_str, ParserError},
     memoize::MemoizeMode,
@@ -50,13 +49,6 @@ impl From<ParserError> for PyErr {
 
 // TODO: Is there a clean way of avoiding the duplication of all our various
 // algorithm variant enums?
-
-/// Mirrors the [`EnumerateMode`] enum.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum PyEnumerateMode {
-    Extend,
-    GrowErode,
-}
 
 /// Mirrors the [`CanonizeMode`] enum.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -101,22 +93,6 @@ enum PyBound {
     CoverSort,
     CoverNoSort,
     CliqueBudget,
-}
-
-/// Converts bound options in `&str` format to `PyEnumerateMode`.
-impl FromStr for PyEnumerateMode {
-    type Err = PyErr;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "extend" => Ok(PyEnumerateMode::Extend),
-            "grow-erode" => Ok(PyEnumerateMode::GrowErode),
-            _ => Err(PyValueError::new_err(format!(
-                "Invalid enumeration mode \"{s}\", options are: \
-                [\"extend\", \"grow-erode\"]"
-            ))),
-        }
-    }
 }
 
 /// Converts bound options in `&str` format to `PyCanonizeMode`.
@@ -362,8 +338,6 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 /// # Python Parameters
 ///
 /// - `mol_block`: The contents of a `.mol` file as a `str`.
-/// - `enumerate_str`: An enumeration mode from [`"extend"`, `"grow-erode"`
-/// (default)]. See [`EnumerateMode`] for details.
 /// - `canonize_str`: A canonization mode from [`"nauty"`, `"faulon"`,
 /// `"tree-nauty"` (default), `"tree-faulon"`]. See [`CanonizeMode`] for
 /// details.
@@ -383,7 +357,7 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 ///
 /// A 3-tuple containing:
 /// - The molecule's `int` assembly index.
-/// - The molecule's `int` number of non-overlapping isomorphic subgraph pairs.
+/// - The molecule's `int` number of edge-disjoint isomorphic subgraph pairs.
 /// - The `int` number of assembly states searched.
 ///
 /// # Python Example
@@ -398,7 +372,6 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 /// # Calculate the molecule's assembly index using the specified options.
 /// (index, num_matches, states_searched) = at.index_search(
 ///     mol_block,
-///     "grow-erode",
 ///     "tree-nauty",
 ///     "none",
 ///     "none",
@@ -406,14 +379,13 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 ///     ["int", "vec-simple", "vec-small-frags"])
 ///
 /// print(f"Assembly Index: {index}")  # 6
-/// print(f"Non-Overlapping Isomorphic Subgraph Pairs: {num_matches}")  # 466
-/// print(f"Assembly States Searched: {states_searched}")  # 2562
+/// print(f"Edge-Disjoint Isomorphic Subgraph Pairs: {num_matches}")  # 466
+/// print(f"Assembly States Searched: {states_searched}")  # 2462
 /// ```
 #[pyfunction(name = "index_search")]
-#[pyo3(signature = (mol_block, enumerate_str="grow-erode", canonize_str="tree-nauty", parallel_str="depth-one", memoize_str="canon-index", kernel_str="none", bound_strs=vec!["int".to_string(), "vec-simple".to_string(), "vec-small-frags".to_string()]), text_signature = "(mol_block, enumerate_str=\"grow-erode\", canonize_str=\"tree-nauty\", parallel_str=\"depth-one\", memoize_str=\"canon-index\", kernel_str=\"none\", bound_strs=[\"int\", \"vec-simple\", \"vec-small-frags\"]))")]
+#[pyo3(signature = (mol_block, canonize_str="tree-nauty", parallel_str="depth-one", memoize_str="canon-index", kernel_str="none", bound_strs=vec!["int".to_string(), "vec-simple".to_string(), "vec-small-frags".to_string()]), text_signature = "(mol_block, canonize_str=\"tree-nauty\", parallel_str=\"depth-one\", memoize_str=\"canon-index\", kernel_str=\"none\", bound_strs=[\"int\", \"vec-simple\", \"vec-small-frags\"]))")]
 pub fn _index_search(
     mol_block: &str,
-    enumerate_str: &str,
     canonize_str: &str,
     parallel_str: &str,
     memoize_str: &str,
@@ -428,11 +400,6 @@ pub fn _index_search(
     };
 
     // Parse the various modes and bound options.
-    let enumerate_mode = match PyEnumerateMode::from_str(enumerate_str) {
-        Ok(PyEnumerateMode::Extend) => EnumerateMode::Extend,
-        Ok(PyEnumerateMode::GrowErode) => EnumerateMode::GrowErode,
-        Err(e) => return Err(e),
-    };
     let canonize_mode = match PyCanonizeMode::from_str(canonize_str) {
         Ok(PyCanonizeMode::Nauty) => CanonizeMode::Nauty,
         Ok(PyCanonizeMode::Faulon) => CanonizeMode::Faulon,
@@ -464,7 +431,6 @@ pub fn _index_search(
     // Compute assembly index.
     Ok(index_search(
         &mol,
-        enumerate_mode,
         canonize_mode,
         parallel_mode,
         memoize_mode,

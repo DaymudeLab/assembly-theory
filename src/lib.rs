@@ -49,7 +49,6 @@ pub mod molecule;
 pub mod assembly;
 pub mod bounds;
 pub mod canonize;
-pub mod enumerate;
 pub mod kernels;
 pub mod matches;
 pub mod memoize;

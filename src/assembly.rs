@@ -30,7 +30,6 @@ use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIter
 use crate::{
     bounds::{bound_exceeded, Bound},
     canonize::CanonizeMode,
-    enumerate::EnumerateMode,
     kernels::KernelMode,
     matches::Matches,
     memoize::{Cache, MemoizeMode},
@@ -94,7 +93,7 @@ pub fn depth(mol: &Molecule) -> u32 {
 }
 
 /// Determine the fragments produced from the given assembly state by removing
-/// the given pair of non-overlapping, isomorphic subgraphs and then adding one
+/// the given pair of edge-disjoint, isomorphic subgraphs and then adding one
 /// back; return `None` if not possible.
 fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Option<Vec<BitSet>> {
     // Attempt to find fragments f1 and f2 containing h1 and h2, respectively;
@@ -144,7 +143,7 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Opti
 ///
 /// Inputs:
 /// - `mol`: The molecule whose assembly index is being calculated.
-/// - `matches`: The non-overlapping isomorphic subgraph pairs left to check.
+/// - `matches`: Structural information about the molecule's matched fragments.
 /// - `state`: The current assembly state.
 /// - `best_index`: The smallest assembly index for all assembly states so far.
 /// - `bounds`: The list of bounding strategies to apply.
@@ -173,8 +172,9 @@ pub fn recurse_index_search(
         return (state.index(), 1);
     }
 
-    // Generate list of matches to try removing from this state
-    let later_matches = matches.later_matches(state);
+    // Generate a list of matches (i.e., pairs of edge-disjoint, isomorphic
+    // fragments) to remove from this state.
+    let matches_to_remove = matches.matches_to_remove(state);
 
     // Keep track of the best assembly index found in any of this assembly
     // state's children and the number of states searched, including this one.
@@ -182,8 +182,10 @@ pub fn recurse_index_search(
     let states_searched = AtomicUsize::from(1);
 
     // Define a closure that handles recursing to a new assembly state based on
-    // the given (enumerated) pair of non-overlapping isomorphic subgraphs.
-    let recurse_on_match = |i: usize, h1: &BitSet, h2: &BitSet| {
+    // the given match.
+    let recurse_on_match = |i: usize, match_ix: usize| {
+        let (h1, h2) = matches.match_fragments(match_ix);
+
         if let Some(fragments) = fragments(mol, state.fragments(), h1, h2) {
             // If using depth-one parallelism, all descendant states should be
             // computed serially.
@@ -214,15 +216,15 @@ pub fn recurse_index_search(
 
     // Use the iterator type corresponding to the specified parallelism mode.
     if parallel_mode == ParallelMode::None {
-        later_matches
+        matches_to_remove
             .iter()
             .enumerate()
-            .for_each(|(i, (h1, h2))| recurse_on_match(i, h1, h2));
+            .for_each(|(i, match_ix)| recurse_on_match(i, *match_ix));
     } else {
-        later_matches
+        matches_to_remove
             .par_iter()
             .enumerate()
-            .for_each(|(i, (h1, h2))| recurse_on_match(i, h1, h2));
+            .for_each(|(i, match_ix)| recurse_on_match(i, *match_ix));
     }
 
     (
@@ -234,14 +236,14 @@ pub fn recurse_index_search(
 /// Compute a molecule's assembly index and related information using a
 /// top-down recursive algorithm, parameterized by the specified options.
 ///
-/// See [`EnumerateMode`], [`CanonizeMode`], [`ParallelMode`], [`KernelMode`],
-/// and [`Bound`] for details on how to customize the algorithm. Notably,
-/// bounds are applied in the order they appear in the `bounds` slice. It is
-/// generally better to provide bounds that are quick to compute first.
+/// See [`CanonizeMode`], [`ParallelMode`], [`KernelMode`], and [`Bound`] for
+/// details on how to customize the algorithm. Notably, bounds are applied in
+/// the order they appear in the `bounds` slice. It is generally better to
+/// provide bounds that are quick to compute first.
 ///
 /// The results returned are:
 /// - The molecule's `u32` assembly index.
-/// - The molecule's `u32` number of non-overlapping isomorphic subgraph pairs.
+/// - The molecule's `u32` number of edge-disjoint isomorphic subgraph pairs.
 /// - The `usize` total number of assembly states searched, where an assembly
 ///   state is a collection of fragments. Note that, depending on the algorithm
 ///   parameters used, some states may be searched/counted multiple times.
@@ -253,7 +255,6 @@ pub fn recurse_index_search(
 ///     assembly::{index_search, ParallelMode},
 ///     bounds::Bound,
 ///     canonize::CanonizeMode,
-///     enumerate::EnumerateMode,
 ///     kernels::KernelMode,
 ///     loader::parse_molfile_str,
 ///     memoize::MemoizeMode,
@@ -269,7 +270,6 @@ pub fn recurse_index_search(
 /// // kernelization, or bounds.
 /// let (slow_index, _, _) = index_search(
 ///     &anthracene,
-///     EnumerateMode::GrowErode,
 ///     CanonizeMode::TreeNauty,
 ///     ParallelMode::None,
 ///     MemoizeMode::None,
@@ -281,7 +281,6 @@ pub fn recurse_index_search(
 /// // some bounds.
 /// let (fast_index, _, _) = index_search(
 ///     &anthracene,
-///     EnumerateMode::GrowErode,
 ///     CanonizeMode::TreeNauty,
 ///     ParallelMode::DepthOne,
 ///     MemoizeMode::CanonIndex,
@@ -296,7 +295,6 @@ pub fn recurse_index_search(
 /// ```
 pub fn index_search(
     mol: &Molecule,
-    enumerate_mode: EnumerateMode,
     canonize_mode: CanonizeMode,
     parallel_mode: ParallelMode,
     memoize_mode: MemoizeMode,
@@ -308,8 +306,8 @@ pub fn index_search(
         panic!("The chosen --kernel mode is not implemented yet!")
     }
 
-    // Enumerate non-overlapping isomorphic subgraph pairs.
-    let matches = Matches::new(mol, enumerate_mode, canonize_mode, parallel_mode);
+    // Enumerate matches (i.e., pairs of edge-disjoint isomorphic fragments).
+    let matches = Matches::new(mol, canonize_mode);
 
     // Create memoization cache.
     let mut cache = Cache::new(memoize_mode, canonize_mode);
@@ -355,7 +353,6 @@ pub fn index_search(
 pub fn index(mol: &Molecule) -> u32 {
     index_search(
         mol,
-        EnumerateMode::GrowErode,
         CanonizeMode::TreeNauty,
         ParallelMode::DepthOne,
         MemoizeMode::CanonIndex,

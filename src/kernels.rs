@@ -2,7 +2,7 @@
 //!
 //! The problem of computing the minimum assembly index of a molecule can be
 //! reduced to finding the maximum weight clique in a compatibility graph over
-//! matches (i.e., pairs of non-overlapping isomorphic subgraphs). Strucutral
+//! matches (i.e., pairs of edge-disjoint isomorphic subgraphs). Strucutral
 //! properties of this graph can be used to determine match pairs (i.e., nodes)
 //! that *definitely will* or *definitely won't* be used in an optimal
 //! solution. We call the process of identifying these nodes *kernelization*.

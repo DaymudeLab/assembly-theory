@@ -66,14 +66,13 @@ def test_index_search():
 
     (index, num_matches, states_searched) = at.index_search(
             mol_block,
-            "grow-erode",
             "tree-nauty",
             "none",  # Disable parallelism for deterministic states_searched.
             "none",
             "none",
             ["int", "vec-simple", "vec-small-frags"])
 
-    assert (index, num_matches, states_searched) == (6, 466, 2562)
+    assert (index, num_matches, states_searched) == (6, 466, 2462)
 
 
 def test_index_search_bad_molblock():
@@ -81,16 +80,6 @@ def test_index_search_bad_molblock():
         at.index_search("This string is not the contents of a .mol file.")
 
     assert e.type is OSError
-
-
-def test_index_search_bad_enumerate():
-    with open(osp.join('data', 'checks', 'anthracene.mol')) as f:
-        mol_block = f.read()
-
-    with pytest.raises(ValueError) as e:
-        at.index_search(mol_block, enumerate_str="invalid-mode")
-
-    assert e.type is ValueError and "Invalid enumeration" in str(e.value)
 
 
 def test_index_search_bad_canonize():

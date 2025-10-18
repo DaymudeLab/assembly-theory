@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     ffi::OsStr,
     fs,
     path::Path,
@@ -7,14 +6,12 @@ use std::{
     time::{Duration, Instant},
 };
 
-use bit_set::BitSet;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 
 use assembly_theory::{
     assembly::{recurse_index_search, ParallelMode},
     bounds::Bound,
-    canonize::{canonize, CanonizeMode},
-    enumerate::{enumerate_subgraphs, EnumerateMode},
+    canonize::CanonizeMode,
     loader::parse_molfile_str,
     matches::Matches,
     memoize::{Cache, MemoizeMode},
@@ -41,51 +38,14 @@ fn load_dataset_molecules(dataset: &str) -> Vec<Molecule> {
     mol_list
 }
 
-/// Benchmark the first step of [`index_search`] which enumerates all connected
-/// non-induced subgraphs with at most |E|/2 edges.
+/// Benchmark the first step of [`index_search`] which computes all structural
+/// information related to "matches" (i.e., pairs of edge-disjoint, isomorphic,
+/// connected, non-induced subgraphs).
 ///
 /// This benchmark preloads all dataset .mol files as [`Molecule`]s and then
-/// times only the [`enumerate_subgraphs`] function for each [`EnumerateMode`].
-pub fn bench_enumerate(c: &mut Criterion) {
-    let mut bench_group = c.benchmark_group("bench_enumerate");
-
-    // Define datasets and enumeration modes. EnumerateMode::ExtendIsomorphic
-    // is not included here because it combines enumeration and canonization.
-    let datasets = ["gdb13_1201", "gdb17_200", "checks", "coconut_55"];
-    let enumerate_modes = [
-        (EnumerateMode::Extend, "extend"),
-        (EnumerateMode::GrowErode, "grow-erode"),
-    ];
-
-    // Run a benchmark for each dataset and enumeration mode.
-    for dataset in &datasets {
-        let mol_list = load_dataset_molecules(dataset);
-        for (enumerate_mode, name) in &enumerate_modes {
-            bench_group.bench_with_input(
-                BenchmarkId::new(*dataset, &name),
-                &enumerate_mode,
-                |b, &enumerate_mode| {
-                    b.iter(|| {
-                        for mol in &mol_list {
-                            enumerate_subgraphs(mol, *enumerate_mode);
-                        }
-                    });
-                },
-            );
-        }
-    }
-
-    bench_group.finish();
-}
-
-/// Benchmark the second step of [`index_search`] which bins connected,
-/// non-induced subgraphs into isomorphism classes.
-///
-/// This benchmark preloads all dataset .mol files as [`Molecule`]s and uses
-/// the fastest option for [`enumerate_subgraphs`] to get their subgraphs. It
-/// times only the creation of isomorphism classes for each [`CanonizeMode`].
-pub fn bench_canonize(c: &mut Criterion) {
-    let mut bench_group = c.benchmark_group("bench_canonize");
+/// times only the [`Matches::new`] function for each [`CanonizeMode`].
+pub fn bench_matches(c: &mut Criterion) {
+    let mut bench_group = c.benchmark_group("bench_matches");
 
     // Define datasets and canonization modes.
     let datasets = ["gdb13_1201", "gdb17_200", "checks", "coconut_55"];
@@ -102,26 +62,10 @@ pub fn bench_canonize(c: &mut Criterion) {
                 BenchmarkId::new(*dataset, &name),
                 &canonize_mode,
                 |b, &canonize_mode| {
-                    b.iter_custom(|iters| {
-                        let mut total_time = Duration::new(0, 0);
+                    b.iter(|| {
                         for mol in &mol_list {
-                            // Precompute subgraph enumeration.
-                            let subgraphs = enumerate_subgraphs(mol, EnumerateMode::GrowErode);
-
-                            // Benchmark the isomorphism class creation.
-                            for _ in 0..iters {
-                                let start = Instant::now();
-                                let mut isomorphism_classes = HashMap::<_, Vec<BitSet>>::new();
-                                for subgraph in &subgraphs {
-                                    isomorphism_classes
-                                        .entry(canonize(mol, &subgraph, *canonize_mode))
-                                        .and_modify(|bucket| bucket.push(subgraph.clone()))
-                                        .or_insert(vec![subgraph.clone()]);
-                                }
-                                total_time += start.elapsed();
-                            }
+                            Matches::new(mol, *canonize_mode);
                         }
-                        total_time
                     });
                 },
             );
@@ -133,9 +77,9 @@ pub fn bench_canonize(c: &mut Criterion) {
 
 /// Benchmark the search step of [`index_search`] using different [`Bound`]s.
 ///
-/// This benchmark precomputes the enumeration and isomorphism steps using the
-/// fastest options and times only the search step for different combinations
-/// of [`Bound`]s. This benchmark otherwise uses the default search options.
+/// This benchmark precomputes matches information using the fastest options
+/// and times only the search step for different combinations of [`Bound`]s.
+/// This benchmark otherwise uses the default search options.
 pub fn bench_bounds(c: &mut Criterion) {
     let mut bench_group = c.benchmark_group("bench_bounds");
 
@@ -163,12 +107,7 @@ pub fn bench_bounds(c: &mut Criterion) {
                         let mut total_time = Duration::new(0, 0);
                         for mol in &mol_list {
                             // Precompute the molecule's matches and setup.
-                            let matches = Matches::new(
-                                mol,
-                                EnumerateMode::GrowErode,
-                                CanonizeMode::TreeNauty,
-                                ParallelMode::DepthOne,
-                            );
+                            let matches = Matches::new(mol, CanonizeMode::TreeNauty);
                             let state = State::new(mol);
                             let edge_count = mol.graph().edge_count();
 
@@ -203,9 +142,9 @@ pub fn bench_bounds(c: &mut Criterion) {
 /// Benchmark the search step of [`index_search`] using different
 /// [`MemoizeMode`]s.
 ///
-/// This benchmark precomputes the enumeration and isomorphism steps using the
-/// fastest options and times only the search step for different
-/// [`MemoizeMode`]s. This benchmark otherwise uses the default search options.
+/// This benchmark precomputes matches information using the fastest options
+/// and times only the search step for different [`MemoizeMode`]s. This
+/// benchmark otherwise uses the default search options.
 pub fn bench_memoize(c: &mut Criterion) {
     let mut bench_group = c.benchmark_group("bench_memoize");
 
@@ -233,12 +172,7 @@ pub fn bench_memoize(c: &mut Criterion) {
                         let mut total_time = Duration::new(0, 0);
                         for mol in &mol_list {
                             // Precompute the molecule's matches and setup.
-                            let matches = Matches::new(
-                                mol,
-                                EnumerateMode::GrowErode,
-                                CanonizeMode::TreeNauty,
-                                ParallelMode::DepthOne,
-                            );
+                            let matches = Matches::new(mol, CanonizeMode::TreeNauty);
                             let state = State::new(mol);
                             let edge_count = mol.graph().edge_count();
 
@@ -272,6 +206,6 @@ pub fn bench_memoize(c: &mut Criterion) {
 criterion_group! {
     name = benchmark;
     config = Criterion::default().sample_size(20);
-    targets = bench_enumerate, bench_canonize, bench_bounds, bench_memoize
+    targets = bench_matches, bench_bounds, bench_memoize
 }
 criterion_main!(benchmark);

@@ -8,7 +8,6 @@ use assembly_theory::{
     assembly::{index_search, ParallelMode},
     bounds::Bound,
     canonize::CanonizeMode,
-    enumerate::EnumerateMode,
     kernels::KernelMode,
     loader::parse_molfile_str,
     memoize::MemoizeMode,
@@ -40,7 +39,6 @@ fn load_ma_index(dataset: &str) -> HashMap<String, u32> {
 
 fn test_reference_dataset(
     dataset: &str,
-    enumerate_mode: EnumerateMode,
     canonize_mode: CanonizeMode,
     parallel_mode: ParallelMode,
     memoize_mode: MemoizeMode,
@@ -75,7 +73,6 @@ fn test_reference_dataset(
         // Calculate the molecule's assembly index.
         let (index, _, _) = index_search(
             &mol,
-            enumerate_mode,
             canonize_mode,
             parallel_mode,
             memoize_mode,
@@ -101,24 +98,6 @@ fn test_reference_dataset(
     assert!(incorrect_mols.is_empty(), "{}", error_details);
 }
 
-/// Test enumeration modes individually without any search options.
-///
-/// This is very slow, so use gdb13_1201, the smallest dataset.
-#[test]
-fn enumeration() {
-    for enumerate_mode in [EnumerateMode::Extend, EnumerateMode::GrowErode] {
-        test_reference_dataset(
-            "gdb13_1201",
-            enumerate_mode,
-            CanonizeMode::TreeNauty,
-            ParallelMode::None,
-            MemoizeMode::None,
-            KernelMode::None,
-            &[],
-        );
-    }
-}
-
 /// Test canonization modes individually without any search options.
 ///
 /// This is very slow, so use gdb13_1201, the smallest dataset.
@@ -127,7 +106,6 @@ fn canonization() {
     for canonize_mode in [CanonizeMode::Nauty, CanonizeMode::TreeNauty] {
         test_reference_dataset(
             "gdb13_1201",
-            EnumerateMode::GrowErode,
             canonize_mode,
             ParallelMode::None,
             MemoizeMode::None,
@@ -156,7 +134,6 @@ fn memoization() {
     ] {
         test_reference_dataset(
             "gdb13_1201",
-            EnumerateMode::GrowErode,
             canonize_mode,
             ParallelMode::DepthOne,
             memoize_mode,
@@ -168,9 +145,9 @@ fn memoization() {
 
 /// Test bounds individually.
 ///
-/// The enumeration/canonization tests did not use bounds, so this tests one
-/// actual bound at a time. Bounds don't have any race conditions, so this test
-/// uses parallelism, but avoids any other search options.
+/// The canonization test did not use bounds, so this tests one actual bound at
+/// a time. Bounds don't have any race conditions, so this test uses
+/// parallelism, but avoids any other search options.
 #[test]
 fn individual_bounds() {
     for bound in [
@@ -181,7 +158,6 @@ fn individual_bounds() {
     ] {
         test_reference_dataset(
             "checks",
-            EnumerateMode::GrowErode,
             CanonizeMode::TreeNauty,
             ParallelMode::DepthOne,
             MemoizeMode::None,
@@ -196,7 +172,6 @@ fn individual_bounds() {
 fn all_bounds() {
     test_reference_dataset(
         "coconut_55",
-        EnumerateMode::GrowErode,
         CanonizeMode::TreeNauty,
         ParallelMode::DepthOne,
         MemoizeMode::None,
@@ -215,7 +190,6 @@ fn all_bounds() {
 fn memoize_bounds() {
     test_reference_dataset(
         "coconut_55",
-        EnumerateMode::GrowErode,
         CanonizeMode::TreeNauty,
         ParallelMode::DepthOne,
         MemoizeMode::CanonIndex,
