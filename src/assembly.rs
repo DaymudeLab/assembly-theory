@@ -174,7 +174,7 @@ pub fn recurse_index_search(
 
     // Generate a list of matches (i.e., pairs of edge-disjoint, isomorphic
     // fragments) to remove from this state.
-    let matches_to_remove = matches.matches_to_remove(state);
+    let matches_to_remove = matches.matches_to_remove(mol, state);
 
     // Keep track of the best assembly index found in any of this assembly
     // state's children and the number of states searched, including this one.
