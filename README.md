@@ -11,8 +11,19 @@ It is implemented in Rust and is available as a [Rust crate](https://crates.io/c
 
 ## Getting Started
 
-If you want to use the Rust crate in a Rust project, refer to the [docs.rs](https://docs.rs/assembly-theory) documentation for installation and usage examples.
-If you want to use the Python library (e.g., to take advantage of RDKit-compatible molecule loaders), refer to the documentation on [PyPI](https://pypi.org/project/assembly-theory/).
+If you want to use the `assembly-theory` Rust crate in a Rust project, install as follows and refer to the [docs.rs](https://docs.rs/assembly-theory) documentation for usage examples.
+
+```shell
+cargo add assembly-theory
+```
+
+If you want to use the Python library (e.g., to take advantage of RDKit-compatible molecule loaders), install `assembly-theory` using a Python virtual environment manager of your choosing and refer to the documentation on [PyPI](https://pypi.org/project/assembly-theory/) for usage examples.
+
+```shell
+pip install assembly-theory   # Using pip.
+pipx install assembly-theory  # Using pipx.
+uv add assembly-theory        # Using uv.
+```
 
 Otherwise, clone/download this repository if you want to:
 
