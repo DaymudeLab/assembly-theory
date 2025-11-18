@@ -333,6 +333,9 @@ pub fn index_search(
 
 /// Compute a molecule's assembly index using an efficient default strategy.
 ///
+/// To customize assembly index calculation beyond the default strategy, see
+/// [`index_search`].
+///
 /// # Example
 /// ```
 /// # use std::{fs, path::PathBuf};
