@@ -84,6 +84,9 @@ anthracene = Chem.MolToMolBlock(anthracene)
 at.index(anthracene)  # 6
 ```
 
+
+## API Reference
+
 See the [`assembly_theory::python` documentation](https://docs.rs/assembly-theory/latest/assembly_theory/python) for a complete list of functions exposed to this package along with usage examples.
 
 
