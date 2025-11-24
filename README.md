@@ -11,8 +11,19 @@ It is implemented in Rust and is available as a [Rust crate](https://crates.io/c
 
 ## Getting Started
 
-If you want to use the Rust crate in a Rust project, refer to the [docs.rs](https://docs.rs/assembly-theory) documentation for installation and usage examples.
-If you want to use the Python library (e.g., to take advantage of RDKit-compatible molecule loaders), refer to the documentation on [PyPI](https://pypi.org/project/assembly-theory/).
+If you want to use the `assembly-theory` Rust crate in a Rust project, install as follows and refer to the [docs.rs](https://docs.rs/assembly-theory) documentation for usage examples.
+
+```shell
+cargo add assembly-theory
+```
+
+If you want to use the Python library (e.g., to take advantage of RDKit-compatible molecule loaders), install `assembly-theory` using a Python virtual environment manager of your choosing and refer to the documentation on [PyPI](https://pypi.org/project/assembly-theory/) for usage examples.
+
+```shell
+pip install assembly-theory   # Using pip.
+pipx install assembly-theory  # Using pipx.
+uv add assembly-theory        # Using uv.
+```
 
 Otherwise, clone/download this repository if you want to:
 
@@ -107,7 +118,13 @@ at.index(anthracene)  # 6
 
 See the [`assembly_theory::python` documentation](https://docs.rs/assembly-theory/latest/assembly_theory/python) for a complete list of functions exposed to the Python package along with usage examples.
 
-To run the Python test suite, install [`pytest`](https://pypi.org/project/pytest/) in your virtual environment and then simply run `pytest`.
+To run the Python test suite, install [`pytest`](https://pypi.org/project/pytest/) in your virtual environment as follows and then simply run `pytest`.
+
+```shell
+pip install pytest   # using pip
+pipx install pytest  # using pipx
+uv add --dev pytest  # using uv
+```
 
 
 ## Known Issues
