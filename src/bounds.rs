@@ -58,7 +58,7 @@ pub enum Bound {
     /// possible savings obtainable for each fragment.
     CliqueBudget,
 
-    DagIntBound,
+    DagInt,
 }
 
 /// Edge information used in vector addition chain bounds.
@@ -79,26 +79,18 @@ pub fn dag_bounds(state_index: usize, best: usize, masks: &Vec<Vec<BitSet>>, bou
             }
 
             match bound_type {
-                Bound::DagIntBound => {
+                Bound::DagInt => {
                     let mut bound = 0;
-                    let i = i + 2;
+                    let removal_size = i + 2;
                     for (j, frag) in list.iter().enumerate() {
-                        let mf = masks[0][j].len();
-                        let mi = frag.len();
-                        let x = mf + (mi % i) - mi;
-                        bound += mf - (mi / i) - (x+i-2) / (i-1);
+                        let total_removable_edges = masks[0][j].len();
+                        let removable_edges = frag.len();
+                        let leftover_edges = (total_removable_edges - removable_edges) + (removable_edges % removal_size);
+                        bound += total_removable_edges - (removable_edges / removal_size) - leftover_edges.div_ceil(removal_size - 1);
                     }
-                    let log: usize = (i as f32).log2().ceil() as usize;
-                    bound = {
-                        if log > bound {
-                            0
-                        }
-                        else {
-                            bound - log
-                        }
-                    };
+                    bound = bound.saturating_sub((removal_size as f32).log2().ceil() as usize);
 
-                    if state_index - bound >= best {
+                    if state_index >= best + bound {
                         stop = true;
                     }
                 }
