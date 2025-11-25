@@ -57,8 +57,9 @@ pub enum Bound {
     /// subraphs remaining in each fragment. Uses this to bound the best
     /// possible savings obtainable for each fragment.
     CliqueBudget,
-
-    DagInt,
+    /// Similar to [`Bound::Int`], but uses only matchable edges, as computed
+    /// in [`crate::matches::Matches::matches_to_remove`].
+    UsableEdges,
 }
 
 /// Edge information used in vector addition chain bounds.
@@ -68,56 +69,8 @@ struct EdgeType {
     ends: (Element, Element),
 }
 
-pub fn dag_bounds(
-    state_index: usize,
-    best: usize,
-    masks: &Vec<Vec<BitSet>>,
-    bounds: &[Bound],
-) -> usize {
-    let mut smallest_to_remove = 2;
-
-    for (i, list) in masks.iter().enumerate() {
-        let mut stop = false;
-        for bound_type in bounds {
-            if stop {
-                break;
-            }
-
-            match bound_type {
-                Bound::DagInt => {
-                    let mut bound = 0;
-                    let removal_size = i + 2;
-                    for (j, frag) in list.iter().enumerate() {
-                        let total_removable_edges = masks[0][j].len();
-                        let removable_edges = frag.len();
-                        let leftover_edges = (total_removable_edges - removable_edges)
-                            + (removable_edges % removal_size);
-                        bound += total_removable_edges
-                            - (removable_edges / removal_size)
-                            - leftover_edges.div_ceil(removal_size - 1);
-                    }
-                    bound = bound.saturating_sub((removal_size as f32).log2().ceil() as usize);
-
-                    if state_index >= best + bound {
-                        stop = true;
-                    }
-                }
-                _ => (),
-            }
-        }
-
-        if stop {
-            smallest_to_remove += 1;
-        } else {
-            break;
-        }
-    }
-
-    smallest_to_remove
-}
-
 /// Return `true` iff any of the given bounds would prune this assembly state.
-pub fn bound_exceeded(mol: &Molecule, state: &State, best_index: usize, bounds: &[Bound]) -> bool {
+pub fn state_bounds(mol: &Molecule, state: &State, best_index: usize, bounds: &[Bound]) -> bool {
     let fragments = state.fragments();
     let state_index = state.index();
     let largest_removed = state.largest_removed();
@@ -132,9 +85,7 @@ pub fn bound_exceeded(mol: &Molecule, state: &State, best_index: usize, bounds: 
             Bound::VecSmallFrags => {
                 state_index - vec_small_frags_bound(fragments, largest_removed, mol) >= best_index
             }
-            _ => false, // {
-                        //     panic!("One of the chosen bounds is not implemented yet!")
-                        // }
+            _ => false,
         };
         if exceeds {
             return true;
@@ -288,4 +239,64 @@ fn vec_small_frags_bound(fragments: &[BitSet], m: usize, mol: &Molecule) -> usiz
 
     s - (z + size_two_types.len() + size_two_fragments.len())
         - ((sl - z) as f32 / m as f32).ceil() as usize
+}
+
+/// Returns the largest match removal size that could potentially lead to an
+/// improved assembly index from this state. Used within the
+/// [`crate::matches::Matches::matches_to_remove`] function, after computing
+/// the matchable edges.
+pub fn match_bounds(
+    state_index: usize,
+    best_index: usize,
+    matchable_edge_masks: &Vec<Vec<BitSet>>,
+    bounds: &[Bound],
+) -> usize {
+    let mut smallest_to_remove = 2;
+
+    // Test different match removal sizes.
+    for removal_size in 2..matchable_edge_masks.len() + 2 {
+        let mut bounded = false;
+
+        for bound_type in bounds {
+            bounded |= match bound_type {
+                Bound::UsableEdges => {
+                    state_index
+                        >= usable_edges_bound(matchable_edge_masks, removal_size) + best_index
+                }
+                _ => false,
+            };
+
+            if bounded {
+                break;
+            }
+        }
+
+        // If a bound says that a better assembly index can not be reached
+        // using removals of this size, increment smallest_to_remove and try
+        // the next size.
+        if bounded {
+            smallest_to_remove += 1;
+        } else {
+            break;
+        }
+    }
+
+    smallest_to_remove
+}
+
+/// TODO
+pub fn usable_edges_bound(matchable_edge_masks: &Vec<Vec<BitSet>>, removal_size: usize) -> usize {
+    let mut bound = 0;
+
+    for (frag_ix, frag) in matchable_edge_masks[removal_size - 2].iter().enumerate() {
+        let total_removable_edges = matchable_edge_masks[0][frag_ix].len();
+        let removable_edges = frag.len();
+        let leftover_edges =
+            (total_removable_edges - removable_edges) + (removable_edges % removal_size);
+        bound += total_removable_edges
+            - (removable_edges / removal_size)
+            - leftover_edges.div_ceil(removal_size - 1);
+    }
+
+    bound.saturating_sub((removal_size as f32).log2().ceil() as usize)
 }

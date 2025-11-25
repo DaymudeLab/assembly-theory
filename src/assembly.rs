@@ -28,7 +28,7 @@ use clap::ValueEnum;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
-    bounds::Bound,
+    bounds::{state_bounds, Bound},
     canonize::CanonizeMode,
     kernels::KernelMode,
     matches::Matches,
@@ -166,8 +166,7 @@ pub fn recurse_index_search(
 ) -> (usize, usize) {
     // If any bounds would prune this assembly state or if memoization is
     // enabled and this assembly state is preempted by the cached state, halt.
-    if crate::bounds::bound_exceeded(mol, state, best_index.load(Relaxed), bounds)
-        || cache.memoize_state(mol, state)
+    if state_bounds(mol, state, best_index.load(Relaxed), bounds) || cache.memoize_state(mol, state)
     {
         return (state.index(), 1);
     }

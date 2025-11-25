@@ -7,7 +7,7 @@ use bit_set::BitSet;
 use petgraph::graph::EdgeIndex;
 
 use crate::{
-    bounds::{dag_bounds, Bound},
+    bounds::{match_bounds, Bound},
     canonize::{canonize, CanonizeMode, Labeling},
     molecule::Molecule,
     state::State,
@@ -342,7 +342,7 @@ impl Matches {
 
         // Use bounds to find the size of the smallest removable match that can
         // possibly result in an improved assembly index.
-        let smallest_to_remove = dag_bounds(state.index(), best, &matchable_edge_masks, bounds);
+        let smallest_to_remove = match_bounds(state.index(), best, &matchable_edge_masks, bounds);
 
         // Use the stored isomorphism classes to generate removable matches
         // (pairs of edge disjoint, isomorphic fragments.)
