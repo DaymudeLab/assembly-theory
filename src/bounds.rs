@@ -57,6 +57,8 @@ pub enum Bound {
     /// subraphs remaining in each fragment. Uses this to bound the best
     /// possible savings obtainable for each fragment.
     CliqueBudget,
+
+    DagIntBound,
 }
 
 /// Edge information used in vector addition chain bounds.
@@ -64,6 +66,55 @@ pub enum Bound {
 struct EdgeType {
     bond: Bond,
     ends: (Element, Element),
+}
+
+pub fn dag_bounds(state_index: usize, best: usize, masks: &Vec<Vec<BitSet>>, bounds: &[Bound]) -> usize {
+    let mut smallest_to_remove = 2;
+
+    for (i, list) in masks.iter().enumerate() {
+        let mut stop = false;
+        for bound_type in bounds {
+            if stop {
+                break;
+            }
+
+            match bound_type {
+                Bound::DagIntBound => {
+                    let mut bound = 0;
+                    let i = i + 2;
+                    for (j, frag) in list.iter().enumerate() {
+                        let mf = masks[0][j].len();
+                        let mi = frag.len();
+                        let x = mf + (mi % i) - mi;
+                        bound += mf - (mi / i) - (x+i-2) / (i-1);
+                    }
+                    let log: usize = (i as f32).log2().ceil() as usize;
+                    bound = {
+                        if log > bound {
+                            0
+                        }
+                        else {
+                            bound - log
+                        }
+                    };
+
+                    if state_index - bound >= best {
+                        stop = true;
+                    }
+                }
+                _ => ()
+            }
+        }
+
+        if stop {
+            smallest_to_remove += 1;
+        }
+        else {
+            break;
+        }
+    }
+
+    smallest_to_remove
 }
 
 /// Return `true` iff any of the given bounds would prune this assembly state.
@@ -82,9 +133,10 @@ pub fn bound_exceeded(mol: &Molecule, state: &State, best_index: usize, bounds: 
             Bound::VecSmallFrags => {
                 state_index - vec_small_frags_bound(fragments, largest_removed, mol) >= best_index
             }
-            _ => {
-                panic!("One of the chosen bounds is not implemented yet!")
-            }
+            _ => false
+            // {
+            //     panic!("One of the chosen bounds is not implemented yet!")
+            // }
         };
         if exceeds {
             return true;

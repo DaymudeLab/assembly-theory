@@ -7,10 +7,7 @@ use bit_set::BitSet;
 use petgraph::graph::EdgeIndex;
 
 use crate::{
-    canonize::{canonize, CanonizeMode, Labeling},
-    molecule::Molecule,
-    state::State,
-    utils::edge_neighbors,
+    bounds::{Bound, dag_bounds}, canonize::{CanonizeMode, Labeling, canonize}, molecule::Molecule, state::State, utils::{connected_components_under_edges, edge_neighbors}
 };
 
 /// A node in the DAG storing fragment information; see [`Matches`].
@@ -194,7 +191,7 @@ impl Matches {
     /// from an assembly state if (1) each match fragment is a subgraph of some
     /// assembly state fragment, and (2) the match's index is strictly greater
     /// than that of the last match removed from this assembly state.
-    pub fn matches_to_remove(&self, mol: &Molecule, state: &State) -> Vec<usize> {
+    pub fn matches_to_remove(&self, mol: &Molecule, state: &State, best: usize, bounds: &[Bound]) -> (Vec<BitSet>, Vec<usize>) {
         // The search for removable matches uses the DAG of duplicatable
         // fragments, starting with singleton edge fragments (the DAG's source
         // nodes). Because removable fragments are subgraphs of assembly state
@@ -247,6 +244,10 @@ impl Matches {
                 // Check if pairs of isomorphic fragments form a match.
                 for iso_ix1 in 0..isomorphic_frags.len() {
                     for iso_ix2 in (iso_ix1 + 1)..isomorphic_frags.len() {
+                        if frag_has_match.contains(iso_ix1) && frag_has_match.contains(iso_ix2) {
+                            continue;
+                        }
+
                         // Order the fragments by descending fragment index.
                         let mut frag1_ixs = (isomorphic_frags[iso_ix1], iso_ix1);
                         let mut frag2_ixs = (isomorphic_frags[iso_ix2], iso_ix2);
@@ -296,10 +297,33 @@ impl Matches {
             frag_state_ixs = next_frag_state_ixs;
         }
 
+        masks.pop();
+
+        let intermediate_frags = {
+            if masks.len() >= 1 {
+                masks[0]
+                .iter()
+                .flat_map(|frag| connected_components_under_edges(mol.graph(), frag))
+                .filter(|frag| frag.len() >= 2)
+                .collect::<Vec<BitSet>>()
+            }
+            else {
+                vec![]
+            }
+        };
+
+        // Bound
+        let smallest_to_remove = dag_bounds(state.index(), best, &masks, bounds);
+
         // Create removable matches
         let mut removable_matches: Vec<usize> = Vec::new();
 
-        for bucket in buckets_by_len.iter().rev() {
+        for (bucket_idx, bucket) in buckets_by_len.iter().enumerate().rev() {
+            let match_len = bucket_idx + 2;
+            if match_len < smallest_to_remove {
+                break;
+            }
+            
             // If we do not have to create the subgraph, and buckets with this size
             // have been bounded, then we can stop generating valid matches
             for fragments in bucket.values() {
@@ -322,11 +346,9 @@ impl Matches {
             }
         }
 
-
-        // Sort removable matches in ascending order of match index (i.e.,
-        // those with larger fragments first).
         removable_matches.sort();
-        removable_matches
+
+        (intermediate_frags, removable_matches)
     }
 
     /// Return the two edge-disjoint isomorphic fragments composing this match.
