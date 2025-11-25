@@ -40,7 +40,13 @@ impl State {
 
     /// Construct the child [`State`] resulting from removing the specified
     /// match from this [`State`].
-    pub fn update(&self, fragments: Vec<BitSet>, remove_ix: usize, match_ix: usize, remove_len: usize) -> Self {
+    pub fn update(
+        &self,
+        fragments: Vec<BitSet>,
+        remove_ix: usize,
+        match_ix: usize,
+        remove_len: usize,
+    ) -> Self {
         Self {
             fragments,
             index: self.index - remove_len + 1,

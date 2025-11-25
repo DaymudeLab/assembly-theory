@@ -7,7 +7,11 @@ use bit_set::BitSet;
 use petgraph::graph::EdgeIndex;
 
 use crate::{
-    bounds::{Bound, dag_bounds}, canonize::{CanonizeMode, Labeling, canonize}, molecule::Molecule, state::State, utils::{connected_components_under_edges, edge_neighbors}
+    bounds::{dag_bounds, Bound},
+    canonize::{canonize, CanonizeMode, Labeling},
+    molecule::Molecule,
+    state::State,
+    utils::{connected_components_under_edges, edge_neighbors},
 };
 
 /// A node in the DAG storing fragment information; see [`Matches`].
@@ -192,11 +196,17 @@ impl Matches {
     /// from an assembly state if (1) each match fragment is a subgraph of some
     /// assembly state fragment, and (2) the match's index is strictly greater
     /// than that of the last match removed from this assembly state.
-    /// 
+    ///
     /// Bounds are used to find matches whose removal will not lead to a better
     /// assembly index that what has already been found. These matches will not
     /// be included in the returned list.
-    pub fn matches_to_remove(&self, mol: &Molecule, state: &State, best: usize, bounds: &[Bound]) -> (Vec<BitSet>, Vec<usize>) {
+    pub fn matches_to_remove(
+        &self,
+        mol: &Molecule,
+        state: &State,
+        best: usize,
+        bounds: &[Bound],
+    ) -> (Vec<BitSet>, Vec<usize>) {
         // The search for removable matches uses the DAG of duplicatable
         // fragments, starting with singleton edge fragments (the DAG's source
         // nodes). Because removable fragments are subgraphs of assembly state
@@ -321,12 +331,11 @@ impl Matches {
         let intermediate_frags = {
             if matchable_edge_masks.len() >= 1 {
                 matchable_edge_masks[0]
-                .iter()
-                .flat_map(|frag| connected_components_under_edges(mol.graph(), frag))
-                .filter(|frag| frag.len() >= 2)
-                .collect::<Vec<BitSet>>()
-            }
-            else {
+                    .iter()
+                    .flat_map(|frag| connected_components_under_edges(mol.graph(), frag))
+                    .filter(|frag| frag.len() >= 2)
+                    .collect::<Vec<BitSet>>()
+            } else {
                 vec![]
             }
         };
@@ -345,11 +354,11 @@ impl Matches {
             if match_len < smallest_to_remove {
                 break;
             }
-            
+
             // Loop through isomorphic fragments and check if they form a match
             for isomorphic_frags in isomorphism_classes.values() {
                 for i in 0..isomorphic_frags.len() {
-                    for j in i+1..isomorphic_frags.len() {
+                    for j in i + 1..isomorphic_frags.len() {
                         let mut frag1_id = isomorphic_frags[i].0;
                         let mut frag2_id = isomorphic_frags[j].0;
 

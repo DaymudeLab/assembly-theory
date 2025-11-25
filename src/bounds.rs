@@ -68,7 +68,12 @@ struct EdgeType {
     ends: (Element, Element),
 }
 
-pub fn dag_bounds(state_index: usize, best: usize, masks: &Vec<Vec<BitSet>>, bounds: &[Bound]) -> usize {
+pub fn dag_bounds(
+    state_index: usize,
+    best: usize,
+    masks: &Vec<Vec<BitSet>>,
+    bounds: &[Bound],
+) -> usize {
     let mut smallest_to_remove = 2;
 
     for (i, list) in masks.iter().enumerate() {
@@ -85,8 +90,11 @@ pub fn dag_bounds(state_index: usize, best: usize, masks: &Vec<Vec<BitSet>>, bou
                     for (j, frag) in list.iter().enumerate() {
                         let total_removable_edges = masks[0][j].len();
                         let removable_edges = frag.len();
-                        let leftover_edges = (total_removable_edges - removable_edges) + (removable_edges % removal_size);
-                        bound += total_removable_edges - (removable_edges / removal_size) - leftover_edges.div_ceil(removal_size - 1);
+                        let leftover_edges = (total_removable_edges - removable_edges)
+                            + (removable_edges % removal_size);
+                        bound += total_removable_edges
+                            - (removable_edges / removal_size)
+                            - leftover_edges.div_ceil(removal_size - 1);
                     }
                     bound = bound.saturating_sub((removal_size as f32).log2().ceil() as usize);
 
@@ -94,14 +102,13 @@ pub fn dag_bounds(state_index: usize, best: usize, masks: &Vec<Vec<BitSet>>, bou
                         stop = true;
                     }
                 }
-                _ => ()
+                _ => (),
             }
         }
 
         if stop {
             smallest_to_remove += 1;
-        }
-        else {
+        } else {
             break;
         }
     }
@@ -125,10 +132,9 @@ pub fn bound_exceeded(mol: &Molecule, state: &State, best_index: usize, bounds: 
             Bound::VecSmallFrags => {
                 state_index - vec_small_frags_bound(fragments, largest_removed, mol) >= best_index
             }
-            _ => false
-            // {
-            //     panic!("One of the chosen bounds is not implemented yet!")
-            // }
+            _ => false, // {
+                        //     panic!("One of the chosen bounds is not implemented yet!")
+                        // }
         };
         if exceeds {
             return true;

@@ -167,14 +167,15 @@ pub fn recurse_index_search(
     // If any bounds would prune this assembly state or if memoization is
     // enabled and this assembly state is preempted by the cached state, halt.
     if crate::bounds::bound_exceeded(mol, state, best_index.load(Relaxed), bounds)
-       || cache.memoize_state(mol, state) 
+        || cache.memoize_state(mol, state)
     {
         return (state.index(), 1);
     }
 
     // Generate a list of matches (i.e., pairs of edge-disjoint, isomorphic
     // fragments) to remove from this state.
-    let (intermediate_frags, matches_to_remove): (Vec<BitSet>, Vec<usize>) = matches.matches_to_remove(mol, state, best_index.load(Relaxed), bounds);
+    let (intermediate_frags, matches_to_remove): (Vec<BitSet>, Vec<usize>) =
+        matches.matches_to_remove(mol, state, best_index.load(Relaxed), bounds);
 
     // Keep track of the best assembly index found in any of this assembly
     // state's children and the number of states searched, including this one.
