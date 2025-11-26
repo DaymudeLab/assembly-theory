@@ -248,7 +248,7 @@ fn vec_small_frags_bound(fragments: &[BitSet], m: usize, mol: &Molecule) -> usiz
 pub fn match_bounds(
     state_index: usize,
     best_index: usize,
-    matchable_edge_masks: &Vec<Vec<BitSet>>,
+    matchable_edge_masks: &[Vec<BitSet>],
     bounds: &[Bound],
 ) -> usize {
     let mut smallest_to_remove = 2;
@@ -285,7 +285,7 @@ pub fn match_bounds(
 }
 
 /// TODO
-pub fn usable_edges_bound(matchable_edge_masks: &Vec<Vec<BitSet>>, removal_size: usize) -> usize {
+pub fn usable_edges_bound(matchable_edge_masks: &[Vec<BitSet>], removal_size: usize) -> usize {
     let mut bound = 0;
 
     for (frag_ix, frag) in matchable_edge_masks[removal_size - 2].iter().enumerate() {

@@ -329,7 +329,7 @@ impl Matches {
         // non-matched edges. Such edges will remain non-matchable lower in the
         // search tree and thus can be discarded.
         let intermediate_frags = {
-            if matchable_edge_masks.len() >= 1 {
+            if !matchable_edge_masks.is_empty() {
                 matchable_edge_masks[0]
                     .iter()
                     .flat_map(|frag| connected_components_under_edges(mol.graph(), frag))

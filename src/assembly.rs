@@ -360,7 +360,12 @@ pub fn index(mol: &Molecule) -> u32 {
         ParallelMode::DepthOne,
         MemoizeMode::CanonIndex,
         KernelMode::None,
-        &[Bound::Int, Bound::VecSimple, Bound::VecSmallFrags, Bound::UsableEdges],
+        &[
+            Bound::Int,
+            Bound::VecSimple,
+            Bound::VecSmallFrags,
+            Bound::UsableEdges,
+        ],
     )
     .0
 }

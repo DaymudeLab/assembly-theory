@@ -90,7 +90,12 @@ fn main() -> Result<()> {
     // Handle bounding strategy CLI arguments.
     let boundlist: &[Bound] = match cli.boundsgroup {
         // By default, use a combination of the integer and vector bounds.
-        None => &[Bound::Int, Bound::VecSimple, Bound::VecSmallFrags, Bound::UsableEdges],
+        None => &[
+            Bound::Int,
+            Bound::VecSimple,
+            Bound::VecSmallFrags,
+            Bound::UsableEdges,
+        ],
         // If --no-bounds is set, do not use any bounds.
         Some(BoundsGroup {
             no_bounds: true, ..
