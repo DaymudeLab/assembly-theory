@@ -25,7 +25,7 @@ use std::sync::{
 
 use bit_set::BitSet;
 use clap::ValueEnum;
-use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{ParallelBridge, ParallelIterator};
 
 use crate::{
     bounds::{state_bounds, Bound},
@@ -222,8 +222,9 @@ pub fn recurse_index_search(
             .for_each(|(i, match_ix)| recurse_on_match(i, *match_ix));
     } else {
         matches_to_remove
-            .par_iter()
+            .iter()
             .enumerate()
+            .par_bridge()
             .for_each(|(i, match_ix)| recurse_on_match(i, *match_ix));
     }
 
