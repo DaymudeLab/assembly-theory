@@ -47,6 +47,7 @@ pub mod molecule;
 
 // Assembly index calculation and supporting functions.
 pub mod assembly;
+pub mod objects;
 pub mod bounds;
 pub mod canonize;
 pub mod kernels;
