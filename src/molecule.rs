@@ -1,17 +1,18 @@
 //! Graph-theoretic representation of a molecule.
 
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeSet, HashMap, HashSet},
     fmt::Display,
     str::FromStr,
 };
 
 use petgraph::{
+    dot::Dot,
     graph::{EdgeIndex, Graph, NodeIndex},
     Undirected,
 };
 
-use crate::objects::AssemblyObject;
+use crate::utils::{edge_induced_subgraph, is_subset_connected};
 
 pub(crate) type Index = u32;
 pub(crate) type MGraph = Graph<Atom, Bond, Undirected, Index>;
@@ -257,21 +258,42 @@ pub struct Molecule {
     graph: MGraph,
 }
 
-impl AssemblyObject for Molecule {
+impl Molecule {
     /// Construct a [`Molecule`] from an existing `MGraph`.
-    fn from_graph(g: MGraph) -> Self { // pub(crate)
+    pub(crate) fn from_graph(g: MGraph) -> Self {
         Self { graph: g }
     }
 
     /// Return a representation of this molecule as an `MGraph`.
     ///
     /// Only public for benchmarking purposes.
-    fn graph(&self) -> &MGraph { // pub 
+    pub fn graph(&self) -> &MGraph {
         &self.graph
     }
-}
 
-impl Molecule {
+    /// Return a pretty-printable representation of this molecule.
+    pub fn info(&self) -> String {
+        let dot = Dot::new(&self.graph);
+        format!("{dot:?}")
+    }
+
+    /// Return `true` iff this molecule contains self-loops or multiple edges
+    /// between any pair of nodes.
+    pub fn is_malformed(&self) -> bool {
+        let mut uniq = HashSet::new();
+        !self.graph.edge_indices().all(|ix| {
+            uniq.insert(ix)
+                && self
+                    .graph
+                    .edge_endpoints(ix)
+                    .is_some_and(|(src, dst)| src != dst)
+        })
+    }
+
+    /// Return `true` iff this molecule comprises only one bond (of any type).
+    pub fn is_basic_unit(&self) -> bool {
+        self.graph.edge_count() == 1 && self.graph.node_count() == 2
+    }
 
     /// Join this molecule with `other` on edge `on`.
     pub fn join(
@@ -309,6 +331,77 @@ impl Molecule {
         Some(output_graph)
     }
 
+    /// Return an iterator over all ways of partitioning this molecule into two
+    /// submolecules.
+    pub fn partitions(&self) -> Option<impl Iterator<Item = (Molecule, Molecule)> + '_> {
+        let mut solutions = HashSet::new();
+        let remaining_edges = self.graph.edge_indices().collect();
+        self.backtrack(
+            remaining_edges,
+            BTreeSet::new(),
+            BTreeSet::new(),
+            &mut solutions,
+        );
+        Some(solutions.into_iter().map(|(left, right)| {
+            (
+                Molecule {
+                    graph: edge_induced_subgraph(self.graph.clone(), &left),
+                },
+                Molecule {
+                    graph: edge_induced_subgraph(self.graph.clone(), &right),
+                },
+            )
+        }))
+    }
+
+    fn backtrack(
+        &self,
+        mut remaining_edges: Vec<EdgeIndex<Index>>,
+        left: EdgeSet,
+        right: EdgeSet,
+        solutions: &mut HashSet<(EdgeSet, EdgeSet)>,
+    ) {
+        if let Some(suffix) = remaining_edges.pop() {
+            let mut lc = left.clone();
+            lc.insert(suffix);
+
+            let mut rc = right.clone();
+            rc.insert(suffix);
+
+            self.backtrack(remaining_edges.clone(), lc, right, solutions);
+            self.backtrack(remaining_edges, left, rc, solutions);
+        } else if self.is_valid_partition(&left, &right) {
+            solutions.insert((left, right));
+        }
+    }
+
+    fn is_valid_partition(&self, left: &EdgeSet, right: &EdgeSet) -> bool {
+        !left.is_empty()
+            && !right.is_empty()
+            && is_subset_connected(&self.graph, left)
+            && is_subset_connected(&self.graph, right)
+    }
+
+    #[allow(dead_code)]
+    fn print_edgelist(&self, list: &[EdgeIndex], name: &str) {
+        println!(
+            "{name}: {:?}",
+            list.iter()
+                .map(|e| (
+                    e.index(),
+                    self.graph
+                        .edge_endpoints(*e)
+                        .map(|(i, j)| (
+                            i.index(),
+                            self.graph.node_weight(i).unwrap().element(),
+                            j.index(),
+                            self.graph.node_weight(j).unwrap().element(),
+                        ))
+                        .unwrap()
+                ))
+                .collect::<Vec<_>>()
+        );
+    }
 }
 
 mod tests {
