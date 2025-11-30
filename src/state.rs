@@ -3,7 +3,7 @@
 use bit_set::BitSet;
 
 use crate::molecule::Molecule;
-
+use crate::object::AObject;
 /// Assembly state of the top-down recursive search algorithm.
 pub struct State {
     /// List of connected components in this state.

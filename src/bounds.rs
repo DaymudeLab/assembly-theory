@@ -16,6 +16,7 @@ use clap::ValueEnum;
 
 use crate::{
     molecule::{Bond, Element, Molecule},
+    object::AObject,
     state::State,
 };
 

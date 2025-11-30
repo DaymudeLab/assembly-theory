@@ -12,6 +12,7 @@ use petgraph::{
 use crate::{
     molecule::{AtomOrBond, Index, Molecule},
     nauty::CanonLabeling,
+    object::AObject,
     utils::node_count_under_edge_mask,
 };
 

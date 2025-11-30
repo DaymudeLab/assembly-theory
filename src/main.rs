@@ -8,6 +8,7 @@ use assembly_theory::{
     kernels::KernelMode,
     loader::parse_molfile_str,
     memoize::MemoizeMode,
+    object::AObject,
 };
 use clap::{Args, Parser};
 

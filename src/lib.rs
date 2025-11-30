@@ -44,6 +44,7 @@ mod utils;
 // Graph representations of molecules and associated parsing.
 pub mod loader;
 pub mod molecule;
+pub mod object;
 
 // Assembly index calculation and supporting functions.
 pub mod assembly;

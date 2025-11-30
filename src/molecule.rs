@@ -7,12 +7,12 @@ use std::{
 };
 
 use petgraph::{
-    dot::Dot,
     graph::{EdgeIndex, Graph, NodeIndex},
     Undirected,
 };
 
 use crate::utils::{edge_induced_subgraph, is_subset_connected};
+use crate::object::AObject;
 
 pub(crate) type Index = u32;
 pub(crate) type MGraph = Graph<Atom, Bond, Undirected, Index>;
@@ -258,43 +258,23 @@ pub struct Molecule {
     graph: MGraph,
 }
 
-impl Molecule {
-    /// Construct a [`Molecule`] from an existing `MGraph`.
-    pub(crate) fn from_graph(g: MGraph) -> Self {
-        Self { graph: g }
-    }
+impl AObject for Molecule {
+    type NodeLabel = Atom;
+    type EdgeLabel = Bond;
 
+    /// Construct a [`Molecule`] from an existing `MGraph`.
+    fn from_graph(g: MGraph) -> Self {
+        Molecule { graph: g }
+    }
     /// Return a representation of this molecule as an `MGraph`.
-    ///
-    /// Only public for benchmarking purposes.
-    pub fn graph(&self) -> &MGraph {
+    fn graph(&self) -> &MGraph {
         &self.graph
     }
+}
 
-    /// Return a pretty-printable representation of this molecule.
-    pub fn info(&self) -> String {
-        let dot = Dot::new(&self.graph);
-        format!("{dot:?}")
-    }
-
-    /// Return `true` iff this molecule contains self-loops or multiple edges
-    /// between any pair of nodes.
-    pub fn is_malformed(&self) -> bool {
-        let mut uniq = HashSet::new();
-        !self.graph.edge_indices().all(|ix| {
-            uniq.insert(ix)
-                && self
-                    .graph
-                    .edge_endpoints(ix)
-                    .is_some_and(|(src, dst)| src != dst)
-        })
-    }
-
-    /// Return `true` iff this molecule comprises only one bond (of any type).
-    pub fn is_basic_unit(&self) -> bool {
-        self.graph.edge_count() == 1 && self.graph.node_count() == 2
-    }
-
+impl Molecule {
+    
+    
     /// Join this molecule with `other` on edge `on`.
     pub fn join(
         &self,

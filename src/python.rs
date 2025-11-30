@@ -75,6 +75,7 @@ use crate::{
     kernels::KernelMode,
     loader::{parse_molfile_str, ParserError},
     memoize::MemoizeMode,
+    object::AObject,
 };
 
 /// Implement a Python version of [`crate::loader::ParserError`].

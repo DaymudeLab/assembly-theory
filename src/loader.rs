@@ -18,6 +18,7 @@ use std::{error::Error, fmt::Display};
 use clap::error::Result;
 
 use crate::molecule::{Atom, Bond, Element::Hydrogen, MGraph, Molecule};
+use crate::object::AObject;
 
 /// Thrown by [`parse_molfile_str`] when errors occur.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -34,6 +34,7 @@ use crate::{
     matches::Matches,
     memoize::{Cache, MemoizeMode},
     molecule::Molecule,
+    object::AObject,
     state::State,
     utils::connected_components_under_edges,
 };

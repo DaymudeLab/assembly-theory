@@ -9,6 +9,7 @@ use petgraph::graph::EdgeIndex;
 use crate::{
     canonize::{canonize, CanonizeMode, Labeling},
     molecule::Molecule,
+    object::AObject,
     state::State,
     utils::edge_neighbors,
 };
