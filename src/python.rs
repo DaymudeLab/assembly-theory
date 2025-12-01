@@ -76,6 +76,7 @@ use crate::{
     loader::{parse_molfile_str, ParserError},
     memoize::MemoizeMode,
     object::AObject,
+    strings::StringGraph,
 };
 
 /// Implement a Python version of [`crate::loader::ParserError`].
@@ -477,6 +478,33 @@ pub fn _index_search(
     ))
 }
 
+/// Computes a molecule's assembly index from a string input.
+///
+/// Python version of [`index`] for string inputs.
+///
+/// # Python Parameters
+/// - `input_str`: The input string to calculate the assembly index from.
+///
+/// # Python Returns
+/// - The assembly index as an `int`.
+///
+/// # Python Example
+///
+/// ```custom,{class=language-python}
+/// import assembly_theory as at
+///
+/// # Calculate the assembly index of a string directly.
+/// at.string_index("C1=CC=CC=C1")  # 3
+/// ```
+#[pyfunction(name = "string_index")]
+pub fn _string_index(input_str: &str) -> PyResult<u32> {
+    // Create a StringGraph from the input string
+    let string_graph = StringGraph::new(input_str.to_string());
+
+    // Calculate the assembly index using the `index` method
+    Ok(index(&string_graph))
+}
+
 /// A Python wrapper for the assembly_theory Rust crate.
 // Registers the listed functions as a Python module named 'assembly_theory';
 // the above line is used as a docstring.
@@ -486,5 +514,6 @@ fn _assembly_theory(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_depth, m)?)?;
     m.add_function(wrap_pyfunction!(_index, m)?)?;
     m.add_function(wrap_pyfunction!(_index_search, m)?)?;
+    m.add_function(wrap_pyfunction!(_string_index, m)?)?;
     Ok(())
 }

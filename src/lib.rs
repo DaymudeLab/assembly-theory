@@ -54,6 +54,7 @@ pub mod kernels;
 pub mod matches;
 pub mod memoize;
 mod nauty;
+pub mod strings;
 pub mod state;
 mod vf3;
 

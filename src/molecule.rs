@@ -244,7 +244,6 @@ impl TryFrom<usize> for Bond {
     }
 }
 
-
 impl Bond {
     pub fn repr(self) -> u8 {
         match self {
@@ -286,8 +285,7 @@ impl AObject for Molecule {
 }
 
 impl Molecule {
-    
-    
+
     /// Join this molecule with `other` on edge `on`.
     pub fn join(
         &self,
