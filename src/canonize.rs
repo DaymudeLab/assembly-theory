@@ -10,9 +10,9 @@ use petgraph::{
 };
 
 use crate::{
-    molecule::{AtomOrBond, Index, Molecule},
+    molecule::{AtomOrBond, Index},
     nauty::CanonLabeling,
-    object::AObject,
+    object::{AObject, NodeBehavior, EdgeBehavior},
     utils::node_count_under_edge_mask,
 };
 
@@ -35,7 +35,7 @@ pub enum CanonizeMode {
 #[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum Labeling {
     /// Labeling returned by the `graph_canon` crate.
-    Nauty(CanonLabeling<AtomOrBond>),
+    Nauty(CanonLabeling<u8>),
 
     /// A string labeling returned by our implementation of
     /// [Faulon et al. (2004)](https://doi.org/10.1021/ci0341823).
@@ -48,7 +48,7 @@ pub enum Labeling {
 
 /// Obtain a canonical labeling of the specified subgraph using the specified
 /// algorithm.
-pub fn canonize(mol: &Molecule, subgraph: &BitSet, mode: CanonizeMode) -> Labeling {
+pub fn canonize<T: AObject>(mol: &T, subgraph: &BitSet, mode: CanonizeMode) -> Labeling {
     match mode {
         CanonizeMode::Nauty => {
             let cgraph = subgraph_to_cgraph(mol, subgraph);
@@ -69,10 +69,10 @@ pub fn canonize(mol: &Molecule, subgraph: &BitSet, mode: CanonizeMode) -> Labeli
 }
 
 /// A graph representation interpretable by Nauty.
-type CGraph = Graph<AtomOrBond, (), Undirected, Index>;
+type CGraph = Graph<u8, (), Undirected, Index>;
 
 /// Convert the specified `subgraph` to the format expected by Nauty.
-fn subgraph_to_cgraph(mol: &Molecule, subgraph: &BitSet) -> CGraph {
+fn subgraph_to_cgraph<T: AObject>(mol: &T, subgraph: &BitSet) -> CGraph {
     let mut h = CGraph::with_capacity(subgraph.len(), 2 * subgraph.len());
     let mut vtx_map = HashMap::<NodeIndex, NodeIndex>::new();
     for e in subgraph {
@@ -82,23 +82,23 @@ fn subgraph_to_cgraph(mol: &Molecule, subgraph: &BitSet) -> CGraph {
         let dst_w = mol.graph().node_weight(dst).unwrap();
         let e_w = mol.graph().edge_weight(eix).unwrap();
 
-        let h_enode = h.add_node(AtomOrBond::Bond(*e_w));
+        let h_enode = h.add_node(e_w.kind());
 
         let h_src = vtx_map
             .entry(src)
-            .or_insert(h.add_node(AtomOrBond::Atom(*src_w)));
+            .or_insert(h.add_node(src_w.kind()));
         h.add_edge(*h_src, h_enode, ());
 
         let h_dst = vtx_map
             .entry(dst)
-            .or_insert(h.add_node(AtomOrBond::Atom(*dst_w)));
+            .or_insert(h.add_node(dst_w.kind()));
         h.add_edge(*h_dst, h_enode, ());
     }
     h
 }
 
 /// Returns `True` iff the *connected* `subgraph` induces a tree.
-fn is_tree(mol: &Molecule, subgraph: &BitSet) -> bool {
+fn is_tree<T: AObject>(mol: &T, subgraph: &BitSet) -> bool {
     node_count_under_edge_mask(mol.graph(), subgraph) == subgraph.len() + 1
 }
 
@@ -123,7 +123,7 @@ fn collapse_set(mut set: Vec<Vec<u8>>) -> Vec<u8> {
 /// Two isomorphic trees will have the same canonical labeling. Assumes
 /// `subgraph` induces a tree; this should be checked before calling this
 /// function with `is_tree`.
-fn tree_canonize(mol: &Molecule, subgraph: &BitSet) -> Vec<u8> {
+fn tree_canonize<T: AObject>(mol: &T, subgraph: &BitSet) -> Vec<u8> {
     let graph = mol.graph();
     let order = graph.node_count();
 
@@ -153,7 +153,7 @@ fn tree_canonize(mol: &Molecule, subgraph: &BitSet) -> Vec<u8> {
             }
             unlabeled_vertices.insert(index);
             let weight = graph.node_weight(node).unwrap();
-            partial_canonical_sets[index].push(vec![weight.element().repr()]);
+            partial_canonical_sets[index].push(vec![weight.kind()]);
         }
 
         let (u, v) = (u.index(), v.index());
@@ -178,7 +178,7 @@ fn tree_canonize(mol: &Molecule, subgraph: &BitSet) -> Vec<u8> {
             // Collapse parent-leaf edge + partial canonical set into canonical
             // label vector. Then move canonical label into parent's partial
             // canonical set.
-            let mut canonical_label = vec![(*edge.weight()).repr()];
+            let mut canonical_label = vec![(*edge.weight()).kind()];
             canonical_label.extend(collapse_set(mem::take(&mut partial_canonical_sets[leaf])));
             partial_canonical_sets[parent].push(canonical_label);
 
@@ -205,7 +205,7 @@ fn tree_canonize(mol: &Molecule, subgraph: &BitSet) -> Vec<u8> {
 
         let (first, second) = if u < v { (u, v) } else { (v, u) };
 
-        [(*edge.weight()).repr()]
+        [(*edge.weight()).kind()]
             .into_iter()
             .chain(wrap_with_delimiters(first))
             .chain(wrap_with_delimiters(second))

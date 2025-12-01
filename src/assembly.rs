@@ -96,7 +96,7 @@ pub fn depth(mol: &Molecule) -> u32 {
 /// Determine the fragments produced from the given assembly state by removing
 /// the given pair of edge-disjoint, isomorphic subgraphs and then adding one
 /// back; return `None` if not possible.
-fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Option<Vec<BitSet>> {
+fn fragments<T: AObject>(mol: &T, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Option<Vec<BitSet>> {
     // Attempt to find fragments f1 and f2 containing h1 and h2, respectively;
     // if either do not exist, exit without further fragmentation.
     let f1 = state.iter().enumerate().find(|(_, c)| h1.is_subset(c));
@@ -156,8 +156,8 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Opti
 ///   state is pruned by bounds or deemed redundant by memoization, then the
 ///   upper bound returned is unchanged.)
 /// - `usize`: The number of assembly states searched.
-pub fn recurse_index_search(
-    mol: &Molecule,
+pub fn recurse_index_search<T: AObject>(
+    mol: &T,
     matches: &Matches,
     state: &State,
     best_index: Arc<AtomicUsize>,

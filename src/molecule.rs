@@ -11,7 +11,7 @@ use petgraph::{
     Undirected,
 };
 
-use crate::utils::{edge_induced_subgraph, is_subset_connected};
+use crate::{object::{EdgeBehavior, NodeBehavior}, utils::{edge_induced_subgraph, is_subset_connected}};
 use crate::object::AObject;
 
 pub(crate) type Index = u32;
@@ -190,6 +190,12 @@ pub struct Atom {
     capacity: u32,
 }
 
+impl NodeBehavior for Atom {
+    fn kind(&self) -> u8 {
+        self.element.repr()
+    }
+}
+
 impl Atom {
     /// Construct an [`Atom`] of type `element` with capacity `capacity`.
     pub fn new(element: Element, capacity: u32) -> Self {
@@ -238,6 +244,7 @@ impl TryFrom<usize> for Bond {
     }
 }
 
+
 impl Bond {
     pub fn repr(self) -> u8 {
         match self {
@@ -245,6 +252,12 @@ impl Bond {
             Bond::Double => 2,
             Bond::Triple => 3,
         }
+    }
+}
+
+impl EdgeBehavior for Bond {
+    fn kind(&self) -> u8 {
+        self.repr()
     }
 }
 

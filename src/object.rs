@@ -5,14 +5,26 @@ use petgraph::{
 };
 use std::collections::HashSet;
 use std::fmt::Debug;
+use std::marker::{Copy, Sync};
 use std::hash::Hash;
 
 pub(crate) type Index = u32;
 type EdgeSet = std::collections::BTreeSet<EdgeIndex<Index>>;
 
-pub trait AObject {
-    type NodeLabel: Debug + Clone + Eq + Hash;
-    type EdgeLabel: Debug + Clone + Eq + Hash;
+
+/// behavior required of node labels
+pub trait NodeBehavior {
+    fn kind(&self) -> u8;
+}
+
+pub trait EdgeBehavior {
+    fn kind(&self) -> u8;
+}
+
+
+pub trait AObject : Sync + Send {
+    type NodeLabel: NodeBehavior + Copy + Sync + Debug + Eq + Hash;
+    type EdgeLabel: EdgeBehavior + Copy + Sync + Debug + Eq + Hash;
 
     fn from_graph(g: Graph<Self::NodeLabel, Self::EdgeLabel, Undirected, Index>) -> Self;
 

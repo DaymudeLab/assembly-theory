@@ -11,7 +11,7 @@ use dashmap::DashMap;
 
 use crate::{
     canonize::{canonize, CanonizeMode, Labeling},
-    molecule::Molecule,
+    object::AObject,
     state::State,
 };
 
@@ -65,7 +65,7 @@ impl Cache {
     ///
     /// If using [`MemoizeMode::CanonIndex`], keys are sorted lists of
     /// canonical IDs.
-    fn key(&mut self, mol: &Molecule, state: &State) -> Option<Vec<usize>> {
+    fn key<T: AObject>(&mut self, mol: &T, state: &State) -> Option<Vec<usize>> {
         match self.memoize_mode {
             MemoizeMode::None => None,
             MemoizeMode::CanonIndex => {
@@ -83,7 +83,7 @@ impl Cache {
 
     /// Obtain the canonical ID of the given fragment, canonizing it using the
     /// specified [`CanonizeMode`] if this has not already been done.
-    fn canonical_id(&mut self, mol: &Molecule, fragment: &BitSet) -> usize {
+    fn canonical_id<T: AObject>(&mut self, mol: &T, fragment: &BitSet) -> usize {
         if let Some(id) = self.fragment_to_id.get(fragment) {
             *id
         } else {
@@ -103,7 +103,7 @@ impl Cache {
     /// Return `true` iff memoization is enabled and this assembly state is
     /// preempted by the cached assembly state.
     /// See https://github.com/DaymudeLab/assembly-theory/pull/95 for details.
-    pub fn memoize_state(&mut self, mol: &Molecule, state: &State) -> bool {
+    pub fn memoize_state<T: AObject>(&mut self, mol: &T, state: &State) -> bool {
         let state_index = state.index();
         let removal_order = state.removal_order();
         let mut result = false;

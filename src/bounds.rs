@@ -15,8 +15,7 @@ use bit_set::BitSet;
 use clap::ValueEnum;
 
 use crate::{
-    molecule::{Bond, Element, Molecule},
-    object::AObject,
+    object::{AObject, NodeBehavior, EdgeBehavior},
     state::State,
 };
 
@@ -63,12 +62,12 @@ pub enum Bound {
 /// Edge information used in vector addition chain bounds.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct EdgeType {
-    bond: Bond,
-    ends: (Element, Element),
+    kind: u8,
+    ends: (u8, u8),
 }
 
 /// Return `true` iff any of the given bounds would prune this assembly state.
-pub fn bound_exceeded(mol: &Molecule, state: &State, best_index: usize, bounds: &[Bound]) -> bool {
+pub fn bound_exceeded<T: AObject>(mol: &T, state: &State, best_index: usize, bounds: &[Bound]) -> bool {
     let fragments = state.fragments();
     let state_index = state.index();
     let largest_removed = state.largest_removed();
@@ -133,14 +132,14 @@ fn int_bound(fragments: &[BitSet], m: usize) -> usize {
 /// TODO
 // Count number of unique edges in a fragment
 // Helper function for vector bounds
-fn unique_edges(fragment: &BitSet, mol: &Molecule) -> Vec<EdgeType> {
+fn unique_edges<T: AObject>(fragment: &BitSet, mol: &T) -> Vec<EdgeType> {
     let g = mol.graph();
-    let mut nodes: Vec<Element> = Vec::new();
+    let mut nodes: Vec<u8> = Vec::new();
     for v in g.node_weights() {
-        nodes.push(v.element());
+        nodes.push(v.kind());
     }
     let edges: Vec<petgraph::prelude::EdgeIndex> = g.edge_indices().collect();
-    let weights: Vec<Bond> = g.edge_weights().copied().collect();
+    let weights: Vec<T::EdgeLabel> = g.edge_weights().copied().collect();
 
     // types will hold an element for every unique edge type in fragment
     let mut types: Vec<EdgeType> = Vec::new();
@@ -153,7 +152,7 @@ fn unique_edges(fragment: &BitSet, mol: &Molecule) -> Vec<EdgeType> {
         let e2 = nodes[e2.index()];
         let ends = if e1 < e2 { (e1, e2) } else { (e2, e1) };
 
-        let edge_type = EdgeType { bond, ends };
+        let edge_type = EdgeType { kind: bond.kind(), ends };
 
         if types.contains(&edge_type) {
             continue;
@@ -166,7 +165,7 @@ fn unique_edges(fragment: &BitSet, mol: &Molecule) -> Vec<EdgeType> {
 }
 
 /// TODO
-fn vec_simple_bound(fragments: &[BitSet], m: usize, mol: &Molecule) -> usize {
+fn vec_simple_bound<T: AObject>(fragments: &[BitSet], m: usize, mol: &T) -> usize {
     // Calculate s (total number of edges)
     // Calculate z (number of unique edges)
     let mut s = 0;
@@ -184,7 +183,7 @@ fn vec_simple_bound(fragments: &[BitSet], m: usize, mol: &Molecule) -> usize {
 }
 
 /// TODO
-fn vec_small_frags_bound(fragments: &[BitSet], m: usize, mol: &Molecule) -> usize {
+fn vec_small_frags_bound<T: AObject>(fragments: &[BitSet], m: usize, mol: &T) -> usize {
     let mut size_two_fragments: Vec<BitSet> = Vec::new();
     let mut large_fragments: Vec<BitSet> = fragments.to_owned();
     let mut indices_to_remove: Vec<usize> = Vec::new();
