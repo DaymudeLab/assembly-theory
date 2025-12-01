@@ -9,7 +9,6 @@ use std::marker::{Copy, Sync};
 use std::hash::Hash;
 
 pub(crate) type Index = u32;
-type EdgeSet = std::collections::BTreeSet<EdgeIndex<Index>>;
 
 
 /// behavior required of node labels

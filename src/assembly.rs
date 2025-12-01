@@ -294,8 +294,8 @@ pub fn recurse_index_search<T: AObject>(
 /// # Ok(())
 /// # }
 /// ```
-pub fn index_search(
-    mol: &Molecule,
+pub fn index_search<T: AObject>(
+    mol: &T,
     canonize_mode: CanonizeMode,
     parallel_mode: ParallelMode,
     memoize_mode: MemoizeMode,
@@ -354,7 +354,7 @@ pub fn index_search(
 /// # Ok(())
 /// # }
 /// ```
-pub fn index(mol: &Molecule) -> u32 {
+pub fn index<T: AObject>(mol: &T) -> u32 {
     index_search(
         mol,
         CanonizeMode::TreeNauty,

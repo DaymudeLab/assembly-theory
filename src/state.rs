@@ -2,7 +2,7 @@
 
 use bit_set::BitSet;
 
-use crate::molecule::Molecule;
+//use crate::molecule::Molecule;
 use crate::object::AObject;
 /// Assembly state of the top-down recursive search algorithm.
 pub struct State {
@@ -24,7 +24,7 @@ pub struct State {
 
 impl State {
     /// Construct the initial [`State`] for the given molecule.
-    pub fn new(mol: &Molecule) -> Self {
+    pub fn new<T: AObject>(mol: &T) -> Self {
         Self {
             fragments: {
                 let mut init = BitSet::new();

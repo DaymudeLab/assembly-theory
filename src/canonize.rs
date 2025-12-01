@@ -10,9 +10,8 @@ use petgraph::{
 };
 
 use crate::{
-    molecule::{AtomOrBond, Index},
     nauty::CanonLabeling,
-    object::{AObject, NodeBehavior, EdgeBehavior},
+    object::{AObject, NodeBehavior, EdgeBehavior, Index},
     utils::node_count_under_edge_mask,
 };
 

@@ -8,7 +8,7 @@ use petgraph::graph::EdgeIndex;
 
 use crate::{
     canonize::{canonize, CanonizeMode, Labeling},
-    molecule::Molecule,
+    //molecule::Molecule,
     object::AObject,
     state::State,
     utils::edge_neighbors,
@@ -57,7 +57,7 @@ impl DagNode {
 
 impl Matches {
     /// Generate [`Matches`] from the given molecule and canonization mode.
-    pub fn new(mol: &Molecule, canonize_mode: CanonizeMode) -> Self {
+    pub fn new<T: AObject>(mol: &T, canonize_mode: CanonizeMode) -> Self {
         let num_edges = mol.graph().edge_count();
         let mut dag: Vec<DagNode> = Vec::with_capacity(num_edges);
         let mut matches: Vec<(usize, usize)> = Vec::new();
