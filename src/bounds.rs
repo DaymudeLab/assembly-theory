@@ -58,23 +58,9 @@ pub enum Bound {
     /// remove if there is a duplicate set of two bonds in the graph.
     /// Otherwise, they will require two steps.
     VecSmallFrags,
-    /// A weighted independent set cover provides a bound on the size of a max.
-    /// weight clique in the compatibility graph. Uses a greedy algorithm  to
-    /// construct such a cover and obtain a bound. See
-    /// [Lamm et al. (2019)](https://doi.org/10.1137/1.9781611975499.12) for
-    /// the definition of a cover. (Note that they solve the equivalent
-    /// weighted independent set problem and thus use a clique cover instead.)
-    CoverNoSort,
-    /// Like `CoverNoSort`, buts sorts the vertices of the compatibility
-    /// graph by degree before creating the greedy independent set cover.
-    CoverSort,
-    /// Uses the compatibility graph to determine the largest duplicatable
-    /// subraphs remaining in each fragment. Uses this to bound the best
-    /// possible savings obtainable for each fragment.
-    CliqueBudget,
     /// Like `Int`, but uses only matchable edges as computed in
     /// [`matches::Matches::matches_to_remove`].
-    UsableEdges,
+    MatchableEdges,
 }
 
 /// Edge information used in vector addition chain bounds.
@@ -128,7 +114,7 @@ pub(crate) fn match_bounds(
 
         for bound_type in bounds {
             bounded |= match bound_type {
-                Bound::UsableEdges => {
+                Bound::MatchableEdges => {
                     state_index
                         >= usable_edges_bound(matchable_edge_masks, removal_size) + best_index
                 }
