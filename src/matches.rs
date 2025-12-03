@@ -1,5 +1,4 @@
-//! Strucutral information on "matches" in a molecular graph, i.e., pairs of
-//! edge-disjoint, isomorphic subgraphs.
+//! Strucutral information on matches in a molecular graph.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 

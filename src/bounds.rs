@@ -34,7 +34,7 @@ use crate::{
     state::State,
 };
 
-/// Type of upper bound on the "savings" possible from an assembly state.
+/// State and match bounds to prune assembly index search.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum Bound {
     /// The shortest number of joining operations to create a molecule with |E|
