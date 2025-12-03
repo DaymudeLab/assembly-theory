@@ -93,6 +93,7 @@ pub fn bench_bounds(c: &mut Criterion) {
             vec![Bound::Int, Bound::VecSimple, Bound::VecSmallFrags],
             "int-vec",
         ),
+        (vec![Bound::Int, Bound::MatchableEdges], "int-matchable"),
     ];
 
     // Run the benchmark for each dataset and bound list.
@@ -186,7 +187,7 @@ pub fn bench_memoize(c: &mut Criterion) {
                                     &matches,
                                     &state,
                                     best_index,
-                                    &[Bound::Int, Bound::VecSimple, Bound::VecSmallFrags],
+                                    &[Bound::Int, Bound::MatchableEdges],
                                     &mut cache,
                                     ParallelMode::DepthOne,
                                 );
