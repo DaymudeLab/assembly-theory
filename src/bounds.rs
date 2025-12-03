@@ -21,10 +21,10 @@
 //!
 //! Each match bound considers both the current assembly state and the matches
 //! (i.e., pairs of edge-disjoint, isomorphic subgraphs) that can be removed
-//! from it. Its goal is to determine a size (in edges) such that the removal
-//! of any match smaller than this size cannot possibly yield a better assembly
-//! index. This size is then used as a filter when generating matches to remove
-//! from a given assembly state in [`matches::Matches::matches_to_remove`].
+//! from it. It determines a size (in edges) such that the removal of any match
+//! smaller than this size cannot possibly yield a better assembly index. This
+//! size is then used as a filter when generating matches to remove from a
+//! given assembly state in [`crate::matches::Matches::matches_to_remove`].
 
 use bit_set::BitSet;
 use clap::ValueEnum;
@@ -59,7 +59,7 @@ pub enum Bound {
     /// Otherwise, they will require two steps.
     VecSmallFrags,
     /// Like `Int`, but uses only matchable edges as computed in
-    /// [`matches::Matches::matches_to_remove`].
+    /// [`crate::matches::Matches::matches_to_remove`].
     MatchableEdges,
 }
 
