@@ -1,6 +1,14 @@
 //! Prune assembly states from which the assembly index cannot improve.
 //!
-//! Each bound takes information about the current assembly state (i.e., set of
+//! There are two types of bounds: *state bounds* and *match bounds*. State
+//! bounds are applied as soon as an assembly state is reached to determine
+//! whether any children of this state may possibly yield an improved assembly
+//! index; if not, this state is removed from the search tree. Otherwise, match
+//! bounds are applied to exclude any matches (i.e., pairs of edge-disjoint,
+//! isomorphic subgraphs) whose removal from the current assembly state cannot
+//! not yield an improved assembly index.
+//!
+//! Each state bound considers the current assembly state (i.e., set of
 //! fragments) and computes an upper bound on the "savings" (in terms of number
 //! of joining operations) that can possibly be obtained when constructing the
 //! molecule using this state's fragments and subfragments thereof. Let
@@ -10,6 +18,13 @@
 //! `state_index` - `bound` >= `best_index`, then no descendant of this
 //! assembly state can possibly yield an assembly index better than
 //! `best_index` and thus this assembly state can be pruned.
+//!
+//! Each match bound considers both the current assembly state and the matches
+//! (i.e., pairs of edge-disjoint, isomorphic subgraphs) that can be removed
+//! from it. Its goal is to determine a size (in edges) such that the removal
+//! of any match smaller than this size cannot possibly yield a better assembly
+//! index. This size is then used as a filter when generating matches to remove
+//! from a given assembly state in [`matches::Matches::matches_to_remove`].
 
 use bit_set::BitSet;
 use clap::ValueEnum;
@@ -57,8 +72,8 @@ pub enum Bound {
     /// subraphs remaining in each fragment. Uses this to bound the best
     /// possible savings obtainable for each fragment.
     CliqueBudget,
-    /// Similar to [`Bound::Int`], but uses only matchable edges, as computed
-    /// in [`crate::matches::Matches::matches_to_remove`].
+    /// Like `Int`, but uses only matchable edges as computed in
+    /// [`matches::Matches::matches_to_remove`].
     UsableEdges,
 }
 
@@ -69,8 +84,13 @@ struct EdgeType {
     ends: (Element, Element),
 }
 
-/// Return `true` iff any of the given bounds would prune this assembly state.
-pub fn state_bounds(mol: &Molecule, state: &State, best_index: usize, bounds: &[Bound]) -> bool {
+/// Return `true` iff any of the given state bounds prune this assembly state.
+pub(crate) fn state_bounds(
+    mol: &Molecule,
+    state: &State,
+    best_index: usize,
+    bounds: &[Bound],
+) -> bool {
     let fragments = state.fragments();
     let state_index = state.index();
     let largest_removed = state.largest_removed();
@@ -92,6 +112,40 @@ pub fn state_bounds(mol: &Molecule, state: &State, best_index: usize, bounds: &[
         }
     }
     false
+}
+
+/// Compute a lower bound on the size of the largest match whose removal from
+/// the given assembly state could possibly yield an improved assembly index.
+pub(crate) fn match_bounds(
+    state_index: usize,
+    best_index: usize,
+    matchable_edge_masks: &[Vec<BitSet>],
+    bounds: &[Bound],
+) -> usize {
+    // Test different match removal sizes.
+    for removal_size in 2..matchable_edge_masks.len() + 2 {
+        let mut bounded = false;
+
+        for bound_type in bounds {
+            bounded |= match bound_type {
+                Bound::UsableEdges => {
+                    state_index
+                        >= usable_edges_bound(matchable_edge_masks, removal_size) + best_index
+                }
+                _ => false,
+            };
+            if bounded {
+                break;
+            }
+        }
+
+        // If no bounds apply, the largest match size has been found.
+        if !bounded {
+            return removal_size;
+        }
+    }
+
+    matchable_edge_masks.len() + 2
 }
 
 /// TODO
@@ -241,51 +295,8 @@ fn vec_small_frags_bound(fragments: &[BitSet], m: usize, mol: &Molecule) -> usiz
         - ((sl - z) as f32 / m as f32).ceil() as usize
 }
 
-/// Returns the largest match removal size that could potentially lead to an
-/// improved assembly index from this state. Used within the
-/// [`crate::matches::Matches::matches_to_remove`] function, after computing
-/// the matchable edges.
-pub fn match_bounds(
-    state_index: usize,
-    best_index: usize,
-    matchable_edge_masks: &[Vec<BitSet>],
-    bounds: &[Bound],
-) -> usize {
-    let mut smallest_to_remove = 2;
-
-    // Test different match removal sizes.
-    for removal_size in 2..matchable_edge_masks.len() + 2 {
-        let mut bounded = false;
-
-        for bound_type in bounds {
-            bounded |= match bound_type {
-                Bound::UsableEdges => {
-                    state_index
-                        >= usable_edges_bound(matchable_edge_masks, removal_size) + best_index
-                }
-                _ => false,
-            };
-
-            if bounded {
-                break;
-            }
-        }
-
-        // If a bound says that a better assembly index can not be reached
-        // using removals of this size, increment smallest_to_remove and try
-        // the next size.
-        if bounded {
-            smallest_to_remove += 1;
-        } else {
-            break;
-        }
-    }
-
-    smallest_to_remove
-}
-
 /// TODO
-pub fn usable_edges_bound(matchable_edge_masks: &[Vec<BitSet>], removal_size: usize) -> usize {
+fn usable_edges_bound(matchable_edge_masks: &[Vec<BitSet>], removal_size: usize) -> usize {
     let mut bound = 0;
 
     for (frag_ix, frag) in matchable_edge_masks[removal_size - 2].iter().enumerate() {
