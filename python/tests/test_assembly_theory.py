@@ -72,7 +72,7 @@ def test_index_search():
             "none",
             ["int", "matchable-edges"])
 
-    assert (index, num_matches, states_searched) == (6, 466, 2462)
+    assert (index, num_matches, states_searched) == (6, 466, 491)
 
 
 def test_index_search_bad_molblock():

@@ -410,7 +410,7 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 ///
 /// print(f"Assembly Index: {index}")  # 6
 /// print(f"Edge-Disjoint Isomorphic Subgraph Pairs: {num_matches}")  # 466
-/// print(f"Assembly States Searched: {states_searched}")  # TODO
+/// print(f"Assembly States Searched: {states_searched}")  # 491
 /// ```
 #[pyfunction(name = "index_search")]
 #[pyo3(signature = (mol_block, canonize_str="tree-nauty", parallel_str="depth-one", memoize_str="canon-index", kernel_str="none", bound_strs=vec!["int".to_string(), "matchable-edges".to_string()]), text_signature = "(mol_block, canonize_str=\"tree-nauty\", parallel_str=\"depth-one\", memoize_str=\"canon-index\", kernel_str=\"none\", bound_strs=[\"int\", \"matchable-edges\"]))")]
