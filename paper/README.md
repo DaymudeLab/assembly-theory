@@ -26,6 +26,7 @@ We use [`uv`](https://docs.astral.sh/uv/) to manage Python environments.
 [Install it](https://docs.astral.sh/uv/getting-started/installation/) and then run the following to get all dependencies:
 
 ```shell
+cd paper
 uv sync
 ```
 
@@ -68,7 +69,7 @@ cd paper/assembly_go/cmd/app
 Then run the benchmark with
 
 ```shell
-go test -bench=. -cpu=<cpus> -count=<iters> -timeout=0 > datasets_bench.tsv
+go test -bench=. -cpu=<cpus> -count=<iters> -timeout=0 > joss_bench.tsv
 ```
 
 where `<cpus>` is replaced by the number of CPUs you want to let `assembly_go` parallelize over and `<iters>` is replaced by the number of iterations you want to run the benchmark and average the times over (see the [go testing flags](https://pkg.go.dev/cmd/go#hdr-Testing_flags) for details).
