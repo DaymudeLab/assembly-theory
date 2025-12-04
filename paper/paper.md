@@ -18,7 +18,7 @@ authors:
   - name: Devendra Parkar
     orcid: 0009-0009-0133-8875
     affiliation: "1, 2"
-  - name: Sean Bergen
+  - name: Holly Bergen
     orcid: 0009-0004-3570-5120
     affiliation: "1, 2"
   - name: Joshua J. Daymude
@@ -35,7 +35,7 @@ affiliations:
     index: 2
   - name: School of Complex Adaptive Systems, Arizona State University, United States
     index: 3
-date: 6 August 2025
+date: 8 December 2025
 bibliography: paper.bib
 ---
 
@@ -187,7 +187,7 @@ Contributing guidelines and project governance are described in our `README`.
 
 DV was the primary software developer (architecture, command line interface, molecule representations, unit tests, parallelism, performance engineering).
 GP, DV, and CM formalized the core algorithm design.
-GP and SB implemented the algorithm's bounding strategies.
+GP and HB implemented the algorithm's bounding strategies.
 DP and DV implemented the `.mol` file parser.
 CM and JJD implemented the Python interface.
 OMS curated all reference datasets and assembly index ground truths with input from CM.
