@@ -1,0 +1,6 @@
+[submodule "paper/assembly_go"]
+	path = paper/assembly_go
+	url = https://github.com/croningp/assembly_go
+[submodule "paper/assemblycpp-v5"]
+	path = paper/assemblycpp-v5
+	url = https://github.com/croningp/assemblycpp-v5
