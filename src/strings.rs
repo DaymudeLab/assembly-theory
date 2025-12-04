@@ -32,9 +32,12 @@ impl StringGraph {
         for ch in string.chars() {
             let current_node = graph.add_node(ch);
             if let Some(prev) = prev_node {
-                graph.add_edge(prev, current_node, edge_label);
+                // Only add an edge if the character is not a space
+                if ch != ' ' {
+                    graph.add_edge(prev, current_node, edge_label);
+                }
             }
-            prev_node = Some(current_node);
+            prev_node = if ch == ' ' { None } else { Some(current_node) };
         }
 
         Self { string, graph }
