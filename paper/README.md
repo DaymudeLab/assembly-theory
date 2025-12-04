@@ -52,7 +52,7 @@ cp paper/scripts/benchmark.rs benches/
 Then run the benchmark with
 
 ```shell
-cargo bench datasets
+cargo bench
 ```
 
 
