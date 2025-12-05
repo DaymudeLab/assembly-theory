@@ -360,7 +360,7 @@ bool dagRecursiveAssembly(assemblyState &input, int &AI)
     return true;
 }
 
-bool initialRecursiveAssembly(assemblyState &input, int &AI)
+bool initialRecursiveAssembly(assemblyState &input, int &AI, ofstream &ofs)
 {
     bool earlyTerminate = 0;
     recursiveCount++;
@@ -445,7 +445,7 @@ bool initialRecursiveAssembly(assemblyState &input, int &AI)
     return true;
 }
 
-void improvedBnB(molGraph &mg)
+void improvedBnB(molGraph &mg, ofstream &ofs)
 {
     startTime = clock();
     clearPathMap();
@@ -471,5 +471,11 @@ void improvedBnB(molGraph &mg)
     pathAssemblyMap.insert(ap);
     as.apPtr = ap.ap;
     int AI = MAX_INT;
-    initialRecursiveAssembly(as, AI);
+    initialRecursiveAssembly(as, AI, ofs);
+    if (isPathway)
+        recoverPathway2(removedEdges);
+    if (disjointCompensation)
+        ofs << AI - disjointFragments + 1 << '\n';
+    else
+        ofs << AI << '\n';
 }

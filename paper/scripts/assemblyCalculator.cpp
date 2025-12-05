@@ -1,6 +1,6 @@
 
 #include "assemblyCalculator.h"
-#include <time.h>             // for clock, clock_t
+#include <chrono>
 #include <iostream>           // for operator<<, basic_ostream, cout, ifstream
 #include <string>             // for char_traits, allocator, operator+, ope...
 #include <vector>             // for vector
@@ -18,24 +18,24 @@ void assemblyCalculator(string &fileName)
     ifstream molfile(in.c_str());
     if (molfile.is_open())
     {
-        moleculeName = fileName + "Pathway";
+        ofstream outputFile;
         molGraph mol_graph;
         vector<double> coords;
         molfileParser(molfile, mol_graph);
-        clock_t t1 = clock();
-        improvedBnB(mol_graph);
-        clock_t t2 = clock();
+        auto t_start = chrono::steady_clock::now();
+        improvedBnB(mol_graph, outputFile);
+        auto t_end = chrono::steady_clock::now();
+        cout << chrono::duration_cast<chrono::nanoseconds>(t_end - t_start).count();
     }
     else
     {
         ifstream graphFile(fileName.c_str());
         if (graphFile.is_open())
         {
+            ofstream outputFile;
             molGraph mol_graph;
             graphio(graphFile, mol_graph);
-            moleculeName = fileName + "Pathway";
-            clock_t startTime = clock();
-            improvedBnB(mol_graph);
+            improvedBnB(mol_graph, outputFile);
         }
         else
             cout << "No file found\n";

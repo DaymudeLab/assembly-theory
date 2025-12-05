@@ -15,28 +15,33 @@ import scipy.stats as sps
 if __name__ == "__main__":
     # Parse command line arguments.
     parser = argparse.ArgumentParser(description=__doc__)
-    def_at_path = osp.join("..", "target", "criterion", "joss")
-    parser.add_argument(
-        "-A",
-        "--at_path",
-        type=str,
-        default=def_at_path,
-        help="Path to assembly-theory benchmark output",
-    )
-    def_ago_path = osp.join("assembly_go", "cmd", "app", "joss_bench.tsv")
     parser.add_argument(
         "-G",
         "--ago_path",
         type=str,
-        default=def_ago_path,
+        default=osp.join("assembly_go", "cmd", "app", "joss_bench.tsv"),
         help="Path to assembly_go benchmark output",
+    )
+    parser.add_argument(
+        "-C",
+        "--acpp_path",
+        type=str,
+        default=osp.join("assemblycpp-v5", "joss_bench.csv"),
+        help="Path to assemblycpp-v5 benchmark output",
+    )
+    parser.add_argument(
+        "-A",
+        "--at_path",
+        type=str,
+        default=osp.join("..", "target", "criterion", "joss"),
+        help="Path to assembly-theory benchmark output",
     )
     args = parser.parse_args()
 
     # Define reference datasets.
     datasets = ["gdb13_1201", "gdb17_200", "checks", "coconut_55"]
 
-    # Create results dict of the form {bounds: {dataset: (mean, 95% conf.)}}.
+    # Create results dict of the form {impl: {dataset: (mean, 95% conf.)}}.
     results = defaultdict(dict)
 
     # Load assembly_go benchmark outputs.
@@ -65,6 +70,14 @@ if __name__ == "__main__":
         conf = sps.t.interval(0.95, len(times) - 1, loc=mean_time, scale=sps.sem(times))
         conf_perc = (conf[1] - conf[0]) / 2 / mean_time * 100
         results["assembly_go"][dataset] = (mean_time, conf_perc)
+
+    # Load assemblycpp-v5 benchmark outputs and compute means/conf. intervals.
+    acpp_df = pd.read_csv(args.acpp_path)
+    for dataset in datasets:
+        mean_time = acpp_df.mean()[dataset]
+        conf = sps.t.interval(0.95, len(acpp_df) - 1, loc=mean_time, scale=sps.sem(acpp_df[dataset]))
+        conf_perc = (conf[1] - conf[0]) / 2 / mean_time * 100
+        results["assemblycpp-v5"][dataset] = (mean_time, conf_perc)
 
     # Do the same for assembly-theory's different bounds.
     for dataset in datasets:
