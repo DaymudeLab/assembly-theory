@@ -47,7 +47,7 @@ The molecule datasets used for benchmarking are described in `paper.md` and can 
 Set up the `assembly-theory` benchmark by copying the paper-specific Rust benchmark file into the top-level `benches/` directory:
 
 ```shell
-cp paper/scripts/benchmark.rs benches/
+cp paper/benches/benchmark.rs benches/
 ```
 
 Then run the benchmark with
@@ -62,7 +62,7 @@ cargo bench
 Set up the `assembly_go` benchmark by copying the Go benchmark file into the appropriate submodule and then going to the corresponding directory:
 
 ```shell
-cp paper/scripts/main_test.go paper/assembly_go/cmd/app/
+cp paper/benches/main_test.go paper/assembly_go/cmd/app/
 cd paper/assembly_go/cmd/app
 ```
 
@@ -84,8 +84,8 @@ For our paper, we used `-cpu=16` and `-count=20`.
 Set up the `assemblycpp-v5` benchmark by copying all relevant C++ files and our custom benchmark into the appropriate submodule and then going to the corresponding directory:
 
 ```shell
-cp paper/scripts/*.cpp paper/assemblycpp-v5/src
-cp paper/scripts/bench_cpp.py paper/assemblycpp-v5
+cp paper/benches/*.cpp paper/assemblycpp-v5/src
+cp paper/benches/bench_cpp.py paper/assemblycpp-v5
 cd paper/assemblycpp-v5
 ```
 
@@ -115,7 +115,7 @@ python bench_cpp.py
 From this `paper/` directory, run the following to get the benchmark statistics.
 
 ```
-uv run scripts/bench_stats.py
+uv run benches/bench_stats.py
 ```
 
 This script reports the mean benchmark time and 95% confidence interval of the mean for each algorithm&ndash;dataset pair.
