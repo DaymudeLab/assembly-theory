@@ -81,7 +81,26 @@ For our paper, we used `-cpu=16` and `-count=20`.
 
 ### Benchmarking `assemblycpp-v5`
 
-TODO
+Set up the `assemblycpp-v5` benchmark by copying all relevant C++ files into the appropriate submodule and then going to the corresponding directory:
+
+```shell
+cp paper/scripts/*.h paper/assemblycpp-v5/include
+cp paper/scripts/*.cpp paper/assemblycpp-v5/src
+cd paper/assemblycpp-v5
+```
+
+This replaces the usual `main.cpp` entrypoint of `assemblycpp-v5` with a custom benchmark (see details of the modifications below).
+Build and run with:
+
+```shell
+cmake -S . -B build
+cmake --build build
+./build/bin/assembly
+```
+
+Our goal with this benchmark was to put `assemblycpp-v5` on as equal of footing with the other two implementations as possible, focusing only on the average sample time required for assembly index calculations (and not on molecule parsing, file I/O, and status updates to stdout).
+Unfortunately, `assemblycpp-v5` is an architectural maze of core functions, global variables, and intermediate files all interacting with each other in non-obvious ways.
+Our modifications try to put `assemblycpp-v5` in as best a light as possible (e.g., removing unnecessary file I/O, parsing molecules outside the timing loop, etc.) while still achieving a rigorous comparison.
 
 
 ### Getting Benchmark Results
