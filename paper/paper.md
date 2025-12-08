@@ -51,7 +51,7 @@ This is a key complexity measure of *assembly theory*, a recent theoretical fram
 
 *Assembly theory* (AT) is a recently developed body of theoretical and empirical work characterizing selection in diverse physical systems [@Sharma2023-assemblytheory; @Walker2024-experimentallymeasured].
 In AT, objects are entities that are finite, distinguishable, decomposable, and persistent in time.
-AT characterizes objects by their *assembly index*, the minimum number of recursive subconstructions required to construct the object starting from a given set of building blocks [@Jirasek2024-investigatingquantifying; @Seet2024-rapidcomputation].
+AT characterizes objects by their *assembly index*, the minimum number of recursive subconstructions required to construct the object starting from a given set of building blocks [@Jirasek2024-investigatingquantifying; @Seet2025-rapidexploration].
 To date, AT has most commonly been applied to molecular chemistry, where bonds are the basic building blocks and the quantity of interest is the *molecular assembly index* (MA); see \autoref{fig:assemblyindex} for an example.
 MA can be measured for covalently-bonded molecules using standard analytical techniques such as tandem mass spectrometry as well as infrared and nuclear magnetic resonance spectroscopy [@Jirasek2024-investigatingquantifying], enabling a novel approach to life detection [@Marshall2021-identifyingmolecules].
 It has also been proposed in methods to generate novel therapeutic drugs, identify environmental pollutants, and gain new insights into evolutionary history [@Liu2021-exploringmapping; @Kahana2024-constructingmolecular].
@@ -66,12 +66,12 @@ Previous software to compute MA have been approximate, closed-source, platform-d
 The original software to compute a split-branch approximation of MA (an upper bound on the exact value) was written in C++ and depended on the MSVC compiler, making it difficult to deploy to non-Windows machines [@Marshall2021-identifyingmolecules].
 Machine learning methods only provide approximate MA values [@Gebhard2022-inferringmolecular].
 The more recent `assembly_go` computes MA exactly but is written in Go and implements a somewhat naive algorithm, yielding prohibitively slow performance even on mid-size molecules [@Jirasek2024-investigatingquantifying].
-Finally, the latest `assemblycpp-v5` C++ implementation achieves significant performance milestones through an improved branch-and-bound approach, but lacks parallelism, has significant readability and maintenance barriers, and until recently was not publicly available for comparison or verification by the community [@Seet2024-rapidcomputation].
+Finally, the latest `assemblycpp-v5` C++ implementation achieves significant performance milestones through an improved branch-and-bound approach, but lacks parallelism, has significant readability and maintenance barriers, and until recently was not publicly available for comparison or verification by the community [@Seet2025-rapidexploration].
 
 ![*Assembly Pathways for Anthracene*. Starting with bonds as building blocks (yellow), a joining operation yields progressively larger structures by combining any two compatible structures that have already been constructed (arrows). These intermediate structures must obey valence rules but otherwise do not have to be physically accessible or chemically synthesizable. There may be many assembly pathways from building blocks to a target structure&mdash;in this case, Anthracene (green)&mdash;but the length of any shortest such pathway (blue) is that structure's assembly index.\label{fig:assemblyindex}](figures/anthracene.pdf){ width=100% }
 
 With `assembly-theory`, we provide an open-source, fully documented, extensible, and high-performance library for assembly index calculation.
-It moves beyond an implementation of a single algorithm, instead acting a framework and source of ground truth within which current and future algorithmic approaches can be validated and compared.
+It moves beyond an implementation of a single algorithm, instead acting as a framework and source of ground truth within which current and future algorithmic approaches can be validated and compared.
 The main implementation is written in Rust, which we chose for its cross-platform support, memory-safety, performant runtime, convenient parallelism, and integrated testing and documentation [@Perkel2020-whyscientists].
 We also leverage modern Rust tooling to provide native Python bindings, enabling ease of use for scientific practitioners and integration with existing Python cheminformatics libraries.
 
@@ -169,7 +169,7 @@ These reference data are sampled from:
 - COCONUT, a database of natural products (secondary metabolites) offering a rich source of evolved chemical complexity [@Sorokina2021-coconutonline; @Chandrasekhar2025-coconut20].
 
 The `assembly-theory` test suite (run with `cargo test`) contains unit tests validating internal functionality and integration tests verifying the calculation of correct assembly indices for all molecules in our reference datasets.
-Each reference dataset contains an `ma-index.csv` file with ground truth assembly indices calculated using `assemblycpp-v5` [@Seet2024-rapidcomputation].
+Each reference dataset contains an `ma-index.csv` file with ground truth assembly indices calculated using `assemblycpp-v5` [@Seet2025-rapidexploration].
 
 Our benchmark suite (run with `cargo bench`) evaluates the performance of each granular phase of assembly index calculation over entire reference datasets.
 We leverage the [`criterion`](https://bheisler.github.io/criterion.rs/criterion/) Rust crate to automatically collect detailed timing statistics and create performance reports.
