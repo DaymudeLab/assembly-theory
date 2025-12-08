@@ -28,13 +28,14 @@ struct DagNode {
 /// Structural information on "matches" in a molecular graph, i.e., pairs of
 /// edge-disjoint, isomorphic subgraphs.
 pub struct Matches {
-    /// Seet et al. (2024) perform match enumeration by constructing a directed
-    /// acyclic graph (DAG). Each node in this DAG is a fragment (i.e., a
-    /// connected molecular subgraph) that is duplicatable (i.e., there exists
-    /// some other edge-disjoint fragment it is isomorphic to). If there is an
-    /// edge from u to v, then fragment v is fragment u with one added edge
-    /// (note: this new edge may be between two existing nodes in u or "extend"
-    /// from one existing node in u to a new node).
+    /// [Seet et al. (2025)](https://doi.org/10.1021/acs.jcim.5c01964) perform
+    /// match enumeration by constructing a directed acyclic graph (DAG). Each
+    /// node in this DAG is a fragment (i.e., a connected molecular subgraph)
+    /// that is duplicatable (i.e., there exists some other edge-disjoint
+    /// fragment it is isomorphic to). If there is an edge from u to v, then
+    /// fragment v is fragment u with one added edge (note: this new edge may
+    /// be between two existing nodes in u or "extend" from one existing node
+    /// in u to a new node).
     dag: Vec<DagNode>,
     /// All possible matches (i.e., pairs of edge-disjoint, isomorphic
     /// fragments) stored as pairs of fragment (i.e., DAG node) indices.
