@@ -60,12 +60,11 @@ Again, enter a number to choose:
 
 ```shell
 1) assembly_go (Jirasek et al., 2024)
-2) assembly_cpp (Seet et al., 2024)
+2) assemblycpp-v5 (Seet et al., 2025)
 3) assembly-theory
 Calculate assembly indices using: 
 ```
 
-[`assembly_go`](https://github.com/croningp/assembly_go) is existing, open-source software for calculating assembly indices.
-We do not package its source code or its executable with our library, but it can be obtained [on GitHub](https://github.com/croningp/assembly_go) if non-self-referential ground truth is desired.
-[`assembly_cpp`] is the current state-of-the-art algorithm by Seet et al. (2024) and was provided to us by its authors on the condition that it remains private and is used only for this ground-truth generation.
+Both [`assembly_go`](https://github.com/croningp/assembly_go) and [`assemblycpp-v5`](https://github.com/croningp/assemblycpp-v5) are open-source software for calculating assembly indices.
+We do not package their source code or executables with our library, but they can be obtained from GitHub if non-self-referential ground truth is desired.
 Otherwise, a release build of `assembly-theory` is created and used.

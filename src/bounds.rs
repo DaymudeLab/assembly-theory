@@ -45,7 +45,7 @@ pub enum Bound {
     Log,
     /// An improvement over `Log` that also uses the size of the "largest
     /// duplicatable subgraph" for this state in an integer addition chain; see
-    /// [Seet et al. (2024)](https://arxiv.org/abs/2410.09100).
+    /// [Seet et al. (2025)](https://doi.org/10.1021/acs.jcim.5c01964).
     Int,
     /// Uses the types of bonds in the molecule to bound the number of assembly
     /// steps remaining. The first time a unique bond type is added to the
