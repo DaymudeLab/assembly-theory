@@ -4,6 +4,7 @@
 [![PyPI](https://img.shields.io/pypi/v/assembly-theory)](https://pypi.org/project/assembly-theory/)
 [![docs.rs](https://docs.rs/assembly-theory/badge.svg)](https://docs.rs/assembly-theory)
 [![Zenodo](https://zenodo.org/badge/DOI/10.5281/zenodo.16764412.svg)](https://doi.org/10.5281/zenodo.16764412)
+[![JOSS](https://joss.theoj.org/papers/704f4c6eba7224d413819cf889c95091/status.svg)](https://joss.theoj.org/papers/704f4c6eba7224d413819cf889c95091)
 
 `assembly-theory` is an open-source, high-performance library for computing *assembly indices* of molecular structures (see, e.g., [Sharma et al., 2023](https://doi.org/10.1038/s41586-023-06600-9); [Walker et al., 2024](https://doi.org/10.1098/rsif.2024.0367)).
 It is implemented in Rust and is available as a [Rust crate](https://crates.io/crates/assembly-theory), [Python package](https://pypi.org/project/assembly-theory/), and standalone executable. 
