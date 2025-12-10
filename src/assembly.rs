@@ -29,7 +29,7 @@ use std::{
 use bit_set::BitSet;
 use clap::ValueEnum;
 use rayon::iter::{ParallelBridge, ParallelIterator};
-use tokio::{runtime::Runtime, sync::oneshot, time::timeout};
+use tokio::{runtime::Runtime, sync::oneshot, time::timeout as tktimeout};
 
 use crate::{
     bounds::{state_bounds, Bound},
@@ -241,8 +241,8 @@ pub fn recurse_index_search(
 /// Compute a molecule's assembly index and related information using a
 /// top-down recursive algorithm, parameterized by the specified options.
 ///
-/// If `timeout_ms` is `None`, run until the assembly index is found. Otherwise
-/// stop after `timeout_ms` milliseconds and return the best upper bound on the
+/// If `timeout` is `None`, run until the assembly index is found. Otherwise,
+/// stop after `timeout` milliseconds and return the best upper bound on the
 /// assembly index found so far.
 ///
 /// See [`CanonizeMode`], [`ParallelMode`], [`KernelMode`], and [`Bound`] for
@@ -306,7 +306,7 @@ pub fn recurse_index_search(
 /// ```
 pub fn index_search(
     mol: &Molecule,
-    timeout_ms: Option<u64>,
+    timeout: Option<u64>,
     canonize_mode: CanonizeMode,
     parallel_mode: ParallelMode,
     memoize_mode: MemoizeMode,
@@ -329,7 +329,7 @@ pub fn index_search(
     let best_index = Arc::new(AtomicUsize::from(mol.graph().edge_count() - 1));
 
     // Search for the shortest assembly pathway recursively.
-    if let Some(timeout_ms) = timeout_ms {
+    if let Some(timeout) = timeout {
         // If a timeout is provided, we will search within an asynchronous task
         // that can be interrupted after the specified duration (see below). To
         // avoid subsequent scope issues, make copies of various variables.
@@ -353,7 +353,7 @@ pub fn index_search(
                     parallel_mode,
                 ));
             });
-            timeout(Duration::from_millis(timeout_ms), recv).await
+            tktimeout(Duration::from_millis(timeout), recv).await
         });
 
         // If the search completes before the timeout, return the true assembly
