@@ -369,6 +369,9 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 /// # Python Parameters
 ///
 /// - `mol_block`: The contents of a `.mol` file as a `str`.
+/// - `timeout`: An `int` number of milliseconds after which search should
+/// timeout and return the best upper bound on the assembly index found so far,
+/// or `None` if search should run until the true assembly index is found.
 /// - `canonize_str`: A canonization mode from [`"nauty"`, `"faulon"`,
 /// `"tree-nauty"` (default), `"tree-faulon"`]. See [`CanonizeMode`] for
 /// details.
@@ -386,7 +389,7 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 /// # Python Returns
 ///
 /// A 3-tuple containing:
-/// - The molecule's `int` assembly index.
+/// - The molecule's `int` assembly index (or an upper bound if timed out).
 /// - The molecule's `int` number of edge-disjoint isomorphic subgraph pairs.
 /// - The `int` number of assembly states searched.
 ///
@@ -402,20 +405,22 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 /// # Calculate the molecule's assembly index using the specified options.
 /// (index, num_matches, states_searched) = at.index_search(
 ///     mol_block,
-///     "tree-nauty",
-///     "none",
-///     "none",
-///     "none",
-///     ["int", "matchable-edges"])
+///     timeout=None,
+///     canonize_str="tree-nauty",
+///     parallel_str="none",
+///     memoize_str="none",
+///     kernel_str="none",
+///     bound_strs=["int", "matchable-edges"])
 ///
 /// print(f"Assembly Index: {index}")  # 6
 /// print(f"Edge-Disjoint Isomorphic Subgraph Pairs: {num_matches}")  # 466
 /// print(f"Assembly States Searched: {states_searched}")  # 491
 /// ```
 #[pyfunction(name = "index_search")]
-#[pyo3(signature = (mol_block, canonize_str="tree-nauty", parallel_str="depth-one", memoize_str="canon-index", kernel_str="none", bound_strs=vec!["int".to_string(), "matchable-edges".to_string()]), text_signature = "(mol_block, canonize_str=\"tree-nauty\", parallel_str=\"depth-one\", memoize_str=\"canon-index\", kernel_str=\"none\", bound_strs=[\"int\", \"matchable-edges\"]))")]
+#[pyo3(signature = (mol_block, timeout=None, canonize_str="tree-nauty", parallel_str="depth-one", memoize_str="canon-index", kernel_str="none", bound_strs=vec!["int".to_string(), "matchable-edges".to_string()]), text_signature = "(mol_block, canonize_str=\"tree-nauty\", parallel_str=\"depth-one\", memoize_str=\"canon-index\", kernel_str=\"none\", bound_strs=[\"int\", \"matchable-edges\"]))")]
 pub fn _index_search(
     mol_block: &str,
+    timeout: Option<u64>,
     canonize_str: &str,
     parallel_str: &str,
     memoize_str: &str,
@@ -461,6 +466,7 @@ pub fn _index_search(
     // Compute assembly index.
     Ok(index_search(
         &mol,
+        timeout,
         canonize_mode,
         parallel_mode,
         memoize_mode,

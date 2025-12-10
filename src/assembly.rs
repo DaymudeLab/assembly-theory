@@ -18,14 +18,18 @@
 //! # }
 //! ```
 
-use std::sync::{
-    atomic::{AtomicUsize, Ordering::Relaxed},
-    Arc,
+use std::{
+    sync::{
+        atomic::{AtomicUsize, Ordering::Relaxed},
+        Arc,
+    },
+    time::Duration,
 };
 
 use bit_set::BitSet;
 use clap::ValueEnum;
 use rayon::iter::{ParallelBridge, ParallelIterator};
+use tokio::{runtime::Runtime, sync::oneshot, time::timeout};
 
 use crate::{
     bounds::{state_bounds, Bound},
@@ -237,13 +241,17 @@ pub fn recurse_index_search(
 /// Compute a molecule's assembly index and related information using a
 /// top-down recursive algorithm, parameterized by the specified options.
 ///
+/// If `timeout_ms` is `None`, run until the assembly index is found. Otherwise
+/// stop after `timeout_ms` milliseconds and return the best upper bound on the
+/// assembly index found so far.
+///
 /// See [`CanonizeMode`], [`ParallelMode`], [`KernelMode`], and [`Bound`] for
 /// details on how to customize the algorithm. Notably, bounds are applied in
 /// the order they appear in the `bounds` slice. It is generally better to
 /// provide bounds that are quick to compute first.
 ///
 /// The results returned are:
-/// - The molecule's `u32` assembly index.
+/// - The molecule's `u32` assembly index (or an upper bound if timed out).
 /// - The molecule's `u32` number of edge-disjoint isomorphic subgraph pairs.
 /// - The `usize` total number of assembly states searched, where an assembly
 ///   state is a collection of fragments. Note that, depending on the algorithm
@@ -268,9 +276,10 @@ pub fn recurse_index_search(
 /// let anthracene = parse_molfile_str(&molfile).expect("Parsing failure.");
 ///
 /// // Compute the molecule's assembly index without parallelism, memoization,
-/// // kernelization, or bounds.
+/// // kernelization, or bounds, and timeout after 100 ms.
 /// let (slow_index, _, _) = index_search(
 ///     &anthracene,
+///     100,
 ///     CanonizeMode::TreeNauty,
 ///     ParallelMode::None,
 ///     MemoizeMode::None,
@@ -279,9 +288,10 @@ pub fn recurse_index_search(
 /// );
 ///
 /// // Compute the molecule's assembly index with parallelism, memoization, and
-/// // some bounds.
+/// // some bounds, and without a timeout.
 /// let (fast_index, _, _) = index_search(
 ///     &anthracene,
+///     None,
 ///     CanonizeMode::TreeNauty,
 ///     ParallelMode::DepthOne,
 ///     MemoizeMode::CanonIndex,
@@ -296,6 +306,7 @@ pub fn recurse_index_search(
 /// ```
 pub fn index_search(
     mol: &Molecule,
+    timeout_ms: Option<u64>,
     canonize_mode: CanonizeMode,
     parallel_mode: ParallelMode,
     memoize_mode: MemoizeMode,
@@ -307,29 +318,65 @@ pub fn index_search(
         panic!("The chosen --kernel mode is not implemented yet!")
     }
 
+    // Create the initial assembly state and memoization cache.
+    let state = State::new(mol);
+    let mut cache = Cache::new(memoize_mode, canonize_mode);
+
     // Enumerate matches (i.e., pairs of edge-disjoint isomorphic fragments).
     let matches = Matches::new(mol, canonize_mode);
 
-    // Create memoization cache.
-    let mut cache = Cache::new(memoize_mode, canonize_mode);
-
-    // Create the initial assembly state.
-    let state = State::new(mol);
+    // Use an Arc to track the best assembly index across parallel threads.
+    let best_index = Arc::new(AtomicUsize::from(mol.graph().edge_count() - 1));
 
     // Search for the shortest assembly pathway recursively.
-    let edge_count = mol.graph().edge_count();
-    let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
-    let (index, states_searched) = recurse_index_search(
-        mol,
-        &matches,
-        &state,
-        best_index,
-        bounds,
-        &mut cache,
-        parallel_mode,
-    );
+    if let Some(timeout_ms) = timeout_ms {
+        // If a timeout is provided, we will search within an asynchronous task
+        // that can be interrupted after the specified duration (see below). To
+        // avoid subsequent scope issues, make copies of various variables.
+        let best_index_copy = best_index.clone();
+        let mol = mol.clone();
+        let bounds = bounds.to_vec();
+        let num_matches = matches.len();
 
-    (index as u32, matches.len() as u32, states_searched)
+        // Search within a dedicated asynchronous runtime.
+        let rt = Runtime::new().unwrap();
+        let result = rt.block_on(async {
+            let (send, recv) = oneshot::channel();
+            rayon::spawn(move || {
+                let _ = send.send(recurse_index_search(
+                    &mol,
+                    &matches,
+                    &state,
+                    best_index_copy,
+                    &bounds,
+                    &mut cache,
+                    parallel_mode,
+                ));
+            });
+            timeout(Duration::from_millis(timeout_ms), recv).await
+        });
+
+        // If the search completes before the timeout, return the true assembly
+        // index. Otherwise, return the best upper bound on the assembly index
+        // found before timing out.
+        match result {
+            Ok(Ok((index, states_searched))) => (index as u32, num_matches as u32, states_searched),
+            Err(_) => (best_index.load(Relaxed) as u32, num_matches as u32, 0),
+            _ => panic!("An unexpected error occurred in async index_search"),
+        }
+    } else {
+        // Otherwise, if no timeout is provided, run the search normally.
+        let (index, states_searched) = recurse_index_search(
+            mol,
+            &matches,
+            &state,
+            best_index,
+            bounds,
+            &mut cache,
+            parallel_mode,
+        );
+        (index as u32, matches.len() as u32, states_searched)
+    }
 }
 
 /// Compute a molecule's assembly index using an efficient default strategy.
@@ -357,6 +404,7 @@ pub fn index_search(
 pub fn index(mol: &Molecule) -> u32 {
     index_search(
         mol,
+        None,
         CanonizeMode::TreeNauty,
         ParallelMode::DepthOne,
         MemoizeMode::CanonIndex,

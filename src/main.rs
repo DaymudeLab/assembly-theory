@@ -31,6 +31,12 @@ struct Cli {
     #[arg(long)]
     verbose: bool,
 
+    /// Timeout duration in milliseconds after which search is stopped and the
+    /// best assembly index found so far is returned, or `None` if search is
+    /// run until the true assembly index is found.
+    #[arg(long)]
+    timeout: Option<u64>,
+
     /// Algorithm for graph canonization.
     #[arg(long, value_enum, default_value_t = CanonizeMode::TreeNauty)]
     canonize: CanonizeMode,
@@ -105,6 +111,7 @@ fn main() -> Result<()> {
     // Call index calculation with all the various options.
     let (index, num_matches, states_searched) = index_search(
         &mol,
+        cli.timeout,
         cli.canonize,
         cli.parallel,
         cli.memoize,
