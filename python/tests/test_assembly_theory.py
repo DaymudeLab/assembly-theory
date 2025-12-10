@@ -66,6 +66,7 @@ def test_index_search():
 
     (index, num_matches, states_searched) = at.index_search(
             mol_block,
+            None,
             "tree-nauty",
             "none",  # Disable parallelism for deterministic states_searched.
             "none",

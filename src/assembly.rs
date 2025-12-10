@@ -279,7 +279,7 @@ pub fn recurse_index_search(
 /// // kernelization, or bounds, and timeout after 100 ms.
 /// let (slow_index, _, _) = index_search(
 ///     &anthracene,
-///     100,
+///     Some(100),
 ///     CanonizeMode::TreeNauty,
 ///     ParallelMode::None,
 ///     MemoizeMode::None,
