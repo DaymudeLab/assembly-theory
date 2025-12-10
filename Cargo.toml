@@ -19,6 +19,7 @@ rayon = "1.10.0"
 dashmap = "6.1.0"
 nauty-Traces-sys = "0.10.0"
 bitvec = "1.0.1"
+tokio = { version = "1.48.0", features = ["rt", "rt-multi-thread", "sync", "time"] }
 
 [dev-dependencies]
 criterion = "0.3"
