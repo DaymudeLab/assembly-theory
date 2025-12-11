@@ -150,29 +150,32 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Opti
 /// - `matches`: Structural information about the molecule's matched fragments.
 /// - `state`: The current assembly state.
 /// - `best_index`: The smallest assembly index for all assembly states so far.
+/// - `states_searched`: The number of assembly states searched so far.
 /// - `bounds`: The list of bounding strategies to apply.
 /// - `cache`: Memoization cache storing previously searched assembly states.
 /// - `parallel_mode`: The parallelism mode for this state's match iteration.
 ///
-/// Returns, from this assembly state and any of its descendents:
-/// - `usize`: An updated upper bound on the assembly index. (Note: If this
-///   state is pruned by bounds or deemed redundant by memoization, then the
-///   upper bound returned is unchanged.)
-/// - `usize`: The number of assembly states searched.
+/// Returns, from this assembly state and any of its descendents, an updated
+/// upper bound on the assembly index. If this state is pruned by bounds or
+/// deemed redundant by memoization, the upper bound returned is unchanged.
 pub fn recurse_index_search(
     mol: &Molecule,
     matches: &Matches,
     state: &State,
     best_index: Arc<AtomicUsize>,
+    states_searched: Arc<AtomicUsize>,
     bounds: &[Bound],
     cache: &mut Cache,
     parallel_mode: ParallelMode,
-) -> (usize, usize) {
+) -> usize {
+    // Count this state as searched.
+    states_searched.fetch_add(1, Relaxed);
+
     // If any bounds would prune this assembly state or if memoization is
     // enabled and this assembly state is preempted by the cached state, halt.
     if state_bounds(mol, state, best_index.load(Relaxed), bounds) || cache.memoize_state(mol, state)
     {
-        return (state.index(), 1);
+        return state.index();
     }
 
     // Generate a list of matches (i.e., pairs of edge-disjoint, isomorphic
@@ -181,9 +184,8 @@ pub fn recurse_index_search(
         matches.matches_to_remove(mol, state, best_index.load(Relaxed), bounds);
 
     // Keep track of the best assembly index found in any of this assembly
-    // state's children and the number of states searched, including this one.
+    // state's children.
     let best_child_index = AtomicUsize::from(state.index());
-    let states_searched = AtomicUsize::from(1);
 
     // Define a closure that handles recursing to a new assembly state based on
     // the given match.
@@ -200,21 +202,21 @@ pub fn recurse_index_search(
             };
 
             // Recurse using the remaining matches and updated fragments.
-            let (child_index, child_states_searched) = recurse_index_search(
+            let child_index = recurse_index_search(
                 mol,
                 matches,
                 &state.update(fragments, i, match_ix, h1.len()),
                 best_index.clone(),
+                states_searched.clone(),
                 bounds,
                 &mut cache.clone(),
                 new_parallel,
             );
 
-            // Update the best assembly indices (across children states and
-            // the entire search) and the number of descendant states searched.
+            // Update the best assembly indices (across children states and the
+            // entire search).
             best_child_index.fetch_min(child_index, Relaxed);
             best_index.fetch_min(best_child_index.load(Relaxed), Relaxed);
-            states_searched.fetch_add(child_states_searched, Relaxed);
         }
     };
 
@@ -232,10 +234,7 @@ pub fn recurse_index_search(
             .for_each(|(i, match_ix)| recurse_on_match(i, *match_ix));
     }
 
-    (
-        best_child_index.load(Relaxed),
-        states_searched.load(Relaxed),
-    )
+    best_child_index.load(Relaxed)
 }
 
 /// Compute a molecule's assembly index and related information using a
@@ -325,8 +324,10 @@ pub fn index_search(
     // Enumerate matches (i.e., pairs of edge-disjoint isomorphic fragments).
     let matches = Matches::new(mol, canonize_mode);
 
-    // Use an Arc to track the best assembly index across parallel threads.
+    // Use `Arc`s to track the best assembly index and total states searched
+    // across parallel threads.
     let best_index = Arc::new(AtomicUsize::from(mol.graph().edge_count() - 1));
+    let states_searched = Arc::new(AtomicUsize::from(0));
 
     // Search for the shortest assembly pathway recursively.
     if let Some(timeout) = timeout {
@@ -334,6 +335,7 @@ pub fn index_search(
         // that can be interrupted after the specified duration (see below). To
         // avoid subsequent scope issues, make copies of various variables.
         let best_index_copy = best_index.clone();
+        let states_searched_copy = states_searched.clone();
         let mol = mol.clone();
         let bounds = bounds.to_vec();
         let num_matches = matches.len();
@@ -348,6 +350,7 @@ pub fn index_search(
                     &matches,
                     &state,
                     best_index_copy,
+                    states_searched_copy,
                     &bounds,
                     &mut cache,
                     parallel_mode,
@@ -359,23 +362,33 @@ pub fn index_search(
         // If the search completes before the timeout, return the true assembly
         // index. Otherwise, return the best upper bound on the assembly index
         // found before timing out.
-        match result {
-            Ok(Ok((index, states_searched))) => (index as u32, num_matches as u32, states_searched),
-            Err(_) => (best_index.load(Relaxed) as u32, num_matches as u32, 0),
+        let index = match result {
+            Ok(Ok(index)) => index,
+            Err(_) => best_index.load(Relaxed),
             _ => panic!("An unexpected error occurred in async index_search"),
-        }
+        };
+        (
+            index as u32,
+            num_matches as u32,
+            states_searched.load(Relaxed),
+        )
     } else {
         // Otherwise, if no timeout is provided, run the search normally.
-        let (index, states_searched) = recurse_index_search(
+        let index = recurse_index_search(
             mol,
             &matches,
             &state,
             best_index,
+            states_searched.clone(),
             bounds,
             &mut cache,
             parallel_mode,
         );
-        (index as u32, matches.len() as u32, states_searched)
+        (
+            index as u32,
+            matches.len() as u32,
+            states_searched.load(Relaxed),
+        )
     }
 }
 
