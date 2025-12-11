@@ -278,10 +278,10 @@ pub fn recurse_index_search(
 /// let anthracene = parse_molfile_str(&molfile).expect("Parsing failure.");
 ///
 /// // Compute the molecule's assembly index without parallelism, memoization,
-/// // kernelization, or bounds, and timeout after 100 ms.
+/// // kernelization, or bounds.
 /// let (slow_index, _, _, _) = index_search(
 ///     &anthracene,
-///     Some(100),
+///     None,
 ///     CanonizeMode::TreeNauty,
 ///     ParallelMode::None,
 ///     MemoizeMode::None,
@@ -290,7 +290,7 @@ pub fn recurse_index_search(
 /// );
 ///
 /// // Compute the molecule's assembly index with parallelism, memoization, and
-/// // some bounds, and without a timeout.
+/// // some bounds.
 /// let (fast_index, _, _, _) = index_search(
 ///     &anthracene,
 ///     None,
@@ -301,8 +301,20 @@ pub fn recurse_index_search(
 ///     &[Bound::Log, Bound::Int],
 /// );
 ///
+/// // Limit search to 1 ms, which should time out.
+/// let (index_bound, _, _, is_exact) = index_search(
+///     &anthracene,
+///     Some(1),
+///     CanonizeMode::TreeNauty,
+///     ParallelMode::None,
+///     MemoizeMode::None,
+///     KernelMode::None,
+///     &[],
+/// );
+///
 /// assert_eq!(slow_index, 6);
 /// assert_eq!(fast_index, 6);
+/// assert!(index_bound <= fast_index && !is_exact);
 /// # Ok(())
 /// # }
 /// ```
