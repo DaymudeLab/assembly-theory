@@ -109,7 +109,7 @@ fn main() -> Result<()> {
     };
 
     // Call index calculation with all the various options.
-    let (index, num_matches, states_searched) = index_search(
+    let (index, num_matches, states_searched, is_exact) = index_search(
         &mol,
         cli.timeout,
         cli.canonize,
@@ -121,7 +121,11 @@ fn main() -> Result<()> {
 
     // Print final output, depending on --verbose.
     if cli.verbose {
-        println!("Assembly Index: {index}");
+        if !is_exact {
+            println!("Assembly Index: {index} (timed out)");
+        } else {
+            println!("Assembly Index: {index}");
+        }
         println!("Edge-Disjoint Isomorphic Subgraph Pairs: {num_matches}");
         println!("Assembly States Searched: {states_searched}");
     } else {

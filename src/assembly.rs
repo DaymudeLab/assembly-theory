@@ -158,6 +158,7 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Opti
 /// Returns, from this assembly state and any of its descendents, an updated
 /// upper bound on the assembly index. If this state is pruned by bounds or
 /// deemed redundant by memoization, the upper bound returned is unchanged.
+#[allow(clippy::too_many_arguments)]
 pub fn recurse_index_search(
     mol: &Molecule,
     matches: &Matches,
@@ -255,6 +256,8 @@ pub fn recurse_index_search(
 /// - The `usize` total number of assembly states searched, where an assembly
 ///   state is a collection of fragments. Note that, depending on the algorithm
 ///   parameters used, some states may be searched/counted multiple times.
+/// - A `bool` that is `true` if the assembly index returned is exact and is
+///   `false` otherwise, i.e., if search timed out.
 ///
 /// # Example
 /// ```
@@ -276,7 +279,7 @@ pub fn recurse_index_search(
 ///
 /// // Compute the molecule's assembly index without parallelism, memoization,
 /// // kernelization, or bounds, and timeout after 100 ms.
-/// let (slow_index, _, _) = index_search(
+/// let (slow_index, _, _, _) = index_search(
 ///     &anthracene,
 ///     Some(100),
 ///     CanonizeMode::TreeNauty,
@@ -288,7 +291,7 @@ pub fn recurse_index_search(
 ///
 /// // Compute the molecule's assembly index with parallelism, memoization, and
 /// // some bounds, and without a timeout.
-/// let (fast_index, _, _) = index_search(
+/// let (fast_index, _, _, _) = index_search(
 ///     &anthracene,
 ///     None,
 ///     CanonizeMode::TreeNauty,
@@ -311,7 +314,7 @@ pub fn index_search(
     memoize_mode: MemoizeMode,
     kernel_mode: KernelMode,
     bounds: &[Bound],
-) -> (u32, u32, usize) {
+) -> (u32, u32, usize, bool) {
     // Catch not-yet-implemented modes.
     if kernel_mode != KernelMode::None {
         panic!("The chosen --kernel mode is not implemented yet!")
@@ -362,15 +365,16 @@ pub fn index_search(
         // If the search completes before the timeout, return the true assembly
         // index. Otherwise, return the best upper bound on the assembly index
         // found before timing out.
-        let index = match result {
-            Ok(Ok(index)) => index,
-            Err(_) => best_index.load(Relaxed),
+        let (index, is_exact) = match result {
+            Ok(Ok(index)) => (index, true),
+            Err(_) => (best_index.load(Relaxed), false),
             _ => panic!("An unexpected error occurred in async index_search"),
         };
         (
             index as u32,
             num_matches as u32,
             states_searched.load(Relaxed),
+            is_exact,
         )
     } else {
         // Otherwise, if no timeout is provided, run the search normally.
@@ -388,6 +392,7 @@ pub fn index_search(
             index as u32,
             matches.len() as u32,
             states_searched.load(Relaxed),
+            true,
         )
     }
 }

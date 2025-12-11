@@ -388,10 +388,12 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 ///
 /// # Python Returns
 ///
-/// A 3-tuple containing:
+/// A 4-tuple containing:
 /// - The molecule's `int` assembly index (or an upper bound if timed out).
 /// - The molecule's `int` number of edge-disjoint isomorphic subgraph pairs.
 /// - The `int` number of assembly states searched.
+/// - A `bool` that is `true` if the assembly index is exact and `false`
+/// otherwise, i.e., if search times out.
 ///
 /// # Python Example
 ///
@@ -403,7 +405,7 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 ///     mol_block = f.read()
 ///
 /// # Calculate the molecule's assembly index using the specified options.
-/// (index, num_matches, states_searched) = at.index_search(
+/// (index, num_matches, states_searched, is_exact) = at.index_search(
 ///     mol_block,
 ///     timeout=None,
 ///     canonize_str="tree-nauty",
@@ -426,7 +428,7 @@ pub fn _index_search(
     memoize_str: &str,
     kernel_str: &str,
     bound_strs: Vec<String>,
-) -> PyResult<(u32, u32, usize)> {
+) -> PyResult<(u32, u32, usize, bool)> {
     // Parse the .mol file contents as a molecule::Molecule.
     let mol_result = parse_molfile_str(mol_block);
     let mol = match mol_result {
