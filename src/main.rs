@@ -120,20 +120,25 @@ fn main() -> Result<()> {
     );
 
     // Print final output, depending on --verbose.
-    if cli.verbose {
-        if let Some(states_searched) = states_searched {
-            // Found the exact assembly index.
+    match (cli.verbose, states_searched) {
+        // Found the exact assembly index.
+        (true, Some(states_searched)) => {
             println!("Assembly Index:  {index}");
             println!("Matches:         {num_matches}");
             println!("States Searched: {states_searched}");
-        } else {
-            // Search timed out and returned an upper bound.
-            println!("Assembly Index:  ≤{index} (timed out)");
+        }
+        (false, Some(_)) => {
+            println!("{index}");
+        }
+        // Search timed out and returned an upper bound.
+        (true, None) => {
+            println!("Assembly Index:  <= {index} (timed out)");
             println!("Matches:         {num_matches}");
             println!("States Searched: not computed on timeout");
         }
-    } else {
-        println!("{index}");
+        (false, None) => {
+            println!("<= {index} (timed out)");
+        }
     }
 
     Ok(())
