@@ -1,6 +1,6 @@
 # `assembly-theory` JOSS Manuscript
 
-This `paper/` directory contains the source files for our [Journal of Open Source Science](https://joss.theoj.org/) manuscript on the `assembly-theory` software package titled *Open, Reproducible Calculation of Assembly Indices*.
+This `paper/` directory contains the source files for our [Journal of Open Source Science](https://joss.theoj.org/) manuscript on the `assembly-theory` software package titled *assembly-theory: Open, Reproducible Calculation of Assembly Indices*.
 This is a collaboration in the Biodesign Center for Biocomputing, Security and Society at Arizona State University involving Devansh Vimal, Garrett Parzych, Olivia M. Smith, Devendra Parkar, Holly Bergen, Joshua J. Daymude, and Cole Mathis.
 
 > [!NOTE]

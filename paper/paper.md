@@ -1,5 +1,5 @@
 ---
-title: 'Open, Reproducible Calculation of Assembly Indices'
+title: 'assembly-theory: Open, Reproducible Calculation of Assembly Indices'
 tags:
   - assembly theory
   - biochemistry
@@ -207,6 +207,7 @@ However, we emphasize that `assembly-theory` offers advantages beyond performanc
 `assembly-theory` is available as a source code repository on [GitHub](https://github.com/DaymudeLab/assembly-theory), as a Rust crate on [crates.io](https://crates.io/crates/assembly-theory), and as a Python package on [PyPI](https://pypi.org/project/assembly-theory/).
 Following the standard practice for Rust projects, `assembly-theory` is dual-licensed under the MIT and Apache-2.0 licenses.
 Contributing guidelines and project governance are described in our `README`.
+Benchmarks and performance evaluations supporting this manuscript are available on Zenodo [@AgentElement2025-assemblytheory].
 
 
 
