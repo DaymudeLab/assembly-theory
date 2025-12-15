@@ -31,6 +31,12 @@ struct Cli {
     #[arg(long)]
     verbose: bool,
 
+    /// Timeout duration in milliseconds after which search is stopped and the
+    /// best assembly index found so far is returned, or `None` if search is
+    /// run until the true assembly index is found.
+    #[arg(long)]
+    timeout: Option<u64>,
+
     /// Algorithm for graph canonization.
     #[arg(long, value_enum, default_value_t = CanonizeMode::TreeNauty)]
     canonize: CanonizeMode,
@@ -105,6 +111,7 @@ fn main() -> Result<()> {
     // Call index calculation with all the various options.
     let (index, num_matches, states_searched) = index_search(
         &mol,
+        cli.timeout,
         cli.canonize,
         cli.parallel,
         cli.memoize,
@@ -113,12 +120,25 @@ fn main() -> Result<()> {
     );
 
     // Print final output, depending on --verbose.
-    if cli.verbose {
-        println!("Assembly Index: {index}");
-        println!("Edge-Disjoint Isomorphic Subgraph Pairs: {num_matches}");
-        println!("Assembly States Searched: {states_searched}");
-    } else {
-        println!("{index}");
+    match (cli.verbose, states_searched) {
+        // Found the exact assembly index.
+        (true, Some(states_searched)) => {
+            println!("Assembly Index:  {index}");
+            println!("Matches:         {num_matches}");
+            println!("States Searched: {states_searched}");
+        }
+        (false, Some(_)) => {
+            println!("{index}");
+        }
+        // Search timed out and returned an upper bound.
+        (true, None) => {
+            println!("Assembly Index:  <= {index} (timed out)");
+            println!("Matches:         {num_matches}");
+            println!("States Searched: not computed on timeout");
+        }
+        (false, None) => {
+            println!("<= {index} (timed out)");
+        }
     }
 
     Ok(())

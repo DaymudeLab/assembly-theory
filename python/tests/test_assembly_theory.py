@@ -13,14 +13,14 @@ import assembly_theory as at
 
 
 def test_mol_info():
-    with open(osp.join('data', 'checks', 'anthracene.mol')) as f:
+    with open(osp.join("data", "checks", "anthracene.mol")) as f:
         mol_block = f.read()
 
     info = at.mol_info(mol_block)
-    num_atoms = info.count("label = \"Atom")
-    num_single = info.count("label = \"Single\"")
-    num_double = info.count("label = \"Double\"")
-    num_triple = info.count("label = \"Triple\"")
+    num_atoms = info.count('label = "Atom')
+    num_single = info.count('label = "Single"')
+    num_double = info.count('label = "Double"')
+    num_triple = info.count('label = "Triple"')
 
     assert (num_atoms, num_single, num_double, num_triple) == (14, 9, 7, 0)
 
@@ -33,7 +33,7 @@ def test_mol_info_bad_molblock():
 
 
 def test_depth():
-    with open(osp.join('data', 'checks', 'benzene.mol')) as f:
+    with open(osp.join("data", "checks", "benzene.mol")) as f:
         mol_block = f.read()
 
     assert at.depth(mol_block) == 3
@@ -47,7 +47,7 @@ def test_depth_bad_molblock():
 
 
 def test_index():
-    with open(osp.join('data', 'checks', 'anthracene.mol')) as f:
+    with open(osp.join("data", "checks", "anthracene.mol")) as f:
         mol_block = f.read()
 
     assert at.index(mol_block) == 6
@@ -61,18 +61,37 @@ def test_index_bad_molblock():
 
 
 def test_index_search():
-    with open(osp.join('data', 'checks', 'anthracene.mol')) as f:
+    with open(osp.join("data", "checks", "anthracene.mol")) as f:
         mol_block = f.read()
 
     (index, num_matches, states_searched) = at.index_search(
-            mol_block,
-            "tree-nauty",
-            "none",  # Disable parallelism for deterministic states_searched.
-            "none",
-            "none",
-            ["int", "matchable-edges"])
+        mol_block,
+        timeout=None,
+        canonize_str="tree-nauty",
+        parallel_str="none",  # Make states_searched deterministic.
+        memoize_str="none",
+        kernel_str="none",
+        bound_strs=["int", "matchable-edges"],
+    )
 
     assert (index, num_matches, states_searched) == (6, 466, 491)
+
+
+def test_index_search_timeout():
+    with open(osp.join("data", "checks", "anthracene.mol")) as f:
+        mol_block = f.read()
+
+    (_, _, states_searched) = at.index_search(
+        mol_block,
+        timeout=1,  # Limit search to 1 ms, which should time out.
+        canonize_str="tree-nauty",
+        parallel_str="none",
+        memoize_str="none",
+        kernel_str="none",
+        bound_strs=[],
+    )
+
+    assert states_searched is None
 
 
 def test_index_search_bad_molblock():
@@ -83,7 +102,7 @@ def test_index_search_bad_molblock():
 
 
 def test_index_search_bad_canonize():
-    with open(osp.join('data', 'checks', 'anthracene.mol')) as f:
+    with open(osp.join("data", "checks", "anthracene.mol")) as f:
         mol_block = f.read()
 
     with pytest.raises(ValueError) as e:
@@ -93,7 +112,7 @@ def test_index_search_bad_canonize():
 
 
 def test_index_search_bad_parallel():
-    with open(osp.join('data', 'checks', 'anthracene.mol')) as f:
+    with open(osp.join("data", "checks", "anthracene.mol")) as f:
         mol_block = f.read()
 
     with pytest.raises(ValueError) as e:
@@ -103,7 +122,7 @@ def test_index_search_bad_parallel():
 
 
 def test_index_search_bad_memoize():
-    with open(osp.join('data', 'checks', 'anthracene.mol')) as f:
+    with open(osp.join("data", "checks", "anthracene.mol")) as f:
         mol_block = f.read()
 
     with pytest.raises(ValueError) as e:
@@ -113,7 +132,7 @@ def test_index_search_bad_memoize():
 
 
 def test_index_search_bad_kernel():
-    with open(osp.join('data', 'checks', 'anthracene.mol')) as f:
+    with open(osp.join("data", "checks", "anthracene.mol")) as f:
         mol_block = f.read()
 
     with pytest.raises(ValueError) as e:
@@ -123,7 +142,7 @@ def test_index_search_bad_kernel():
 
 
 def test_index_search_bad_bound():
-    with open(osp.join('data', 'checks', 'anthracene.mol')) as f:
+    with open(osp.join("data", "checks", "anthracene.mol")) as f:
         mol_block = f.read()
 
     with pytest.raises(ValueError) as e:

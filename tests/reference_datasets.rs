@@ -73,6 +73,7 @@ fn test_reference_dataset(
         // Calculate the molecule's assembly index.
         let (index, _, _) = index_search(
             &mol,
+            None,
             canonize_mode,
             parallel_mode,
             memoize_mode,
