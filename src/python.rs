@@ -369,9 +369,9 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 /// # Python Parameters
 ///
 /// - `mol_block`: The contents of a `.mol` file as a `str`.
-/// - `timeout`: An `int` number of milliseconds after which search should
-/// timeout and return the best upper bound on the assembly index found so far,
-/// or `None` if search should run until the true assembly index is found.
+/// - `timeout`: An `int` duration in milliseconds after which search is
+/// stopped and the best assembly index found so far is returned, or `None` if
+/// search is run until the true assembly index is found.
 /// - `canonize_str`: A canonization mode from [`"nauty"`, `"faulon"`,
 /// `"tree-nauty"` (default), `"tree-faulon"`]. See [`CanonizeMode`] for
 /// details.
@@ -388,12 +388,10 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 ///
 /// # Python Returns
 ///
-/// A 4-tuple containing:
+/// A 3-tuple containing:
 /// - The molecule's `int` assembly index (or an upper bound if timed out).
 /// - The molecule's `int` number of edge-disjoint isomorphic subgraph pairs.
-/// - The `int` number of assembly states searched.
-/// - A `bool` that is `true` if the assembly index is exact and `false`
-/// otherwise, i.e., if search times out.
+/// - The `int` number of assembly states searched, or `None` if timed out.
 ///
 /// # Python Example
 ///
@@ -405,7 +403,7 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 ///     mol_block = f.read()
 ///
 /// # Calculate the molecule's assembly index using the specified options.
-/// (index, num_matches, states_searched, is_exact) = at.index_search(
+/// (index, num_matches, states_searched) = at.index_search(
 ///     mol_block,
 ///     timeout=None,
 ///     canonize_str="tree-nauty",
@@ -414,9 +412,9 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 ///     kernel_str="none",
 ///     bound_strs=["int", "matchable-edges"])
 ///
-/// print(f"Assembly Index: {index}")  # 6
-/// print(f"Edge-Disjoint Isomorphic Subgraph Pairs: {num_matches}")  # 466
-/// print(f"Assembly States Searched: {states_searched}")  # 491
+/// print(f"Assembly Index:  {index}")            # 6
+/// print(f"Matches:         {num_matches}")      # 466
+/// print(f"States Searched: {states_searched}")  # 491
 /// ```
 #[pyfunction(name = "index_search")]
 #[pyo3(signature = (mol_block, timeout=None, canonize_str="tree-nauty", parallel_str="depth-one", memoize_str="canon-index", kernel_str="none", bound_strs=vec!["int".to_string(), "matchable-edges".to_string()]), text_signature = "(mol_block, canonize_str=\"tree-nauty\", parallel_str=\"depth-one\", memoize_str=\"canon-index\", kernel_str=\"none\", bound_strs=[\"int\", \"matchable-edges\"]))")]
@@ -428,7 +426,7 @@ pub fn _index_search(
     memoize_str: &str,
     kernel_str: &str,
     bound_strs: Vec<String>,
-) -> PyResult<(u32, u32, usize, bool)> {
+) -> PyResult<(u32, u32, Option<usize>)> {
     // Parse the .mol file contents as a molecule::Molecule.
     let mol_result = parse_molfile_str(mol_block);
     let mol = match mol_result {

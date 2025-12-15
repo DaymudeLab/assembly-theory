@@ -64,15 +64,34 @@ def test_index_search():
     with open(osp.join("data", "checks", "anthracene.mol")) as f:
         mol_block = f.read()
 
-    assert at.index_search(
+    (index, num_matches, states_searched) = at.index_search(
         mol_block,
-        None,
-        "tree-nauty",
-        "none",  # Disable parallelism for deterministic states_searched.
-        "none",
-        "none",
-        ["int", "matchable-edges"],
-    ) == (6, 466, 491, True)
+        timeout=None,
+        canonize_str="tree-nauty",
+        parallel_str="none",  # Make states_searched deterministic.
+        memoize_str="none",
+        kernel_str="none",
+        bound_strs=["int", "matchable-edges"],
+    )
+
+    assert (index, num_matches, states_searched) == (6, 466, 491)
+
+
+def test_index_search_timeout():
+    with open(osp.join("data", "checks", "anthracene.mol")) as f:
+        mol_block = f.read()
+
+    (_, _, states_searched) = at.index_search(
+        mol_block,
+        timeout=1,  # Limit search to 1 ms, which should time out.
+        canonize_str="tree-nauty",
+        parallel_str="none",
+        memoize_str="none",
+        kernel_str="none",
+        bound_strs=[],
+    )
+
+    assert states_searched is None
 
 
 def test_index_search_bad_molblock():

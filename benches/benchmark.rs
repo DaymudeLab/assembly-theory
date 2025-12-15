@@ -117,14 +117,12 @@ pub fn bench_bounds(c: &mut Criterion) {
                                 let mut cache =
                                     Cache::new(MemoizeMode::CanonIndex, CanonizeMode::TreeNauty);
                                 let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
-                                let states_searched = Arc::new(AtomicUsize::from(0));
                                 let start = Instant::now();
                                 recurse_index_search(
                                     mol,
                                     &matches,
                                     &state,
                                     best_index,
-                                    states_searched,
                                     bounds,
                                     &mut cache,
                                     ParallelMode::DepthOne,
@@ -183,14 +181,12 @@ pub fn bench_memoize(c: &mut Criterion) {
                             for _ in 0..iters {
                                 let mut cache = Cache::new(memoize_mode, canonize_mode);
                                 let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
-                                let states_searched = Arc::new(AtomicUsize::from(0));
                                 let start = Instant::now();
                                 recurse_index_search(
                                     mol,
                                     &matches,
                                     &state,
                                     best_index,
-                                    states_searched,
                                     &[Bound::Int, Bound::MatchableEdges],
                                     &mut cache,
                                     ParallelMode::DepthOne,

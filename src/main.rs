@@ -109,7 +109,7 @@ fn main() -> Result<()> {
     };
 
     // Call index calculation with all the various options.
-    let (index, num_matches, states_searched, is_exact) = index_search(
+    let (index, num_matches, states_searched) = index_search(
         &mol,
         cli.timeout,
         cli.canonize,
@@ -121,13 +121,17 @@ fn main() -> Result<()> {
 
     // Print final output, depending on --verbose.
     if cli.verbose {
-        if !is_exact {
-            println!("Assembly Index: {index} (timed out)");
+        if let Some(states_searched) = states_searched {
+            // Found the exact assembly index.
+            println!("Assembly Index:  {index}");
+            println!("Matches:         {num_matches}");
+            println!("States Searched: {states_searched}");
         } else {
-            println!("Assembly Index: {index}");
+            // Search timed out and returned an upper bound.
+            println!("Assembly Index:  ≤{index} (timed out)");
+            println!("Matches:         {num_matches}");
+            println!("States Searched: not computed on timeout");
         }
-        println!("Edge-Disjoint Isomorphic Subgraph Pairs: {num_matches}");
-        println!("Assembly States Searched: {states_searched}");
     } else {
         println!("{index}");
     }
