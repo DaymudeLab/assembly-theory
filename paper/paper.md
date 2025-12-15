@@ -194,7 +194,7 @@ Means and 95% confidence intervals are reported over 20 samples per software&nda
 | `gdb13_1201` |   0.938 s ± 6.00% |  **0.107 s** ± 0.19% |   0.163 s ± 0.53% |
 | `gdb17_200`  |  46.523 s ± 1.00% |  0.318 s ± 0.24% |   **0.181 s** ± 0.71% |
 | `checks`     | 215.194 s ± 0.55% |  0.053 s ± 0.88% |   **0.025 s** ± 0.24% |
-| `coconut_55` |     1.48 h$^\ast$ |  0.345 s ± 0.26% |   **0.152 s** ± 0.45% |
+| `coconut_55` |     1.34 h$^\ast$ |  0.345 s ± 0.26% |   **0.152 s** ± 0.45% |
 
 Algorithmically, the default MA search strategies of `assemblycpp-v5` and our `assembly-theory` are currently very similar.
 Our speedup on larger molecules is likely due primarily to parallelism, which `assemblycpp-v5` lacks.
