@@ -129,9 +129,7 @@ enum PyBound {
     Int,
     VecSimple,
     VecSmallFrags,
-    CoverSort,
-    CoverNoSort,
-    CliqueBudget,
+    MatchableEdges,
 }
 
 /// Converts bound options in `&str` format to `PyCanonizeMode`.
@@ -213,13 +211,11 @@ impl FromStr for PyBound {
             "int" => Ok(PyBound::Int),
             "vec-simple" => Ok(PyBound::VecSimple),
             "vec-small-frags" => Ok(PyBound::VecSmallFrags),
-            "cover-sort" => Ok(PyBound::CoverSort),
-            "cover-no-sort" => Ok(PyBound::CoverNoSort),
-            "clique-budget" => Ok(PyBound::CliqueBudget),
+            "matchable-edges" => Ok(PyBound::MatchableEdges),
             _ => Err(PyValueError::new_err(format!(
                 "Invalid bound \"{s}\", options are: \
                 [\"log\", \"int\", \"vec-simple\", \"vec-small-frags\", \
-                \"cover-sort\", \"cover-no-sort\", \"clique-budget\"]"
+                \"matchable-edges\"]"
             ))),
         }
     }
@@ -243,9 +239,7 @@ fn make_boundlist(pybounds: &[PyBound]) -> Vec<OurBound> {
             PyBound::Int => vec![OurBound::Int],
             PyBound::VecSimple => vec![OurBound::VecSimple],
             PyBound::VecSmallFrags => vec![OurBound::VecSmallFrags],
-            PyBound::CoverSort => vec![OurBound::CoverSort],
-            PyBound::CoverNoSort => vec![OurBound::CoverNoSort],
-            PyBound::CliqueBudget => vec![OurBound::CliqueBudget],
+            PyBound::MatchableEdges => vec![OurBound::MatchableEdges],
         })
         .collect::<Vec<_>>();
     boundlist.dedup();
@@ -387,10 +381,9 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 /// - `kernel_str`: A kernelization mode from [`"none"` (default), `"once"`,
 /// `"depth-one"`, `"always"`]. See [`KernelMode`] for details.
 /// - `bound_strs`: A list of bounds containing zero or more of [`"log"`,
-/// `"int"`, `"vec-simple"`, `"vec-small-frags"`, `"cover-sort"`,
-/// `"cover-no-sort"`, `"clique-budget"`]. The default bounds are [`"int"`,
-/// `"vec-simple"`, `"vec-small-frags"`]. See [`crate::bounds::Bound`] for
-/// details.
+/// `"int"`, `"vec-simple"`, `"vec-small-frags"`, `"matchable-edges"`].
+/// The default bounds are [`"int"`, `"matchable-edges"`]. See
+/// [`crate::bounds::Bound`] for details.
 ///
 /// # Python Returns
 ///
@@ -415,14 +408,14 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 ///     "none",
 ///     "none",
 ///     "none",
-///     ["int", "vec-simple", "vec-small-frags"])
+///     ["int", "matchable-edges"])
 ///
 /// print(f"Assembly Index: {index}")  # 6
 /// print(f"Edge-Disjoint Isomorphic Subgraph Pairs: {num_matches}")  # 466
-/// print(f"Assembly States Searched: {states_searched}")  # 2462
+/// print(f"Assembly States Searched: {states_searched}")  # 491
 /// ```
 #[pyfunction(name = "index_search")]
-#[pyo3(signature = (mol_block, canonize_str="tree-nauty", parallel_str="depth-one", memoize_str="canon-index", kernel_str="none", bound_strs=vec!["int".to_string(), "vec-simple".to_string(), "vec-small-frags".to_string()]), text_signature = "(mol_block, canonize_str=\"tree-nauty\", parallel_str=\"depth-one\", memoize_str=\"canon-index\", kernel_str=\"none\", bound_strs=[\"int\", \"vec-simple\", \"vec-small-frags\"]))")]
+#[pyo3(signature = (mol_block, canonize_str="tree-nauty", parallel_str="depth-one", memoize_str="canon-index", kernel_str="none", bound_strs=vec!["int".to_string(), "matchable-edges".to_string()]), text_signature = "(mol_block, canonize_str=\"tree-nauty\", parallel_str=\"depth-one\", memoize_str=\"canon-index\", kernel_str=\"none\", bound_strs=[\"int\", \"matchable-edges\"]))")]
 pub fn _index_search(
     mol_block: &str,
     canonize_str: &str,

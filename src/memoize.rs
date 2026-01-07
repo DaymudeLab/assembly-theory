@@ -101,8 +101,8 @@ impl Cache {
     }
 
     /// Return `true` iff memoization is enabled and this assembly state is
-    /// preempted by the cached assembly state.
-    /// See https://github.com/DaymudeLab/assembly-theory/pull/95 for details.
+    /// preempted by a cached assembly state. See
+    /// <https://github.com/DaymudeLab/assembly-theory/pull/95> for details.
     pub fn memoize_state<T: AObject>(&mut self, mol: &T, state: &State) -> bool {
         let state_index = state.index();
         let removal_order = state.removal_order();

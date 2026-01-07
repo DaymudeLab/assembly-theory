@@ -25,10 +25,10 @@ use std::sync::{
 
 use bit_set::BitSet;
 use clap::ValueEnum;
-use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{ParallelBridge, ParallelIterator};
 
 use crate::{
-    bounds::{bound_exceeded, Bound},
+    bounds::{state_bounds, Bound},
     canonize::CanonizeMode,
     kernels::KernelMode,
     matches::Matches,
@@ -167,15 +167,15 @@ pub fn recurse_index_search<T: AObject>(
 ) -> (usize, usize) {
     // If any bounds would prune this assembly state or if memoization is
     // enabled and this assembly state is preempted by the cached state, halt.
-    if bound_exceeded(mol, state, best_index.load(Relaxed), bounds)
-        || cache.memoize_state(mol, state)
+    if state_bounds(mol, state, best_index.load(Relaxed), bounds) || cache.memoize_state(mol, state)
     {
         return (state.index(), 1);
     }
 
     // Generate a list of matches (i.e., pairs of edge-disjoint, isomorphic
     // fragments) to remove from this state.
-    let matches_to_remove = matches.matches_to_remove(state);
+    let (intermediate_frags, matches_to_remove): (Vec<BitSet>, Vec<usize>) =
+        matches.matches_to_remove(mol, state, best_index.load(Relaxed), bounds);
 
     // Keep track of the best assembly index found in any of this assembly
     // state's children and the number of states searched, including this one.
@@ -187,7 +187,7 @@ pub fn recurse_index_search<T: AObject>(
     let recurse_on_match = |i: usize, match_ix: usize| {
         let (h1, h2) = matches.match_fragments(match_ix);
 
-        if let Some(fragments) = fragments(mol, state.fragments(), h1, h2) {
+        if let Some(fragments) = fragments(mol, &intermediate_frags, h1, h2) {
             // If using depth-one parallelism, all descendant states should be
             // computed serially.
             let new_parallel = if parallel_mode == ParallelMode::DepthOne {
@@ -200,7 +200,7 @@ pub fn recurse_index_search<T: AObject>(
             let (child_index, child_states_searched) = recurse_index_search(
                 mol,
                 matches,
-                &state.update(fragments, i, h1.len()),
+                &state.update(fragments, i, match_ix, h1.len()),
                 best_index.clone(),
                 bounds,
                 &mut cache.clone(),
@@ -223,8 +223,9 @@ pub fn recurse_index_search<T: AObject>(
             .for_each(|(i, match_ix)| recurse_on_match(i, *match_ix));
     } else {
         matches_to_remove
-            .par_iter()
+            .iter()
             .enumerate()
+            .par_bridge()
             .for_each(|(i, match_ix)| recurse_on_match(i, *match_ix));
     }
 
@@ -361,7 +362,7 @@ pub fn index<T: AObject>(mol: &T) -> u32 {
         ParallelMode::DepthOne,
         MemoizeMode::CanonIndex,
         KernelMode::None,
-        &[Bound::Int, Bound::VecSimple, Bound::VecSmallFrags],
+        &[Bound::Int, Bound::MatchableEdges],
     )
     .0
 }

@@ -1,5 +1,4 @@
-//! Strucutral information on "matches" in a molecular graph, i.e., pairs of
-//! edge-disjoint, isomorphic subgraphs.
+//! Strucutral information on matches in a molecular graph.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -7,11 +6,12 @@ use bit_set::BitSet;
 use petgraph::graph::EdgeIndex;
 
 use crate::{
+    bounds::{match_bounds, Bound},
     canonize::{canonize, CanonizeMode, Labeling},
     //molecule::Molecule,
     object::AObject,
     state::State,
-    utils::edge_neighbors,
+    utils::{connected_components_under_edges, edge_neighbors},
 };
 
 /// A node in the DAG storing fragment information; see [`Matches`].
@@ -189,15 +189,20 @@ impl Matches {
         self.matches.is_empty()
     }
 
-    /// Return all removable matches for the given assembly state.
+    /// Return all matches whose removal from the given assembly state may
+    /// result in a better assembly index according to the given match bounds.
     ///
     /// A match (i.e., two edge-disjoint isomorphic fragments) is removable
     /// from an assembly state if (1) each match fragment is a subgraph of some
     /// assembly state fragment, and (2) the match's index is strictly greater
     /// than that of the last match removed from this assembly state.
-    pub fn matches_to_remove(&self, state: &State) -> Vec<usize> {
-        let mut removable_matches: Vec<usize> = Vec::new();
-
+    pub fn matches_to_remove<T: AObject>(
+        &self,
+        mol: &T,
+        state: &State,
+        best: usize,
+        bounds: &[Bound],
+    ) -> (Vec<BitSet>, Vec<usize>) {
         // The search for removable matches uses the DAG of duplicatable
         // fragments, starting with singleton edge fragments (the DAG's source
         // nodes). Because removable fragments are subgraphs of assembly state
@@ -208,7 +213,16 @@ impl Matches {
             frag_state_ixs.extend(frag.iter().map(|e| (e, state_ix)));
         }
 
-        // Search for removable matches using BFS over the DAG, only extending
+        // For later use when applying match bounds, create a container for
+        // "matchable edge masks" indexed by match size (i.e., the number of
+        // edges in each of a match's fragments). Edge masks for a given match
+        // size indicate, for each fragment in this assembly state, which edges
+        // are included in some match of the given size.
+        let mut matchable_edge_masks: Vec<Vec<BitSet>> = Vec::new();
+        let mut iso_classes_by_len: Vec<BTreeMap<usize, Vec<(usize, usize)>>> = Vec::new();
+
+        // Collect duplicatable fragments by isomorphism and find which edges
+        // are used in a removable match. Use BFS over the DAG, only extending
         // search paths that include fragments contained in removable matches.
         // (If some duplicatable fragment is not in a removable match, then no
         // child fragment that extends it with additional edges can be either.)
@@ -238,6 +252,8 @@ impl Matches {
             // Iterate through each isomorphism class (containing isomorphic
             // removable fragments) to identify removable matches.
             let mut next_frag_state_ixs: Vec<(usize, usize)> = Vec::new();
+            let mut matchable_edges =
+                vec![BitSet::with_capacity(mol.graph().edge_count()); state.fragments().len()];
             for isomorphic_frags in isomorphism_classes.values_mut() {
                 // Track which fragments in this isomorphism class are matched.
                 let mut frag_has_match = BitSet::with_capacity(isomorphic_frags.len());
@@ -245,6 +261,12 @@ impl Matches {
                 // Check if pairs of isomorphic fragments form a match.
                 for iso_ix1 in 0..isomorphic_frags.len() {
                     for iso_ix2 in (iso_ix1 + 1)..isomorphic_frags.len() {
+                        // If both fragments have already been found to be
+                        // in some match(es), don't check this again.
+                        if frag_has_match.contains(iso_ix1) && frag_has_match.contains(iso_ix2) {
+                            continue;
+                        }
+
                         // Order the fragments by descending fragment index.
                         let mut frag1_ixs = (isomorphic_frags[iso_ix1], iso_ix1);
                         let mut frag2_ixs = (isomorphic_frags[iso_ix2], iso_ix2);
@@ -261,30 +283,97 @@ impl Matches {
                         // this assembly state, they are a removable match.
                         if let Some(match_ix) = self.match_to_ix.get(&(frag1_ix, frag2_ix)) {
                             if *match_ix as isize > state.last_removed() {
-                                removable_matches.push(*match_ix);
-
                                 // Extend the search for removable matches with
                                 // these fragments on first match.
                                 if frag_has_match.insert(frag1_iso_ix) {
                                     next_frag_state_ixs.push((frag1_ix, frag1_state_ix));
+                                    matchable_edges[frag1_state_ix]
+                                        .union_with(&self.dag[frag1_ix].fragment);
                                 }
                                 if frag_has_match.insert(frag2_iso_ix) {
                                     next_frag_state_ixs.push((frag2_ix, frag2_state_ix));
+                                    matchable_edges[frag2_state_ix]
+                                        .union_with(&self.dag[frag2_ix].fragment);
                                 }
                             }
                         }
                     }
                 }
+
+                // Remove any fragments that were not part of a match.
+                for ix in (0..isomorphic_frags.len())
+                    .filter(|x| !frag_has_match.contains(*x))
+                    .rev()
+                {
+                    isomorphic_frags.remove(ix);
+                }
             }
+
+            iso_classes_by_len.push(isomorphism_classes);
+            matchable_edge_masks.push(matchable_edges);
 
             // Use the updated fragment/state indices in the next iteration.
             frag_state_ixs = next_frag_state_ixs;
         }
 
+        // Breaking out of the loop implies that there were no matches found in
+        // the last iteration. Thus the final entry of matchable_edge_masks
+        // will be empty and can be discarded.
+        matchable_edge_masks.pop();
+
+        // Create new fragments for the current assembly state by removing
+        // non-matched edges. Such edges will remain non-matchable lower in the
+        // search tree and thus can be discarded.
+        let intermediate_frags = {
+            if !matchable_edge_masks.is_empty() {
+                matchable_edge_masks[0]
+                    .iter()
+                    .flat_map(|frag| connected_components_under_edges(mol.graph(), frag))
+                    .filter(|frag| frag.len() >= 2)
+                    .collect::<Vec<BitSet>>()
+            } else {
+                vec![]
+            }
+        };
+
+        // Get a lower bound on the size of the largest match whose removal may
+        // yield a better assembly index.
+        let match_bound = match_bounds(state.index(), best, &matchable_edge_masks, bounds);
+
+        // Use the stored isomorphism classes to generate removable matches.
+        let mut removable_matches: Vec<usize> = Vec::new();
+        for (bucket_ix, isomorphism_classes) in iso_classes_by_len.iter().enumerate().rev() {
+            // Stop if matches of this size are bounded by the match bounds.
+            let match_len = bucket_ix + 2;
+            if match_len < match_bound {
+                break;
+            }
+
+            // Check if pairs of isomorphic fragments form a match.
+            for isomorphic_frags in isomorphism_classes.values() {
+                for i in 0..isomorphic_frags.len() {
+                    for j in i + 1..isomorphic_frags.len() {
+                        let mut frag1_id = isomorphic_frags[i].0;
+                        let mut frag2_id = isomorphic_frags[j].0;
+
+                        if frag1_id < frag2_id {
+                            std::mem::swap(&mut frag1_id, &mut frag2_id);
+                        }
+
+                        if let Some(match_ix) = self.match_to_ix.get(&(frag1_id, frag2_id)) {
+                            if *match_ix as isize > state.last_removed() {
+                                removable_matches.push(*match_ix);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Sort removable matches in ascending order of match index (i.e.,
         // those with larger fragments first).
         removable_matches.sort();
-        removable_matches
+        (intermediate_frags, removable_matches)
     }
 
     /// Return the two edge-disjoint isomorphic fragments composing this match.

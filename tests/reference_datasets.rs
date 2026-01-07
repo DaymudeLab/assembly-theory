@@ -155,6 +155,7 @@ fn individual_bounds() {
         Bound::Int,
         Bound::VecSimple,
         Bound::VecSmallFrags,
+        Bound::MatchableEdges,
     ] {
         test_reference_dataset(
             "checks",
@@ -181,6 +182,7 @@ fn all_bounds() {
             Bound::Int,
             Bound::VecSimple,
             Bound::VecSmallFrags,
+            Bound::MatchableEdges,
         ],
     );
 }
@@ -199,6 +201,7 @@ fn memoize_bounds() {
             Bound::Int,
             Bound::VecSimple,
             Bound::VecSmallFrags,
+            Bound::MatchableEdges,
         ],
     );
 }

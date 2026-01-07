@@ -1,6 +1,14 @@
 //! Prune assembly states from which the assembly index cannot improve.
 //!
-//! Each bound takes information about the current assembly state (i.e., set of
+//! There are two types of bounds: *state bounds* and *match bounds*. State
+//! bounds are applied as soon as an assembly state is reached to determine
+//! whether any children of this state may possibly yield an improved assembly
+//! index; if not, this state is removed from the search tree. Otherwise, match
+//! bounds are applied to exclude any matches (i.e., pairs of edge-disjoint,
+//! isomorphic subgraphs) whose removal from the current assembly state cannot
+//! not yield an improved assembly index.
+//!
+//! Each state bound considers the current assembly state (i.e., set of
 //! fragments) and computes an upper bound on the "savings" (in terms of number
 //! of joining operations) that can possibly be obtained when constructing the
 //! molecule using this state's fragments and subfragments thereof. Let
@@ -10,6 +18,13 @@
 //! `state_index` - `bound` >= `best_index`, then no descendant of this
 //! assembly state can possibly yield an assembly index better than
 //! `best_index` and thus this assembly state can be pruned.
+//!
+//! Each match bound considers both the current assembly state and the matches
+//! (i.e., pairs of edge-disjoint, isomorphic subgraphs) that can be removed
+//! from it. It determines a size (in edges) such that the removal of any match
+//! smaller than this size cannot possibly yield a better assembly index. This
+//! size is then used as a filter when generating matches to remove from a
+//! given assembly state in [`crate::matches::Matches::matches_to_remove`].
 
 use bit_set::BitSet;
 use clap::ValueEnum;
@@ -19,7 +34,7 @@ use crate::{
     state::State,
 };
 
-/// Type of upper bound on the "savings" possible from an assembly state.
+/// State and match bounds to prune assembly index search.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum Bound {
     /// The shortest number of joining operations to create a molecule with |E|
@@ -43,20 +58,9 @@ pub enum Bound {
     /// remove if there is a duplicate set of two bonds in the graph.
     /// Otherwise, they will require two steps.
     VecSmallFrags,
-    /// A weighted independent set cover provides a bound on the size of a max.
-    /// weight clique in the compatibility graph. Uses a greedy algorithm  to
-    /// construct such a cover and obtain a bound. See
-    /// [Lamm et al. (2019)](https://doi.org/10.1137/1.9781611975499.12) for
-    /// the definition of a cover. (Note that they solve the equivalent
-    /// weighted independent set problem and thus use a clique cover instead.)
-    CoverNoSort,
-    /// Like `CoverNoSort`, buts sorts the vertices of the compatibility
-    /// graph by degree before creating the greedy independent set cover.
-    CoverSort,
-    /// Uses the compatibility graph to determine the largest duplicatable
-    /// subraphs remaining in each fragment. Uses this to bound the best
-    /// possible savings obtainable for each fragment.
-    CliqueBudget,
+    /// Like `Int`, but uses only matchable edges as computed in
+    /// [`crate::matches::Matches::matches_to_remove`].
+    MatchableEdges,
 }
 
 /// Edge information used in vector addition chain bounds.
@@ -66,8 +70,13 @@ struct EdgeType {
     ends: (u8, u8),
 }
 
-/// Return `true` iff any of the given bounds would prune this assembly state.
-pub fn bound_exceeded<T: AObject>(mol: &T, state: &State, best_index: usize, bounds: &[Bound]) -> bool {
+/// Return `true` iff any of the given state bounds prune this assembly state.
+pub(crate) fn state_bounds<T: AObject>(
+    mol: &T,
+    state: &State,
+    best_index: usize,
+    bounds: &[Bound],
+) -> bool {
     let fragments = state.fragments();
     let state_index = state.index();
     let largest_removed = state.largest_removed();
@@ -82,15 +91,47 @@ pub fn bound_exceeded<T: AObject>(mol: &T, state: &State, best_index: usize, bou
             Bound::VecSmallFrags => {
                 state_index - vec_small_frags_bound(fragments, largest_removed, mol) >= best_index
             }
-            _ => {
-                panic!("One of the chosen bounds is not implemented yet!")
-            }
+            _ => false,
         };
         if exceeds {
             return true;
         }
     }
     false
+}
+
+/// Compute a lower bound on the size of the largest match whose removal from
+/// the given assembly state could possibly yield an improved assembly index.
+pub(crate) fn match_bounds(
+    state_index: usize,
+    best_index: usize,
+    matchable_edge_masks: &[Vec<BitSet>],
+    bounds: &[Bound],
+) -> usize {
+    // Test different match removal sizes.
+    for removal_size in 2..matchable_edge_masks.len() + 2 {
+        let mut bounded = false;
+
+        for bound_type in bounds {
+            bounded |= match bound_type {
+                Bound::MatchableEdges => {
+                    state_index
+                        >= usable_edges_bound(matchable_edge_masks, removal_size) + best_index
+                }
+                _ => false,
+            };
+            if bounded {
+                break;
+            }
+        }
+
+        // If no bounds apply, the largest match size has been found.
+        if !bounded {
+            return removal_size;
+        }
+    }
+
+    matchable_edge_masks.len() + 2
 }
 
 /// TODO
@@ -238,4 +279,21 @@ fn vec_small_frags_bound<T: AObject>(fragments: &[BitSet], m: usize, mol: &T) ->
 
     s - (z + size_two_types.len() + size_two_fragments.len())
         - ((sl - z) as f32 / m as f32).ceil() as usize
+}
+
+/// TODO
+fn usable_edges_bound(matchable_edge_masks: &[Vec<BitSet>], removal_size: usize) -> usize {
+    let mut bound = 0;
+
+    for (frag_ix, frag) in matchable_edge_masks[removal_size - 2].iter().enumerate() {
+        let total_removable_edges = matchable_edge_masks[0][frag_ix].len();
+        let removable_edges = frag.len();
+        let leftover_edges =
+            (total_removable_edges - removable_edges) + (removable_edges % removal_size);
+        bound += total_removable_edges
+            - (removable_edges / removal_size)
+            - leftover_edges.div_ceil(removal_size - 1);
+    }
+
+    bound.saturating_sub((removal_size as f32).log2().ceil() as usize)
 }

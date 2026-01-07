@@ -1,6 +1,6 @@
 [package]
 name = "assembly-theory"
-version = "0.5.1"
+version = "0.6.0"
 edition = "2021"
 description = "Open, reproducible calculation of assembly indices"
 documentation = "https://docs.rs/assembly-theory"
