@@ -280,11 +280,7 @@ fn make_boundlist(pybounds: &[PyBound]) -> Vec<OurBound> {
 #[pyfunction(name = "mol_info")]
 pub fn _mol_info(mol_block: &str) -> PyResult<String> {
     // Parse the .mol file contents as a molecule::Molecule.
-    let mol_result = parse_molfile_str(mol_block);
-    let mol = match mol_result {
-        Ok(mol) => mol,
-        Err(e) => return Err(e.into()), // Convert the error to PyErr
-    };
+    let mol = parse_molfile_str(mol_block)?;
 
     // Return molecule info.
     Ok(mol.info())
@@ -316,11 +312,7 @@ pub fn _mol_info(mol_block: &str) -> PyResult<String> {
 #[pyfunction(name = "depth")]
 pub fn _depth(mol_block: &str) -> PyResult<u32> {
     // Parse the .mol file contents as a molecule::Molecule.
-    let mol_result = parse_molfile_str(mol_block);
-    let mol = match mol_result {
-        Ok(mol) => mol,
-        Err(e) => return Err(e.into()), // Convert the error to PyErr
-    };
+    let mol = parse_molfile_str(mol_block)?;
 
     // Calculate assembly depth.
     Ok(depth(&mol))
@@ -351,11 +343,7 @@ pub fn _depth(mol_block: &str) -> PyResult<u32> {
 #[pyfunction(name = "index")]
 pub fn _index(mol_block: &str) -> PyResult<u32> {
     // Parse the .mol file contents as a molecule::Molecule.
-    let mol_result = parse_molfile_str(mol_block);
-    let mol = match mol_result {
-        Ok(mol) => mol,
-        Err(e) => return Err(e.into()), // Convert the error to PyErr
-    };
+    let mol = parse_molfile_str(mol_block)?;
 
     // Calculate the assembly index.
     Ok(index(&mol))
@@ -428,11 +416,7 @@ pub fn _index_search(
     bound_strs: Vec<String>,
 ) -> PyResult<(u32, u32, Option<usize>)> {
     // Parse the .mol file contents as a molecule::Molecule.
-    let mol_result = parse_molfile_str(mol_block);
-    let mol = match mol_result {
-        Ok(mol) => mol,
-        Err(e) => return Err(e.into()), // Convert the error to PyErr
-    };
+    let mol = parse_molfile_str(mol_block)?;
 
     // Parse the various modes and bound options.
     let canonize_mode = match PyCanonizeMode::from_str(canonize_str) {
