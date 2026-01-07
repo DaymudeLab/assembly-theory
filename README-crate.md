@@ -36,10 +36,23 @@ See [the documentation](https://docs.rs/assembly-theory) for a complete list of 
 
 ## Citation
 
-If you use this crate in your own scientific work, please consider citing us:
+If you use `assembly-theory` in your own scientific work, please consider citing us!
+On [GitHub](https://github.com/DaymudeLab/assembly-theory), you can use the "Cite this repository" dropdown in the About section to get APA and BibTeX citations; this is also directly compatible with the Zotero browser plugin.
+Otherwise, you can use the following BibTeX entry:
 
 ```bibtex
-Coming soon!
+@article{Vimal2026-assemblytheory,
+    title = {{assembly-theory: Open, Reproducible Calculation of Assembly Indices}},
+    author = {Vimal, Devansh and Parzych, Garrett and Smith, Olivia M. and Parkar, Devendra and Bergen, Holly and Daymude, Joshua J. and Mathis, Cole},
+    journal = {Journal of Open Source Software},
+    volume = {11},
+    number = {117},
+    pages = {9318},
+    month = jan,
+    year = 2026,
+    doi = {10.21105/joss.09318},
+    url = {https://joss.theoj.org/papers/10.21105/joss.09318},
+}
 ```
 
 

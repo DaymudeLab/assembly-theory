@@ -16,7 +16,7 @@ done
 
 # Let the user choose which executable should generate ground truth.
 PS3="Calculate assembly indices using: "
-select exec_choice in "assembly_go (Jirasek et al., 2024)" "assembly_cpp (Seet et al., 2024)" "assembly-theory"
+select exec_choice in "assembly_go (Jirasek et al., 2024)" "assemblycpp-v5 (Seet et al., 2025)" "assembly-theory"
 do
     case $REPLY in
         1)
@@ -29,12 +29,12 @@ do
             break
             ;;
         2)
-            if [ ! -f "assembly_cpp" ]; then
-                echo -n "ERROR: Missing ./assembly_cpp executable "
-                echo "(provided privately by Seet et al.)."
+            if [ ! -f "assemblycpp-v5" ]; then
+                echo -n "ERROR: Missing ./assemblycpp-v5 executable "
+                echo "(https://github.com/croningp/assemblycpp-v5)."
                 exit 1
             fi
-            executable="./assembly_cpp"
+            executable="./assemblycpp-v5"
             break
             ;;
         3)
@@ -60,12 +60,12 @@ do
     molfile=$(basename "$direntry")
     echo -ne "\r\e[K$exec_choice: Calculating assembly index of $molfile..."
 
-    # assembly_go and assembly-theory expect "<molecule>.mol" but assembly_cpp
-    # expects only "<molecule>" with the ".mol" part stripped off. Also,
-    # assembly_cpp prints a ton of unnecessary information requiring some
-    # parsing to get just the assembly index. Lastly, assembly_cpp generates
-    # auxiliary output files that need to be removed.
-    if [ $executable = "./assembly_cpp" ]; then
+    # assembly_go and assembly-theory take "<molecule>.mol" as input but
+    # assemblycpp-v5 takes only "<molecule>" with the ".mol" part stripped off.
+    # Also, assemblycpp-v5 prints a ton of unnecessary information requiring
+    # some parsing to get just the assembly index. Lastly, assemblycpp-v5
+    # generates auxiliary output files that need to be removed.
+    if [ $executable = "./assemblycpp-v5" ]; then
         molpath_stripped=$(echo "$direntry" | sed -e "s/.mol//g")
         maindex=$("$executable" "$molpath_stripped" -pathway=0 | tail -n 1 | awk '{print $NF}')
         rm "${molpath_stripped}Out"

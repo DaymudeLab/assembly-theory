@@ -3,7 +3,8 @@
 [![crates.io](https://img.shields.io/crates/v/assembly-theory)](https://crates.io/crates/assembly-theory)
 [![PyPI](https://img.shields.io/pypi/v/assembly-theory)](https://pypi.org/project/assembly-theory/)
 [![docs.rs](https://docs.rs/assembly-theory/badge.svg)](https://docs.rs/assembly-theory)
-[![Zenodo](https://zenodo.org/badge/DOI/10.5281/zenodo.16764413.svg)](https://doi.org/10.5281/zenodo.16764413)
+[![JOSS](https://joss.theoj.org/papers/704f4c6eba7224d413819cf889c95091/status.svg)](https://joss.theoj.org/papers/704f4c6eba7224d413819cf889c95091)
+[![Zenodo](https://zenodo.org/badge/DOI/10.5281/zenodo.16764412.svg)](https://doi.org/10.5281/zenodo.16764412)
 
 `assembly-theory` is an open-source, high-performance library for computing *assembly indices* of molecular structures (see, e.g., [Sharma et al., 2023](https://doi.org/10.1038/s41586-023-06600-9); [Walker et al., 2024](https://doi.org/10.1098/rsif.2024.0367)).
 It is implemented in Rust and is available as a [Rust crate](https://crates.io/crates/assembly-theory), [Python package](https://pypi.org/project/assembly-theory/), and standalone executable. 
@@ -157,17 +158,30 @@ Your PR will not be reviewed unless it passes all GitHub Actions (compilation, f
 
 ## Governance
 
-`assembly-theory` is maintained by Devansh Vimal ([@AgentElement](https://github.com/AgentElement)), Garrett Parzych ([@Garrett-Pz](https://github.com/Garrett-Pz)), Joshua J. Daymude ([@jdaymude](https://github.com/jdaymude)), and Cole Mathis ([@colemathis](https://github.com/colemathis)) with support from other members of the [Biodesign Center for Biocomputing, Security and Society](https://biodesign.asu.edu/biocomputing-security-and-society/) at Arizona State University including Olivia M. Smith ([@omsmith161](https://github.com/omsmith161)), Devendra Parkar ([@devrz45](https://github.com/devrz45)), and Sean Bergen ([@ARandomCl0wn](https://github.com/ARandomCl0wn)).
+`assembly-theory` is maintained by Devansh Vimal ([@AgentElement](https://github.com/AgentElement)), Garrett Parzych ([@Garrett-Pz](https://github.com/Garrett-Pz)), Joshua J. Daymude ([@jdaymude](https://github.com/jdaymude)), and Cole Mathis ([@colemathis](https://github.com/colemathis)) with support from other members of the [Biodesign Center for Biocomputing, Security and Society](https://biodesign.asu.edu/biocomputing-security-and-society/) at Arizona State University including Olivia M. Smith ([@omsmith161](https://github.com/omsmith161)), Devendra Parkar ([@devrz45](https://github.com/devrz45)), and Holly Bergen ([@ARandomCl0wn](https://github.com/ARandomCl0wn)).
 
 The maintainers govern the project using the committee model: high-level decisions about the project's direction require maintainer consensus, major code changes require majority approval, hotfixes and patches require just one maintainer approval, new maintainers can be added by unanimous decision of the existing maintainers, and existing maintainers can step down with advance notice.
 
 
 ## Citation
 
-If you use this crate in your own scientific work, please consider citing us:
+If you use `assembly-theory` in your own scientific work, please consider citing us!
+On [GitHub](https://github.com/DaymudeLab/assembly-theory), you can use the "Cite this repository" dropdown in the About section to get APA and BibTeX citations; this is also directly compatible with the Zotero browser plugin.
+Otherwise, you can use the following BibTeX entry:
 
 ```bibtex
-Coming soon!
+@article{Vimal2026-assemblytheory,
+    title = {{assembly-theory: Open, Reproducible Calculation of Assembly Indices}},
+    author = {Vimal, Devansh and Parzych, Garrett and Smith, Olivia M. and Parkar, Devendra and Bergen, Holly and Daymude, Joshua J. and Mathis, Cole},
+    journal = {Journal of Open Source Software},
+    volume = {11},
+    number = {117},
+    pages = {9318},
+    month = jan,
+    year = 2026,
+    doi = {10.21105/joss.09318},
+    url = {https://joss.theoj.org/papers/10.21105/joss.09318},
+}
 ```
 
 
