@@ -30,7 +30,7 @@ python = []
 [lib]
 name = "assembly_theory"
 path = "src/lib.rs"
-crate-type = ["lib"]
+crate-type = ["lib", "cdylib"]
 
 [[bench]]
 name = "benchmark"
