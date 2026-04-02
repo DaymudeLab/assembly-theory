@@ -126,6 +126,8 @@ pub fn bench_bounds(c: &mut Criterion) {
                                     bounds,
                                     &mut cache,
                                     ParallelMode::DepthOne,
+                                    None,
+                                    &[],
                                 );
                                 total_time += start.elapsed();
                             }
@@ -190,6 +192,8 @@ pub fn bench_memoize(c: &mut Criterion) {
                                     &[Bound::Int, Bound::MatchableEdges],
                                     &mut cache,
                                     ParallelMode::DepthOne,
+                                    None,
+                                    &[],
                                 );
                                 total_time += start.elapsed();
                             }

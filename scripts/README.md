@@ -68,3 +68,15 @@ Calculate assembly indices using:
 Both [`assembly_go`](https://github.com/croningp/assembly_go) and [`assemblycpp-v5`](https://github.com/croningp/assemblycpp-v5) are open-source software for calculating assembly indices.
 We do not package their source code or executables with our library, but they can be obtained from GitHub if non-self-referential ground truth is desired.
 Otherwise, a release build of `assembly-theory` is created and used.
+
+
+### `compare_pathways.sh`
+
+Compares the assembly pathway output of the Rust `assembly-theory` binary (`--extract-pathway`) against the C++ `assemblycpp-v5` binary across all molecules in `data/checks/`.
+Validates that the assembly index, number of duplicates, duplicate sizes, and remnant edge count agree between both implementations.
+
+Expects the [`assemblycpp-v5`](https://github.com/croningp/assemblycpp-v5) repository to be checked out alongside this repository (i.e., at `../../assemblycpp-v5` relative to this script).
+
+```shell
+zsh compare_pathways.sh
+```

@@ -60,6 +60,7 @@
 //! at.index(mol_block)  # 6
 //! ```
 
+use std::collections::HashMap;
 use std::str::FromStr;
 
 use pyo3::{
@@ -448,7 +449,7 @@ pub fn _index_search(
     let boundlist = make_boundlist(&pybounds);
 
     // Compute assembly index.
-    Ok(index_search(
+    let (idx, num_matches, states_searched, _, _) = index_search(
         &mol,
         timeout,
         canonize_mode,
@@ -456,7 +457,125 @@ pub fn _index_search(
         memoize_mode,
         kernel_mode,
         &boundlist,
-    ))
+        false,
+    );
+    Ok((idx, num_matches, states_searched))
+}
+
+/// Computes a molecule's assembly index and extracts the assembly pathway
+/// using a top-down recursive search, parameterized by the specified options.
+///
+/// Python version of [`index_search`] with pathway extraction enabled.
+///
+/// # Python Parameters
+///
+/// - `mol_block`: The contents of a `.mol` file as a `str`.
+/// - `timeout`: An `int` duration in milliseconds after which search is
+/// stopped, or `None` if search is run until the true assembly index is found.
+/// - `canonize_str`: A canonization mode from [`"nauty"`, `"faulon"`,
+/// `"tree-nauty"` (default), `"tree-faulon"`].
+/// - `parallel_str`: A parallelization mode from [`"none"`, `"depth-one"`
+/// (default), `"always"`].
+/// - `memoize_str`: A memoization mode from [`none`, `canon-index` (default)].
+/// - `kernel_str`: A kernelization mode from [`"none"` (default), `"once"`,
+/// `"depth-one"`, `"always"`].
+/// - `bound_strs`: A list of bounds. Default: `["int", "matchable-edges"]`.
+///
+/// # Python Returns
+///
+/// A 4-tuple containing:
+/// - The molecule's `int` assembly index (or an upper bound if timed out).
+/// - The molecule's `int` number of edge-disjoint isomorphic subgraph pairs.
+/// - The `int` number of assembly states searched, or `None` if timed out.
+/// - A `list` of pathway steps, where each step is a dict with keys
+///   `"piece_a"`, `"piece_b"`, and `"result"` (each a list of edge indices),
+///   or `None` if timed out.
+///
+/// # Python Example
+///
+/// ```custom,{class=language-python}
+/// import assembly_theory as at
+///
+/// # Load a mol block from file.
+/// with open('data/checks/benzene.mol') as f:
+///     mol_block = f.read()
+///
+/// # Calculate the molecule's assembly index and extract pathway.
+/// (index, num_matches, states_searched, pathway) = at.pathway_search(mol_block)
+///
+/// for step in pathway:
+///     print(f"{step['piece_a']} + {step['piece_b']} -> {step['result']}")
+/// ```
+#[pyfunction(name = "pathway_search")]
+#[pyo3(signature = (mol_block, timeout=None, canonize_str="tree-nauty", parallel_str="depth-one", memoize_str="canon-index", kernel_str="none", bound_strs=vec!["int".to_string(), "matchable-edges".to_string()]), text_signature = "(mol_block, timeout=None, canonize_str=\"tree-nauty\", parallel_str=\"depth-one\", memoize_str=\"canon-index\", kernel_str=\"none\", bound_strs=[\"int\", \"matchable-edges\"]))")]
+pub fn _pathway_search(
+    mol_block: &str,
+    timeout: Option<u64>,
+    canonize_str: &str,
+    parallel_str: &str,
+    memoize_str: &str,
+    kernel_str: &str,
+    bound_strs: Vec<String>,
+) -> PyResult<(u32, u32, Option<usize>, Option<Vec<HashMap<String, Vec<usize>>>>)> {
+    // Parse the .mol file contents as a molecule::Molecule.
+    let mol = parse_molfile_str(mol_block)?;
+
+    // Parse the various modes and bound options.
+    let canonize_mode = match PyCanonizeMode::from_str(canonize_str) {
+        Ok(PyCanonizeMode::Nauty) => CanonizeMode::Nauty,
+        Ok(PyCanonizeMode::Faulon) => CanonizeMode::Faulon,
+        Ok(PyCanonizeMode::TreeNauty) => CanonizeMode::TreeNauty,
+        Ok(PyCanonizeMode::TreeFaulon) => CanonizeMode::TreeFaulon,
+        Err(e) => return Err(e),
+    };
+    let parallel_mode = match PyParallelMode::from_str(parallel_str) {
+        Ok(PyParallelMode::None) => ParallelMode::None,
+        Ok(PyParallelMode::DepthOne) => ParallelMode::DepthOne,
+        Ok(PyParallelMode::Always) => ParallelMode::Always,
+        Err(e) => return Err(e),
+    };
+    let memoize_mode = match PyMemoizeMode::from_str(memoize_str) {
+        Ok(PyMemoizeMode::None) => MemoizeMode::None,
+        Ok(PyMemoizeMode::CanonIndex) => MemoizeMode::CanonIndex,
+        Err(e) => return Err(e),
+    };
+    let kernel_mode = match PyKernelMode::from_str(kernel_str) {
+        Ok(PyKernelMode::None) => KernelMode::None,
+        Ok(PyKernelMode::Once) => KernelMode::Once,
+        Ok(PyKernelMode::DepthOne) => KernelMode::DepthOne,
+        Ok(PyKernelMode::Always) => KernelMode::Always,
+        Err(e) => return Err(e),
+    };
+    let pybounds = process_bound_strs(bound_strs)?;
+    let boundlist = make_boundlist(&pybounds);
+
+    // Compute assembly index with pathway extraction.
+    let (idx, num_matches, states_searched, pathway, _) = index_search(
+        &mol,
+        timeout,
+        canonize_mode,
+        parallel_mode,
+        memoize_mode,
+        kernel_mode,
+        &boundlist,
+        true,
+    );
+
+    // Convert pathway steps to Python-friendly dicts.
+    let py_pathway = pathway.map(|steps| {
+        steps
+            .iter()
+            .map(|step| {
+                let mut d = HashMap::new();
+                d.insert("piece_a".to_string(), step.piece_a.iter().collect());
+                d.insert("piece_b".to_string(), step.piece_b.iter().collect());
+                d.insert("result".to_string(), step.result.iter().collect());
+                d
+            })
+            .collect()
+    });
+
+    Ok((idx, num_matches, states_searched, py_pathway))
 }
 
 /// A Python wrapper for the assembly_theory Rust crate.
@@ -468,5 +587,6 @@ fn _assembly_theory(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_depth, m)?)?;
     m.add_function(wrap_pyfunction!(_index, m)?)?;
     m.add_function(wrap_pyfunction!(_index_search, m)?)?;
+    m.add_function(wrap_pyfunction!(_pathway_search, m)?)?;
     Ok(())
 }

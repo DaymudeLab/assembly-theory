@@ -7,7 +7,9 @@ use assembly_theory::{
     canonize::CanonizeMode,
     kernels::KernelMode,
     loader::parse_molfile_str,
+    matches::Matches,
     memoize::MemoizeMode,
+    pathway::edges_as_vertex_pairs,
 };
 use clap::{Args, Parser};
 
@@ -56,6 +58,10 @@ struct Cli {
     /// Strategy for performing graph kernelization during the search phase.
     #[arg(long, value_enum, default_value_t = KernelMode::None)]
     kernel: KernelMode,
+
+    /// Extract and print the assembly pathway (bottom-up reconstruction).
+    #[arg(long)]
+    extract_pathway: bool,
 }
 
 #[derive(Args, Debug)]
@@ -109,7 +115,7 @@ fn main() -> Result<()> {
     };
 
     // Call index calculation with all the various options.
-    let (index, num_matches, states_searched) = index_search(
+    let (index, num_matches, states_searched, pathway, decomposition) = index_search(
         &mol,
         cli.timeout,
         cli.canonize,
@@ -117,6 +123,7 @@ fn main() -> Result<()> {
         cli.memoize,
         cli.kernel,
         boundlist,
+        cli.extract_pathway,
     );
 
     // Print final output, depending on --verbose.
@@ -139,6 +146,42 @@ fn main() -> Result<()> {
         (false, None) => {
             println!("<= {index} (timed out)");
         }
+    }
+
+    // Print the assembly pathway if extracted.
+    if let Some(ref steps) = pathway {
+        println!("\nAssembly Pathway ({} steps):", steps.len());
+        for (i, step) in steps.iter().enumerate() {
+            println!("  Step {}: {}", i + 1, step);
+        }
+    }
+
+    // Print the raw decomposition (C++ comparable) if available.
+    if let Some((ref match_seq, _)) = decomposition {
+        let matches = Matches::new(&mol, cli.canonize);
+        println!("\nDecomposition (duplicates largest-first):");
+        for &mix in match_seq.iter() {
+            let (h1, h2) = matches.match_fragments(mix);
+            let left = edges_as_vertex_pairs(&mol, h1);
+            let right = edges_as_vertex_pairs(&mol, h2);
+            println!("  Left:  {:?}", left);
+            println!("  Right: {:?}", right);
+        }
+        let mut present = bit_set::BitSet::with_capacity(mol.graph().edge_count());
+        present.extend(mol.graph().edge_indices().map(|ix| ix.index()));
+        for &mix in match_seq.iter() {
+            let (_, h2) = matches.match_fragments(mix);
+            present.difference_with(h2);
+        }
+        println!("  Remnant: {:?}", edges_as_vertex_pairs(&mol, &present));
+
+        let dup_sizes: Vec<usize> = match_seq
+            .iter()
+            .map(|&mix| matches.match_fragments(mix).0.len())
+            .collect();
+        println!("\n  Summary:");
+        println!("    Duplicates: {} (sizes: {:?})", dup_sizes.len(), dup_sizes);
+        println!("    Remnant edges: {}", present.len());
     }
 
     Ok(())

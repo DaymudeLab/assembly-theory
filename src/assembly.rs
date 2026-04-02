@@ -21,7 +21,7 @@
 use std::{
     sync::{
         atomic::{AtomicUsize, Ordering::Relaxed},
-        Arc,
+        Arc, Mutex,
     },
     time::Duration,
 };
@@ -38,6 +38,7 @@ use crate::{
     matches::Matches,
     memoize::{Cache, MemoizeMode},
     molecule::Molecule,
+    pathway::{generate_pathway, PathwayStep},
     state::State,
     utils::connected_components_under_edges,
 };
@@ -153,6 +154,10 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Opti
 /// - `bounds`: The list of bounding strategies to apply.
 /// - `cache`: Memoization cache storing previously searched assembly states.
 /// - `parallel_mode`: The parallelism mode for this state's match iteration.
+/// - `best_pathway`: When `Some`, tracks the `(match_ix_sequence, leaf_fragments)`
+///    for the best decomposition path found so far. When `None`, pathway tracking
+///    is skipped entirely.
+/// - `path_so_far`: The sequence of match indices removed from root to this state.
 ///
 /// Returns, from this assembly state and any of its descendents:
 /// - `usize`: An updated upper bound on the assembly index. (Note: If this
@@ -167,6 +172,8 @@ pub fn recurse_index_search(
     bounds: &[Bound],
     cache: &mut Cache,
     parallel_mode: ParallelMode,
+    best_pathway: Option<&Arc<Mutex<(Vec<usize>, Vec<BitSet>)>>>,
+    path_so_far: &[usize],
 ) -> (usize, usize) {
     // If any bounds would prune this assembly state or if memoization is
     // enabled and this assembly state is preempted by the cached state, halt.
@@ -199,21 +206,57 @@ pub fn recurse_index_search(
                 parallel_mode
             };
 
+            // Build the extended path for this child.
+            let child_path: Vec<usize> = if best_pathway.is_some() {
+                let mut p = path_so_far.to_vec();
+                p.push(match_ix);
+                p
+            } else {
+                Vec::new()
+            };
+
+            let new_state = state.update(fragments, i, match_ix, h1.len());
+
+            // If this is a leaf state (no more matches can be removed) and we
+            // are tracking pathways, check if this is the new best.
+            if best_pathway.is_some() {
+                let child_index = new_state.index();
+                if child_index < best_index.load(Relaxed) {
+                    // This will be checked again after recursion, but for leaf
+                    // states we capture here.
+                }
+            }
+
             // Recurse using the remaining matches and updated fragments.
             let (child_index, child_states_searched) = recurse_index_search(
                 mol,
                 matches,
-                &state.update(fragments, i, match_ix, h1.len()),
+                &new_state,
                 best_index.clone(),
                 bounds,
                 &mut cache.clone(),
                 new_parallel,
+                best_pathway,
+                &child_path,
             );
 
             // Update the best assembly indices (across children states and the
             // entire search) and the number of descendant states searched.
-            best_child_index.fetch_min(child_index, Relaxed);
-            best_index.fetch_min(best_child_index.load(Relaxed), Relaxed);
+            let prev_best = best_child_index.fetch_min(child_index, Relaxed);
+            let new_global = best_index.fetch_min(child_index, Relaxed);
+
+            // If this child achieved a new global best and we are tracking
+            // pathways, update the shared pathway data.
+            if let Some(bp) = best_pathway {
+                if child_index < prev_best.min(new_global) {
+                    let mut guard = bp.lock().unwrap();
+                    // Double-check: only update if still the best.
+                    if child_index <= best_index.load(Relaxed) {
+                        *guard = (child_path, new_state.fragments().clone());
+                    }
+                }
+            }
+
             states_searched.fetch_add(child_states_searched, Relaxed);
         }
     };
@@ -255,6 +298,10 @@ pub fn recurse_index_search(
 /// - The molecule's `u32` number of edge-disjoint isomorphic subgraph pairs.
 /// - The `usize` total number of assembly [`State`]s searched if search
 ///   completes, and `None` otherwise (i.e., if search timed out).
+/// - The assembly pathway as a `Vec<PathwayStep>` if `extract_pathway` is
+///   `true` and the search completes, and `None` otherwise.
+/// - The raw decomposition `(match_sequence, remnants)` if `extract_pathway`
+///   is `true` and the search completes, and `None` otherwise.
 ///
 /// # Example
 /// ```
@@ -276,7 +323,7 @@ pub fn recurse_index_search(
 ///
 /// // Compute the molecule's assembly index without parallelism, memoization,
 /// // kernelization, or bounds.
-/// let (slow_index, _, _) = index_search(
+/// let (slow_index, _, _, _, _) = index_search(
 ///     &anthracene,
 ///     None,
 ///     CanonizeMode::TreeNauty,
@@ -284,11 +331,12 @@ pub fn recurse_index_search(
 ///     MemoizeMode::None,
 ///     KernelMode::None,
 ///     &[],
+///     false,
 /// );
 ///
 /// // Compute the molecule's assembly index with parallelism, memoization, and
 /// // some bounds.
-/// let (fast_index, _, _) = index_search(
+/// let (fast_index, _, _, _, _) = index_search(
 ///     &anthracene,
 ///     None,
 ///     CanonizeMode::TreeNauty,
@@ -296,10 +344,11 @@ pub fn recurse_index_search(
 ///     MemoizeMode::CanonIndex,
 ///     KernelMode::None,
 ///     &[Bound::Log, Bound::Int],
+///     false,
 /// );
 ///
 /// // Limit search to 1 ms, which should time out.
-/// let (index_bound, _, states_searched) = index_search(
+/// let (index_bound, _, states_searched, _, _) = index_search(
 ///     &anthracene,
 ///     Some(1),
 ///     CanonizeMode::TreeNauty,
@@ -307,6 +356,7 @@ pub fn recurse_index_search(
 ///     MemoizeMode::None,
 ///     KernelMode::None,
 ///     &[],
+///     false,
 /// );
 ///
 /// assert_eq!(slow_index, 6);
@@ -323,7 +373,8 @@ pub fn index_search(
     memoize_mode: MemoizeMode,
     kernel_mode: KernelMode,
     bounds: &[Bound],
-) -> (u32, u32, Option<usize>) {
+    extract_pathway: bool,
+) -> (u32, u32, Option<usize>, Option<Vec<PathwayStep>>, Option<(Vec<usize>, Vec<BitSet>)>) {
     // Catch not-yet-implemented modes.
     if kernel_mode != KernelMode::None {
         panic!("The chosen --kernel mode is not implemented yet!")
@@ -339,12 +390,21 @@ pub fn index_search(
     // Use an `Arc` to track the best assembly index across parallel threads.
     let best_index = Arc::new(AtomicUsize::from(mol.graph().edge_count() - 1));
 
+    // Optionally create shared pathway tracking state.
+    let best_pathway = if extract_pathway {
+        Some(Arc::new(Mutex::new((Vec::new(), Vec::new()))))
+    } else {
+        None
+    };
+
     // Search for the shortest assembly pathway recursively.
     if let Some(timeout) = timeout {
         // If a timeout is provided, we will search within an asynchronous task
         // that can be interrupted after the specified duration (see below). To
         // avoid subsequent scope issues, make copies of various variables.
         let best_index_copy = best_index.clone();
+        let best_pathway_copy = best_pathway.clone();
+        let parse_mol = mol.clone();
         let mol = mol.clone();
         let bounds = bounds.to_vec();
         let num_matches = matches.len();
@@ -362,6 +422,8 @@ pub fn index_search(
                     &bounds,
                     &mut cache,
                     parallel_mode,
+                    best_pathway_copy.as_ref(),
+                    &[],
                 ));
             });
             tktimeout(Duration::from_millis(timeout), recv).await
@@ -375,7 +437,27 @@ pub fn index_search(
             Err(_) => (best_index.load(Relaxed), None),
             _ => panic!("An unexpected error occurred in async index_search"),
         };
-        (index as u32, num_matches as u32, states_searched)
+
+        // Reconstruct the pathway if tracking was enabled and search completed.
+        let (pathway, decomposition) = match (&best_pathway, &states_searched) {
+            (Some(bp), Some(_)) => {
+                let guard = bp.lock().unwrap();
+                let (ref match_seq, ref remnants) = *guard;
+                if match_seq.is_empty() {
+                    (None, None)
+                } else {
+                    let mol_for_pathway = parse_mol.clone();
+                    let matches_for_pathway = Matches::new(&mol_for_pathway, canonize_mode);
+                    (
+                        Some(generate_pathway(&mol_for_pathway, &matches_for_pathway, match_seq, remnants)),
+                        Some((match_seq.clone(), remnants.clone())),
+                    )
+                }
+            }
+            _ => (None, None),
+        };
+
+        (index as u32, num_matches as u32, states_searched, pathway, decomposition)
     } else {
         // Otherwise, if no timeout is provided, run the search normally.
         let (index, states_searched) = recurse_index_search(
@@ -386,8 +468,24 @@ pub fn index_search(
             bounds,
             &mut cache,
             parallel_mode,
+            best_pathway.as_ref(),
+            &[],
         );
-        (index as u32, matches.len() as u32, Some(states_searched))
+
+        // Reconstruct the pathway if tracking was enabled.
+        let (pathway, decomposition) = match best_pathway {
+            Some(bp) => {
+                let guard = bp.lock().unwrap();
+                let (ref match_seq, ref remnants) = *guard;
+                (
+                    Some(generate_pathway(mol, &matches, match_seq, remnants)),
+                    Some((match_seq.clone(), remnants.clone())),
+                )
+            }
+            None => (None, None),
+        };
+
+        (index as u32, matches.len() as u32, Some(states_searched), pathway, decomposition)
     }
 }
 
@@ -422,6 +520,7 @@ pub fn index(mol: &Molecule) -> u32 {
         MemoizeMode::CanonIndex,
         KernelMode::None,
         &[Bound::Int, Bound::MatchableEdges],
+        false,
     )
     .0
 }
