@@ -22,13 +22,18 @@ pub fn edges_as_vertex_pairs(mol: &Molecule, edges: &BitSet) -> Vec<(usize, usiz
 }
 
 /// A single step in an assembly pathway: joining two pieces into one.
+///
+/// In chemical terms, this represents the combination of two molecular
+/// fragments (each described by its bond indices) into a larger fragment.
+/// The full sequence of `PathwayStep`s rebuilds the molecule bottom-up,
+/// starting from individual bonds and ending with the complete molecule.
 #[derive(Debug, Clone)]
 pub struct PathwayStep {
-    /// First piece being joined (edge set).
+    /// First piece being joined (set of bond/edge indices in the molecule).
     pub piece_a: BitSet,
-    /// Second piece being joined (edge set).
+    /// Second piece being joined (set of bond/edge indices in the molecule).
     pub piece_b: BitSet,
-    /// The result of joining the two pieces (union of edge sets).
+    /// The result of joining the two pieces (union of their bond sets).
     pub result: BitSet,
 }
 
@@ -42,7 +47,8 @@ impl fmt::Display for PathwayStep {
 }
 
 /// Check whether two edge sets share at least one node (vertex) in the
-/// molecular graph.
+/// molecular graph. Two fragments that share a node are "adjacent" and can
+/// be joined into a larger connected fragment.
 fn shares_node(mol: &Molecule, a: &BitSet, b: &BitSet) -> bool {
     let mut nodes_a = BitSet::with_capacity(mol.graph().node_count());
     for e in a {
@@ -59,8 +65,12 @@ fn shares_node(mol: &Molecule, a: &BitSet, b: &BitSet) -> bool {
     false
 }
 
-/// `Consistent_Join`: merge any two pieces sharing a vertex, recording each
-/// join as a pathway step. Returns `true` if any join was performed.
+/// `Consistent_Join` (from Seet et al.): repeatedly merge any two pieces that
+/// share a vertex (atom), recording each merge as a pathway step. Returns
+/// `true` if at least one join was performed.
+///
+/// This is the "glue" operation: after duplicates are introduced, adjacent
+/// fragments are iteratively fused until no more merges are possible.
 fn consistent_join(mol: &Molecule, pieces: &mut Vec<BitSet>, steps: &mut Vec<PathwayStep>) -> bool {
     let mut joined = false;
     let mut i = 0;
@@ -103,8 +113,14 @@ fn filter_pieces(mol: &Molecule, pieces: &[BitSet], fragment: &BitSet) -> Vec<us
         .collect()
 }
 
-/// `Duplicate_Construction`: process duplicates (matched fragment pairs) from
-/// smallest to largest, adding copies or first reassembling containing pieces.
+/// `Duplicate_Construction` (from Seet et al.): process duplicates from
+/// smallest to largest. For each duplicate pair (copy, template), either:
+/// - the template already exists as a piece → just add the copy, or
+/// - the template's bonds are split across multiple pieces → reassemble
+///   those pieces first (via `consistent_join`), then add the copy.
+///
+/// This mirrors the top-down search in reverse: the search removed duplicates
+/// largest-first, so reconstruction adds them back smallest-first.
 fn duplicate_construction(
     mol: &Molecule,
     duplicates: &[(BitSet, BitSet)],
@@ -153,18 +169,24 @@ fn duplicate_construction(
 /// Reconstruct the bottom-up assembly pathway from the top-down decomposition
 /// results.
 ///
+/// The top-down search finds the optimal way to decompose a molecule by
+/// repeatedly removing duplicate subgraphs. This function reverses that
+/// process: starting from the individual bonds left at the leaf state, it
+/// rebuilds the molecule step-by-step by reintroducing duplicates and
+/// fusing adjacent fragments.
+///
 /// # Arguments
 /// - `mol`: The molecule.
 /// - `matches`: The matches structure used during the search.
 /// - `match_sequence`: The sequence of global `match_ix` values from root to
-///   leaf of the optimal decomposition path.
-/// - `remnants`: The leaf state's fragments (the pieces left after all
-///   duplicates have been removed). Note: these may exclude singleton (single-
-///   edge) fragments that were dropped during the search.
+///   leaf of the optimal decomposition path. Each index identifies a pair of
+///   isomorphic edge-disjoint subgraphs (a "duplicate").
+/// - `remnants`: The leaf state's fragments (unused; remnants are recomputed
+///   from `match_sequence` for consistency).
 ///
 /// # Returns
 /// A vector of [`PathwayStep`]s representing the assembly pathway from basic
-/// fragments to the complete molecule.
+/// fragments (individual bonds) to the complete molecule.
 pub fn generate_pathway(
     mol: &Molecule,
     matches: &Matches,

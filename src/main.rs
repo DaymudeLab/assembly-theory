@@ -156,7 +156,13 @@ fn main() -> Result<()> {
         }
     }
 
-    // Print the raw decomposition (C++ comparable) if available.
+    // Print the raw decomposition if available. This outputs the duplicate
+    // pairs and remnant edges in a format comparable to the C++ implementation
+    // (assemblycpp-v5). Each duplicate is a pair of isomorphic subgraphs:
+    //   "Left"  = the copy that was kept (template)
+    //   "Right" = the copy that was removed (duplicate)
+    //   "Remnant" = bonds left over after all duplicates are removed
+    // The assembly index = num_duplicates + num_remnant_edges.
     if let Some((ref match_seq, _)) = decomposition {
         let matches = Matches::new(&mol, cli.canonize);
         println!("\nDecomposition (duplicates largest-first):");
@@ -180,7 +186,11 @@ fn main() -> Result<()> {
             .map(|&mix| matches.match_fragments(mix).0.len())
             .collect();
         println!("\n  Summary:");
-        println!("    Duplicates: {} (sizes: {:?})", dup_sizes.len(), dup_sizes);
+        println!(
+            "    Duplicates: {} (sizes: {:?})",
+            dup_sizes.len(),
+            dup_sizes
+        );
         println!("    Remnant edges: {}", present.len());
     }
 

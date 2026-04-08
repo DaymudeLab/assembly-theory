@@ -516,7 +516,12 @@ pub fn _pathway_search(
     memoize_str: &str,
     kernel_str: &str,
     bound_strs: Vec<String>,
-) -> PyResult<(u32, u32, Option<usize>, Option<Vec<HashMap<String, Vec<usize>>>>)> {
+) -> PyResult<(
+    u32,
+    u32,
+    Option<usize>,
+    Option<Vec<HashMap<String, Vec<usize>>>>,
+)> {
     // Parse the .mol file contents as a molecule::Molecule.
     let mol = parse_molfile_str(mol_block)?;
 
@@ -549,7 +554,8 @@ pub fn _pathway_search(
     let pybounds = process_bound_strs(bound_strs)?;
     let boundlist = make_boundlist(&pybounds);
 
-    // Compute assembly index with pathway extraction.
+    // Compute assembly index with pathway extraction enabled (last arg = true).
+    // The 5th return value (_) is the raw match sequence, not needed for the Python API.
     let (idx, num_matches, states_searched, pathway, _) = index_search(
         &mol,
         timeout,
@@ -561,7 +567,8 @@ pub fn _pathway_search(
         true,
     );
 
-    // Convert pathway steps to Python-friendly dicts.
+    // Convert PathwayStep structs to Python-friendly dicts with string keys.
+    // Each step's piece_a, piece_b, result (BitSets) become Vec<usize> of bond indices.
     let py_pathway = pathway.map(|steps| {
         steps
             .iter()

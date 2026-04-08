@@ -155,9 +155,12 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Opti
 /// - `cache`: Memoization cache storing previously searched assembly states.
 /// - `parallel_mode`: The parallelism mode for this state's match iteration.
 /// - `best_pathway`: When `Some`, tracks the `(match_ix_sequence, leaf_fragments)`
-///    for the best decomposition path found so far. When `None`, pathway tracking
-///    is skipped entirely.
-/// - `path_so_far`: The sequence of match indices removed from root to this state.
+///    for the best decomposition path found so far. This is stored behind an
+///    `Arc<Mutex<...>>` so it can be safely updated from parallel threads.
+///    When `None`, pathway tracking is skipped entirely.
+/// - `path_so_far`: The sequence of match indices removed from root to this
+///    state. Each match index identifies a duplicate subgraph pair; this
+///    sequence records *which* duplicates were removed, in order.
 ///
 /// Returns, from this assembly state and any of its descendents:
 /// - `usize`: An updated upper bound on the assembly index. (Note: If this
@@ -206,7 +209,9 @@ pub fn recurse_index_search(
                 parallel_mode
             };
 
-            // Build the extended path for this child.
+            // Build the extended path for this child: append this match index
+            // to the path so far. This accumulates the full sequence of
+            // duplicate removals from the root state down to the current child.
             let child_path: Vec<usize> = if best_pathway.is_some() {
                 let mut p = path_so_far.to_vec();
                 p.push(match_ix);
@@ -246,7 +251,10 @@ pub fn recurse_index_search(
             let new_global = best_index.fetch_min(child_index, Relaxed);
 
             // If this child achieved a new global best and we are tracking
-            // pathways, update the shared pathway data.
+            // pathways, update the shared pathway data with the match sequence
+            // and leaf fragments. The leaf fragments (new_state.fragments())
+            // represent what's left of the molecule after all duplicates in
+            // child_path have been removed.
             if let Some(bp) = best_pathway {
                 if child_index < prev_best.min(new_global) {
                     let mut guard = bp.lock().unwrap();
@@ -374,7 +382,13 @@ pub fn index_search(
     kernel_mode: KernelMode,
     bounds: &[Bound],
     extract_pathway: bool,
-) -> (u32, u32, Option<usize>, Option<Vec<PathwayStep>>, Option<(Vec<usize>, Vec<BitSet>)>) {
+) -> (
+    u32,
+    u32,
+    Option<usize>,
+    Option<Vec<PathwayStep>>,
+    Option<(Vec<usize>, Vec<BitSet>)>,
+) {
     // Catch not-yet-implemented modes.
     if kernel_mode != KernelMode::None {
         panic!("The chosen --kernel mode is not implemented yet!")
@@ -390,7 +404,11 @@ pub fn index_search(
     // Use an `Arc` to track the best assembly index across parallel threads.
     let best_index = Arc::new(AtomicUsize::from(mol.graph().edge_count() - 1));
 
-    // Optionally create shared pathway tracking state.
+    // Optionally create shared pathway tracking state. The tuple stores
+    // (match_sequence, leaf_fragments): the sequence of duplicate indices
+    // removed during the optimal search path, and the remaining fragments
+    // at the leaf state. These are passed to generate_pathway() for
+    // bottom-up reconstruction.
     let best_pathway = if extract_pathway {
         Some(Arc::new(Mutex::new((Vec::new(), Vec::new()))))
     } else {
@@ -449,7 +467,12 @@ pub fn index_search(
                     let mol_for_pathway = parse_mol.clone();
                     let matches_for_pathway = Matches::new(&mol_for_pathway, canonize_mode);
                     (
-                        Some(generate_pathway(&mol_for_pathway, &matches_for_pathway, match_seq, remnants)),
+                        Some(generate_pathway(
+                            &mol_for_pathway,
+                            &matches_for_pathway,
+                            match_seq,
+                            remnants,
+                        )),
                         Some((match_seq.clone(), remnants.clone())),
                     )
                 }
@@ -457,7 +480,13 @@ pub fn index_search(
             _ => (None, None),
         };
 
-        (index as u32, num_matches as u32, states_searched, pathway, decomposition)
+        (
+            index as u32,
+            num_matches as u32,
+            states_searched,
+            pathway,
+            decomposition,
+        )
     } else {
         // Otherwise, if no timeout is provided, run the search normally.
         let (index, states_searched) = recurse_index_search(
@@ -485,7 +514,13 @@ pub fn index_search(
             None => (None, None),
         };
 
-        (index as u32, matches.len() as u32, Some(states_searched), pathway, decomposition)
+        (
+            index as u32,
+            matches.len() as u32,
+            Some(states_searched),
+            pathway,
+            decomposition,
+        )
     }
 }
 

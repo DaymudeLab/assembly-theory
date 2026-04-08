@@ -68,6 +68,17 @@ M  END"""
 
 # Calculate the molecule's assembly index.
 at.index(mol_block)  # 6
+
+# Calculate the assembly index and extract the construction pathway.
+result = at.pathway_search(mol_block)
+# result is a 4-tuple: (assembly_index, num_duplicates, num_remnant_edges, pathway)
+# pathway is a list of PathwayStep dicts, each with keys:
+#   "piece_a", "piece_b", "result" — lists of bond indices describing
+#   how two fragments join to form a larger one.
+ai, num_dups, num_remnants, pathway = result
+print(f"Assembly index: {ai}")
+for step in pathway:
+    print(f"  Join bonds {step['piece_a']} + {step['piece_b']} -> {step['result']}")
 ```
 
 Combine `assembly-theory` with [RDKit](https://pypi.org/project/rdkit-pypi/) (installed separately) if you need to manipulate molecular representations or incorporate assembly index calculations in a broader cheminformatics pipeline.
