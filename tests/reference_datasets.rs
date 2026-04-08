@@ -71,7 +71,7 @@ fn test_reference_dataset(
         .expect(&format!("Failed to parse {name:?}"));
 
         // Calculate the molecule's assembly index.
-        let (index, _, _, _, _) = index_search(
+        let (index, _, _, _, _, _, _) = index_search(
             &mol,
             None,
             canonize_mode,
@@ -80,6 +80,7 @@ fn test_reference_dataset(
             kernel_mode,
             bounds,
             false,
+            None,
         );
 
         // Compare calculated assembly index to ground truth.

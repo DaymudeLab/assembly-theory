@@ -449,7 +449,7 @@ pub fn _index_search(
     let boundlist = make_boundlist(&pybounds);
 
     // Compute assembly index.
-    let (idx, num_matches, states_searched, _, _) = index_search(
+    let (idx, num_matches, states_searched, _, _, _, _) = index_search(
         &mol,
         timeout,
         canonize_mode,
@@ -458,6 +458,7 @@ pub fn _index_search(
         kernel_mode,
         &boundlist,
         false,
+        None,
     );
     Ok((idx, num_matches, states_searched))
 }
@@ -505,9 +506,13 @@ pub fn _index_search(
 ///
 /// for step in pathway:
 ///     print(f"{step['piece_a']} + {step['piece_b']} -> {step['result']}")
+///
+/// # Collect alternative pathways.
+/// (index, num_matches, states_searched, pathway, alternatives) = at.pathway_search(
+///     mol_block, alternative_pathways=True, max_pathways=5)
 /// ```
 #[pyfunction(name = "pathway_search")]
-#[pyo3(signature = (mol_block, timeout=None, canonize_str="tree-nauty", parallel_str="depth-one", memoize_str="canon-index", kernel_str="none", bound_strs=vec!["int".to_string(), "matchable-edges".to_string()]), text_signature = "(mol_block, timeout=None, canonize_str=\"tree-nauty\", parallel_str=\"depth-one\", memoize_str=\"canon-index\", kernel_str=\"none\", bound_strs=[\"int\", \"matchable-edges\"]))")]
+#[pyo3(signature = (mol_block, timeout=None, canonize_str="tree-nauty", parallel_str="depth-one", memoize_str="canon-index", kernel_str="none", bound_strs=vec!["int".to_string(), "matchable-edges".to_string()], alternative_pathways=false, max_pathways=10), text_signature = "(mol_block, timeout=None, canonize_str=\"tree-nauty\", parallel_str=\"depth-one\", memoize_str=\"canon-index\", kernel_str=\"none\", bound_strs=[\"int\", \"matchable-edges\"], alternative_pathways=False, max_pathways=10)")]
 pub fn _pathway_search(
     mol_block: &str,
     timeout: Option<u64>,
@@ -516,7 +521,9 @@ pub fn _pathway_search(
     memoize_str: &str,
     kernel_str: &str,
     bound_strs: Vec<String>,
-) -> PyResult<(u32, u32, Option<usize>, Option<Vec<HashMap<String, Vec<usize>>>>)> {
+    alternative_pathways: bool,
+    max_pathways: usize,
+) -> PyResult<PyObject> {
     // Parse the .mol file contents as a molecule::Molecule.
     let mol = parse_molfile_str(mol_block)?;
 
@@ -549,33 +556,80 @@ pub fn _pathway_search(
     let pybounds = process_bound_strs(bound_strs)?;
     let boundlist = make_boundlist(&pybounds);
 
-    // Compute assembly index with pathway extraction.
-    let (idx, num_matches, states_searched, pathway, _) = index_search(
-        &mol,
-        timeout,
-        canonize_mode,
-        parallel_mode,
-        memoize_mode,
-        kernel_mode,
-        &boundlist,
-        true,
-    );
+    // When alternative_pathways=True, pass max_pathways to enable collection;
+    // otherwise None triggers single-best-pathway mode.
+    let max_pw = if alternative_pathways {
+        Some(max_pathways)
+    } else {
+        None
+    };
+    let (idx, num_matches, states_searched, pathway, _, alt_pathways, alt_decompositions) =
+        index_search(
+            &mol,
+            timeout,
+            canonize_mode,
+            parallel_mode,
+            memoize_mode,
+            kernel_mode,
+            &boundlist,
+            true,
+            max_pw,
+        );
 
     // Convert pathway steps to Python-friendly dicts.
-    let py_pathway = pathway.map(|steps| {
+    let py_pathway: Option<Vec<HashMap<String, Vec<usize>>>> = pathway.map(|steps| {
         steps
             .iter()
             .map(|step| {
-                let mut d = HashMap::new();
+                let mut d: HashMap<String, Vec<usize>> = HashMap::new();
                 d.insert("piece_a".to_string(), step.piece_a.iter().collect());
                 d.insert("piece_b".to_string(), step.piece_b.iter().collect());
                 d.insert("result".to_string(), step.result.iter().collect());
                 d
             })
-            .collect()
+            .collect::<Vec<_>>()
     });
 
-    Ok((idx, num_matches, states_searched, py_pathway))
+    // Return type depends on mode:
+    //   default:              4-tuple (index, num_matches, states, pathway)
+    //   alternative_pathways: 6-tuple adding (alt_pathways, alt_match_seqs)
+    Python::with_gil(|py| {
+        if alternative_pathways {
+            let py_alternatives: Option<Vec<Vec<HashMap<String, Vec<usize>>>>> =
+                alt_pathways.map(|pathways| {
+                    pathways
+                        .iter()
+                        .map(|steps| {
+                            steps
+                                .iter()
+                                .map(|step| {
+                                    let mut d = HashMap::new();
+                                    d.insert("piece_a".to_string(), step.piece_a.iter().collect());
+                                    d.insert("piece_b".to_string(), step.piece_b.iter().collect());
+                                    d.insert("result".to_string(), step.result.iter().collect());
+                                    d
+                                })
+                                .collect()
+                        })
+                        .collect()
+                });
+            let py_alt_match_seqs: Option<Vec<Vec<usize>>> = alt_decompositions;
+            Ok((
+                idx,
+                num_matches,
+                states_searched,
+                py_pathway,
+                py_alternatives,
+                py_alt_match_seqs,
+            )
+                .into_pyobject(py)?
+                .into())
+        } else {
+            Ok((idx, num_matches, states_searched, py_pathway)
+                .into_pyobject(py)?
+                .into())
+        }
+    })
 }
 
 /// A Python wrapper for the assembly_theory Rust crate.

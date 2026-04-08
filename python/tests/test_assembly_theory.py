@@ -149,3 +149,70 @@ def test_index_search_bad_bound():
         at.index_search(mol_block, bound_strs=["int", "invalid-bound"])
 
     assert e.type is ValueError and "Invalid bound" in str(e.value)
+
+
+def test_pathway_search():
+    with open(osp.join("data", "checks", "anthracene.mol")) as f:
+        mol_block = f.read()
+
+    (index, num_matches, states_searched, pathway) = at.pathway_search(mol_block)
+    assert index == 6
+    assert pathway is not None
+    assert len(pathway) > 0
+
+    for step in pathway:
+        assert "piece_a" in step
+        assert "piece_b" in step
+        assert "result" in step
+
+
+def test_pathway_search_alternative_pathways():
+    with open(osp.join("data", "checks", "anthracene.mol")) as f:
+        mol_block = f.read()
+
+    (index, num_matches, states_searched, pathway, alternatives, alt_match_seqs) = at.pathway_search(
+        mol_block, alternative_pathways=True, max_pathways=5
+    )
+    assert index == 6
+    assert pathway is not None
+
+    # Anthracene should produce at least one alternative pathway.
+    assert alternatives is not None
+    assert len(alternatives) >= 1
+
+    # Alternative match sequences should also be present and match count.
+    assert alt_match_seqs is not None
+    assert len(alt_match_seqs) == len(alternatives)
+
+    # Each match sequence should be a non-empty list of match indices.
+    for seq in alt_match_seqs:
+        assert len(seq) > 0
+
+    # Each alternative should be a valid list of steps.
+    for alt in alternatives:
+        assert len(alt) > 0
+        for step in alt:
+            assert "piece_a" in step
+            assert "piece_b" in step
+            assert "result" in step
+
+
+def test_pathway_search_max_pathways_cap():
+    with open(osp.join("data", "checks", "anthracene.mol")) as f:
+        mol_block = f.read()
+
+    (_, _, _, _, alternatives, _) = at.pathway_search(
+        mol_block, alternative_pathways=True, max_pathways=2
+    )
+    # Total pathways (primary + alternatives) should not exceed max_pathways.
+    if alternatives is not None:
+        assert len(alternatives) <= 1  # primary is separate, so alternatives <= max-1
+
+
+def test_pathway_search_no_alternatives_by_default():
+    """Without alternative_pathways=True, return is a 4-tuple."""
+    with open(osp.join("data", "checks", "anthracene.mol")) as f:
+        mol_block = f.read()
+
+    result = at.pathway_search(mol_block)
+    assert len(result) == 4

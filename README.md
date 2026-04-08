@@ -63,6 +63,18 @@ A full list of options for returning more information or customizing the assembl
 ./target/release/assembly-theory --help
 ```
 
+To extract and print the assembly pathway (the step-by-step reconstruction of the molecule from its basic fragments), use the `--extract-pathway` flag:
+
+```shell
+./target/release/assembly-theory data/checks/anthracene.mol --extract-pathway
+```
+
+To collect multiple distinct optimal pathways (same assembly index, different duplicates), add `--alternative-pathways`:
+
+```shell
+./target/release/assembly-theory data/checks/anthracene.mol --alternative-pathways --max-pathways 5
+```
+
 
 ### Tests and Benchmarks
 
@@ -115,6 +127,16 @@ anthracene = Chem.MolToMolBlock(anthracene)
 
 # Calculate the molecule's assembly index.
 at.index(anthracene)  # 6
+
+# Extract the assembly pathway.
+(index, num_matches, states_searched, pathway) = at.pathway_search(anthracene)
+
+for step in pathway:
+    print(f"{step['piece_a']} + {step['piece_b']} -> {step['result']}")
+
+# Collect alternative pathways that use different duplicates.
+(index, num_matches, states_searched, pathway, alternatives, alt_seqs) = at.pathway_search(
+    anthracene, alternative_pathways=True, max_pathways=5)
 ```
 
 See the [`assembly_theory::python` documentation](https://docs.rs/assembly-theory/latest/assembly_theory/python) for a complete list of functions exposed to the Python package along with usage examples.

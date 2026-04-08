@@ -62,6 +62,16 @@ struct Cli {
     /// Extract and print the assembly pathway (bottom-up reconstruction).
     #[arg(long)]
     extract_pathway: bool,
+
+    /// Collect and print alternative assembly pathways that use different
+    /// duplicates/remnants. Implies --extract-pathway.
+    #[arg(long)]
+    alternative_pathways: bool,
+
+    /// Maximum number of alternative pathways to collect (default: 10).
+    /// Only meaningful with --alternative-pathways.
+    #[arg(long, default_value_t = 10)]
+    max_pathways: usize,
 }
 
 #[derive(Args, Debug)]
@@ -115,7 +125,21 @@ fn main() -> Result<()> {
     };
 
     // Call index calculation with all the various options.
-    let (index, num_matches, states_searched, pathway, decomposition) = index_search(
+    let extract = cli.extract_pathway || cli.alternative_pathways;
+    let max_pathways = if cli.alternative_pathways {
+        Some(cli.max_pathways)
+    } else {
+        None
+    };
+    let (
+        index,
+        num_matches,
+        states_searched,
+        pathway,
+        decomposition,
+        alternative_pathways,
+        _alternative_decompositions,
+    ) = index_search(
         &mol,
         cli.timeout,
         cli.canonize,
@@ -123,7 +147,8 @@ fn main() -> Result<()> {
         cli.memoize,
         cli.kernel,
         boundlist,
-        cli.extract_pathway,
+        extract,
+        max_pathways,
     );
 
     // Print final output, depending on --verbose.
@@ -180,8 +205,29 @@ fn main() -> Result<()> {
             .map(|&mix| matches.match_fragments(mix).0.len())
             .collect();
         println!("\n  Summary:");
-        println!("    Duplicates: {} (sizes: {:?})", dup_sizes.len(), dup_sizes);
+        println!(
+            "    Duplicates: {} (sizes: {:?})",
+            dup_sizes.len(),
+            dup_sizes
+        );
         println!("    Remnant edges: {}", present.len());
+    }
+
+    // Print alternative pathways if collected. These are distinct optimal
+    // decompositions (same assembly index, different set of duplicates used).
+    if let Some(ref alternatives) = alternative_pathways {
+        let total = alternatives.len();
+        for (idx, steps) in alternatives.iter().enumerate() {
+            println!(
+                "\nAlternative Pathway {}/{} ({} steps):",
+                idx + 1,
+                total,
+                steps.len()
+            );
+            for (i, step) in steps.iter().enumerate() {
+                println!("  Step {}: {}", i + 1, step);
+            }
+        }
     }
 
     Ok(())

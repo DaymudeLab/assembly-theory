@@ -19,6 +19,7 @@
 //! ```
 
 use std::{
+    collections::HashSet,
     sync::{
         atomic::{AtomicUsize, Ordering::Relaxed},
         Arc, Mutex,
@@ -144,6 +145,42 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Opti
     Some(fragments)
 }
 
+/// Shared state for collecting one or more optimal assembly pathways.
+///
+/// When `max_pathways` is `None`, behaves as a single-best-pathway tracker
+/// (backward-compatible). When `Some(n)`, collects up to `n` distinct
+/// pathways that achieve the optimal assembly index, deduplicated by the
+/// *set* of match indices used (ignoring removal order).
+pub struct PathwayCollector {
+    /// Collected pathways: each is (match_sequence, leaf_fragments).
+    pub pathways: Vec<(Vec<usize>, Vec<BitSet>)>,
+    /// Set of canonical match-set keys already collected, for dedup.
+    seen_keys: HashSet<Vec<usize>>,
+    /// Maximum number of pathways to collect, or `None` for single-best mode.
+    max_pathways: Option<usize>,
+}
+
+impl PathwayCollector {
+    /// Create a new collector. `None` = single-best mode; `Some(n)` = collect
+    /// up to `n` distinct alternative pathways.
+    pub fn new(max_pathways: Option<usize>) -> Self {
+        Self {
+            pathways: Vec::new(),
+            seen_keys: HashSet::new(),
+            max_pathways,
+        }
+    }
+
+    /// Compute a canonical key for deduplication: the sorted set of match indices.
+    /// Two decompositions that remove the same set of matches (in any order)
+    /// produce identical pathways, so we deduplicate by sorted match set.
+    fn match_set_key(path: &[usize]) -> Vec<usize> {
+        let mut key = path.to_vec();
+        key.sort();
+        key
+    }
+}
+
 /// Recursive helper for [`index_search`], only public for benchmarking.
 ///
 /// Inputs:
@@ -172,7 +209,7 @@ pub fn recurse_index_search(
     bounds: &[Bound],
     cache: &mut Cache,
     parallel_mode: ParallelMode,
-    best_pathway: Option<&Arc<Mutex<(Vec<usize>, Vec<BitSet>)>>>,
+    best_pathway: Option<&Arc<Mutex<PathwayCollector>>>,
     path_so_far: &[usize],
 ) -> (usize, usize) {
     // If any bounds would prune this assembly state or if memoization is
@@ -245,14 +282,54 @@ pub fn recurse_index_search(
             let prev_best = best_child_index.fetch_min(child_index, Relaxed);
             let new_global = best_index.fetch_min(child_index, Relaxed);
 
-            // If this child achieved a new global best and we are tracking
-            // pathways, update the shared pathway data.
+            // If this child achieved a new global best (or tied for the best
+            // when collecting alternatives) and we are tracking pathways,
+            // update the shared pathway data.
+            //
+            // LEAF-ONLY GUARD: Only record when new_state.index() == child_index,
+            // i.e., no deeper recursion improved the index. This ensures we
+            // capture actual leaf decompositions, not intermediate ancestors
+            // that merely propagated a descendant's result.
             if let Some(bp) = best_pathway {
-                if child_index < prev_best.min(new_global) {
-                    let mut guard = bp.lock().unwrap();
-                    // Double-check: only update if still the best.
-                    if child_index <= best_index.load(Relaxed) {
-                        *guard = (child_path, new_state.fragments().clone());
+                if new_state.index() == child_index {
+                    let current_best = best_index.load(Relaxed);
+                    let is_new_best = child_index < prev_best.min(new_global);
+                    let guard_ref = bp.lock().unwrap();
+                    let is_alternative = guard_ref.max_pathways.is_some()
+                        && child_index == current_best
+                        && !is_new_best;
+                    drop(guard_ref);
+
+                    if is_new_best || is_alternative {
+                        let mut guard = bp.lock().unwrap();
+                        let current_best = best_index.load(Relaxed);
+
+                        // DUAL-MODE UPDATE:
+                        //   New best → clear all previously collected pathways
+                        //              and start fresh with this one.
+                        //   Tied best → add as an alternative if distinct and
+                        //               under the collection cap.
+                        if is_new_best && child_index <= current_best {
+                            guard.pathways.clear();
+                            guard.seen_keys.clear();
+                            let key = PathwayCollector::match_set_key(&child_path);
+                            guard.seen_keys.insert(key);
+                            guard
+                                .pathways
+                                .push((child_path, new_state.fragments().clone()));
+                        } else if child_index == current_best {
+                            // Tied with current best: add if distinct and under cap.
+                            let key = PathwayCollector::match_set_key(&child_path);
+                            let at_cap = guard
+                                .max_pathways
+                                .map_or(true, |n| guard.pathways.len() >= n);
+                            if !at_cap && !guard.seen_keys.contains(&key) {
+                                guard.seen_keys.insert(key);
+                                guard
+                                    .pathways
+                                    .push((child_path, new_state.fragments().clone()));
+                            }
+                        }
                     }
                 }
             }
@@ -302,6 +379,8 @@ pub fn recurse_index_search(
 ///   `true` and the search completes, and `None` otherwise.
 /// - The raw decomposition `(match_sequence, remnants)` if `extract_pathway`
 ///   is `true` and the search completes, and `None` otherwise.
+/// - Alternative assembly pathways as a `Vec<Vec<PathwayStep>>` if
+///   `max_pathways` is `Some` and the search completes, and `None` otherwise.
 ///
 /// # Example
 /// ```
@@ -323,7 +402,7 @@ pub fn recurse_index_search(
 ///
 /// // Compute the molecule's assembly index without parallelism, memoization,
 /// // kernelization, or bounds.
-/// let (slow_index, _, _, _, _) = index_search(
+/// let (slow_index, _, _, _, _, _, _) = index_search(
 ///     &anthracene,
 ///     None,
 ///     CanonizeMode::TreeNauty,
@@ -332,11 +411,12 @@ pub fn recurse_index_search(
 ///     KernelMode::None,
 ///     &[],
 ///     false,
+///     None,
 /// );
 ///
 /// // Compute the molecule's assembly index with parallelism, memoization, and
 /// // some bounds.
-/// let (fast_index, _, _, _, _) = index_search(
+/// let (fast_index, _, _, _, _, _, _) = index_search(
 ///     &anthracene,
 ///     None,
 ///     CanonizeMode::TreeNauty,
@@ -345,10 +425,11 @@ pub fn recurse_index_search(
 ///     KernelMode::None,
 ///     &[Bound::Log, Bound::Int],
 ///     false,
+///     None,
 /// );
 ///
 /// // Limit search to 1 ms, which should time out.
-/// let (index_bound, _, states_searched, _, _) = index_search(
+/// let (index_bound, _, states_searched, _, _, _, _) = index_search(
 ///     &anthracene,
 ///     Some(1),
 ///     CanonizeMode::TreeNauty,
@@ -357,6 +438,7 @@ pub fn recurse_index_search(
 ///     KernelMode::None,
 ///     &[],
 ///     false,
+///     None,
 /// );
 ///
 /// assert_eq!(slow_index, 6);
@@ -374,7 +456,16 @@ pub fn index_search(
     kernel_mode: KernelMode,
     bounds: &[Bound],
     extract_pathway: bool,
-) -> (u32, u32, Option<usize>, Option<Vec<PathwayStep>>, Option<(Vec<usize>, Vec<BitSet>)>) {
+    max_pathways: Option<usize>,
+) -> (
+    u32,
+    u32,
+    Option<usize>,
+    Option<Vec<PathwayStep>>,
+    Option<(Vec<usize>, Vec<BitSet>)>,
+    Option<Vec<Vec<PathwayStep>>>,
+    Option<Vec<Vec<usize>>>,
+) {
     // Catch not-yet-implemented modes.
     if kernel_mode != KernelMode::None {
         panic!("The chosen --kernel mode is not implemented yet!")
@@ -392,7 +483,7 @@ pub fn index_search(
 
     // Optionally create shared pathway tracking state.
     let best_pathway = if extract_pathway {
-        Some(Arc::new(Mutex::new((Vec::new(), Vec::new()))))
+        Some(Arc::new(Mutex::new(PathwayCollector::new(max_pathways))))
     } else {
         None
     };
@@ -438,26 +529,63 @@ pub fn index_search(
             _ => panic!("An unexpected error occurred in async index_search"),
         };
 
-        // Reconstruct the pathway if tracking was enabled and search completed.
-        let (pathway, decomposition) = match (&best_pathway, &states_searched) {
-            (Some(bp), Some(_)) => {
-                let guard = bp.lock().unwrap();
-                let (ref match_seq, ref remnants) = *guard;
-                if match_seq.is_empty() {
-                    (None, None)
-                } else {
-                    let mol_for_pathway = parse_mol.clone();
-                    let matches_for_pathway = Matches::new(&mol_for_pathway, canonize_mode);
-                    (
-                        Some(generate_pathway(&mol_for_pathway, &matches_for_pathway, match_seq, remnants)),
-                        Some((match_seq.clone(), remnants.clone())),
-                    )
-                }
-            }
-            _ => (None, None),
-        };
+        // Reconstruct the pathway(s) if tracking was enabled and search completed.
+        let (pathway, decomposition, alternative_pathways, alternative_decompositions) =
+            match (&best_pathway, &states_searched) {
+                (Some(bp), Some(_)) => {
+                    let guard = bp.lock().unwrap();
+                    if guard.pathways.is_empty() {
+                        (None, None, None, None)
+                    } else {
+                        let mol_for_pathway = parse_mol.clone();
+                        let matches_for_pathway = Matches::new(&mol_for_pathway, canonize_mode);
+                        let (ref match_seq, ref remnants) = guard.pathways[0];
+                        let primary = generate_pathway(
+                            &mol_for_pathway,
+                            &matches_for_pathway,
+                            match_seq,
+                            remnants,
+                        );
+                        let decomp = (match_seq.clone(), remnants.clone());
 
-        (index as u32, num_matches as u32, states_searched, pathway, decomposition)
+                        let (alt_steps, alt_seqs): (
+                            Option<Vec<Vec<PathwayStep>>>,
+                            Option<Vec<Vec<usize>>>,
+                        ) = if guard.pathways.len() > 1 {
+                            let (steps, seqs): (Vec<_>, Vec<_>) = guard.pathways[1..]
+                                .iter()
+                                .map(|(ms, rem)| {
+                                    (
+                                        generate_pathway(
+                                            &mol_for_pathway,
+                                            &matches_for_pathway,
+                                            ms,
+                                            rem,
+                                        ),
+                                        ms.clone(),
+                                    )
+                                })
+                                .unzip();
+                            (Some(steps), Some(seqs))
+                        } else {
+                            (None, None)
+                        };
+
+                        (Some(primary), Some(decomp), alt_steps, alt_seqs)
+                    }
+                }
+                _ => (None, None, None, None),
+            };
+
+        (
+            index as u32,
+            num_matches as u32,
+            states_searched,
+            pathway,
+            decomposition,
+            alternative_pathways,
+            alternative_decompositions,
+        )
     } else {
         // Otherwise, if no timeout is provided, run the search normally.
         let (index, states_searched) = recurse_index_search(
@@ -472,20 +600,48 @@ pub fn index_search(
             &[],
         );
 
-        // Reconstruct the pathway if tracking was enabled.
-        let (pathway, decomposition) = match best_pathway {
-            Some(bp) => {
-                let guard = bp.lock().unwrap();
-                let (ref match_seq, ref remnants) = *guard;
-                (
-                    Some(generate_pathway(mol, &matches, match_seq, remnants)),
-                    Some((match_seq.clone(), remnants.clone())),
-                )
-            }
-            None => (None, None),
-        };
+        // Reconstruct the pathway(s) if tracking was enabled.
+        let (pathway, decomposition, alternative_pathways, alternative_decompositions) =
+            match best_pathway {
+                Some(bp) => {
+                    let guard = bp.lock().unwrap();
+                    if guard.pathways.is_empty() {
+                        (None, None, None, None)
+                    } else {
+                        let (ref match_seq, ref remnants) = guard.pathways[0];
+                        let primary = generate_pathway(mol, &matches, match_seq, remnants);
+                        let decomp = (match_seq.clone(), remnants.clone());
 
-        (index as u32, matches.len() as u32, Some(states_searched), pathway, decomposition)
+                        let (alt_steps, alt_seqs): (
+                            Option<Vec<Vec<PathwayStep>>>,
+                            Option<Vec<Vec<usize>>>,
+                        ) = if guard.pathways.len() > 1 {
+                            let (steps, seqs): (Vec<_>, Vec<_>) = guard.pathways[1..]
+                                .iter()
+                                .map(|(ms, rem)| {
+                                    (generate_pathway(mol, &matches, ms, rem), ms.clone())
+                                })
+                                .unzip();
+                            (Some(steps), Some(seqs))
+                        } else {
+                            (None, None)
+                        };
+
+                        (Some(primary), Some(decomp), alt_steps, alt_seqs)
+                    }
+                }
+                None => (None, None, None, None),
+            };
+
+        (
+            index as u32,
+            matches.len() as u32,
+            Some(states_searched),
+            pathway,
+            decomposition,
+            alternative_pathways,
+            alternative_decompositions,
+        )
     }
 }
 
@@ -521,6 +677,7 @@ pub fn index(mol: &Molecule) -> u32 {
         KernelMode::None,
         &[Bound::Int, Bound::MatchableEdges],
         false,
+        None,
     )
     .0
 }

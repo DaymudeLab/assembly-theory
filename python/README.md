@@ -84,6 +84,27 @@ anthracene = Chem.MolToMolBlock(anthracene)
 at.index(anthracene)  # 6
 ```
 
+### Extracting Assembly Pathways
+
+Use `pathway_search` to extract the optimal construction pathway and, optionally, alternative pathways using different duplicates:
+
+```python
+import assembly_theory as at
+
+with open("anthracene.mol") as f:
+    mol_block = f.read()
+
+# Extract the primary pathway.
+index, num_matches, states_searched, pathway = at.pathway_search(mol_block)
+for step in pathway:
+    print(f"{step['piece_a']} + {step['piece_b']} -> {step['result']}")
+
+# Collect up to 5 alternative pathways.
+index, num_matches, states_searched, pathway, alternatives, alt_seqs = at.pathway_search(
+    mol_block, alternative_pathways=True, max_pathways=5)
+print(f"Found {len(alternatives) if alternatives else 0} alternative pathway(s)")
+```
+
 
 ## API Reference
 

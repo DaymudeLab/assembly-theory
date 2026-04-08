@@ -80,3 +80,17 @@ Expects the [`assemblycpp-v5`](https://github.com/croningp/assemblycpp-v5) repos
 ```shell
 zsh compare_pathways.sh
 ```
+
+
+### `validate_pathways.py`
+
+Validates alternative assembly pathways produced by `pathway_search(alternative_pathways=True)`. For each molecule, checks that:
+
+1. Every pathway step produces a valid fragment (union of piece_a and piece_b equals result).
+2. All alternative pathways have the same assembly index as the primary pathway.
+3. Alternative pathways are distinct (different sets of match indices).
+
+```shell
+python validate_pathways.py data/checks/*.mol
+python validate_pathways.py data/gdb13_1201/*.mol
+```
