@@ -360,6 +360,9 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 /// - `timeout`: An `int` duration in milliseconds after which search is
 /// stopped and the best assembly index found so far is returned, or `None` if
 /// search is run until the true assembly index is found.
+/// - `index_limit`: An `int` known upper bound on (or exact value of) the
+/// assembly index to start searching from, or `None` if search should start
+/// from scratch.
 /// - `canonize_str`: A canonization mode from [`"nauty"`, `"faulon"`,
 /// `"tree-nauty"` (default), `"tree-faulon"`]. See [`CanonizeMode`] for
 /// details.
@@ -394,6 +397,7 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 /// (index, num_matches, states_searched) = at.index_search(
 ///     mol_block,
 ///     timeout=None,
+///     index_limit=None,
 ///     canonize_str="tree-nauty",
 ///     parallel_str="none",
 ///     memoize_str="none",
@@ -405,10 +409,11 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 /// print(f"States Searched: {states_searched}")  # 491
 /// ```
 #[pyfunction(name = "index_search")]
-#[pyo3(signature = (mol_block, timeout=None, canonize_str="tree-nauty", parallel_str="depth-one", memoize_str="canon-index", kernel_str="none", bound_strs=vec!["int".to_string(), "matchable-edges".to_string()]), text_signature = "(mol_block, canonize_str=\"tree-nauty\", parallel_str=\"depth-one\", memoize_str=\"canon-index\", kernel_str=\"none\", bound_strs=[\"int\", \"matchable-edges\"]))")]
+#[pyo3(signature = (mol_block, timeout=None, index_limit=None, canonize_str="tree-nauty", parallel_str="depth-one", memoize_str="canon-index", kernel_str="none", bound_strs=vec!["int".to_string(), "matchable-edges".to_string()]), text_signature = "(mol_block, timeout=None, index_limit=None, canonize_str=\"tree-nauty\", parallel_str=\"depth-one\", memoize_str=\"canon-index\", kernel_str=\"none\", bound_strs=[\"int\", \"matchable-edges\"]))")]
 pub fn _index_search(
     mol_block: &str,
     timeout: Option<u64>,
+    index_limit: Option<usize>,
     canonize_str: &str,
     parallel_str: &str,
     memoize_str: &str,
@@ -451,6 +456,7 @@ pub fn _index_search(
     Ok(index_search(
         &mol,
         timeout,
+        index_limit,
         canonize_mode,
         parallel_mode,
         memoize_mode,
