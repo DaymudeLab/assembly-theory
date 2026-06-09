@@ -128,14 +128,6 @@ uv add --dev pytest  # using uv
 ```
 
 
-## Known Issues
-
-- The current implementation tallies the number of states searched during recursive assembly index calculation.
-If the number of states searched exceeds the (very large) limit of a `usize`, the code panics.
-This is unlikely to occur when various kernelization, memoization, and bounding strategies are enabled to prune the search space, but is theoretically always possible given a large enough molecule and sufficiently long search time.
-See [#49](https://github.com/DaymudeLab/assembly-theory/issues/49) for details.
-
-
 ## Contributing
 
 This project is under active development!
