@@ -37,6 +37,11 @@ struct Cli {
     #[arg(long)]
     timeout: Option<u64>,
 
+    /// Known upper bound on (or exact value of) the assembly index to start
+    /// searching from, or `None` if search should start from scratch.
+    #[arg(long)]
+    index_limit: Option<usize>,
+
     /// Algorithm for graph canonization.
     #[arg(long, value_enum, default_value_t = CanonizeMode::TreeNauty)]
     canonize: CanonizeMode,
@@ -112,6 +117,7 @@ fn main() -> Result<()> {
     let (index, num_matches, states_searched) = index_search(
         &mol,
         cli.timeout,
+        cli.index_limit,
         cli.canonize,
         cli.parallel,
         cli.memoize,

@@ -245,6 +245,13 @@ pub fn recurse_index_search(
 /// stop after `timeout` milliseconds and return the best upper bound on the
 /// assembly index found so far.
 ///
+/// If `index_limit` is `None`, start searching from a trivial upper bound on
+/// the assembly index: the molecule's number of bonds minus one. Otherwise,
+/// start from whichever is smaller, the trivial upper bound or `index_limit`.
+/// `index_limit` is assumed to be >= the true assembly index (e.g., the result
+/// of a previous search that timed out); anything smaller will produce an
+/// incorrect assembly index.
+///
 /// See [`CanonizeMode`], [`ParallelMode`], [`KernelMode`], and [`Bound`] for
 /// details on how to customize the algorithm. Notably, bounds are applied in
 /// the order they appear in the `bounds` slice. It is generally better to
@@ -279,17 +286,20 @@ pub fn recurse_index_search(
 /// let (slow_index, _, _) = index_search(
 ///     &anthracene,
 ///     None,
+///     None,
 ///     CanonizeMode::TreeNauty,
 ///     ParallelMode::None,
 ///     MemoizeMode::None,
 ///     KernelMode::None,
 ///     &[],
 /// );
+/// assert_eq!(slow_index, 6);
 ///
 /// // Compute the molecule's assembly index with parallelism, memoization, and
 /// // some bounds.
 /// let (fast_index, _, _) = index_search(
 ///     &anthracene,
+///     None,
 ///     None,
 ///     CanonizeMode::TreeNauty,
 ///     ParallelMode::DepthOne,
@@ -297,20 +307,33 @@ pub fn recurse_index_search(
 ///     KernelMode::None,
 ///     &[Bound::Log, Bound::Int],
 /// );
+/// assert_eq!(fast_index, 6);
 ///
-/// // Limit search to 1 ms, which should time out.
+/// // Repeat the "fast" search above, but search with the a priori knowledge
+/// // that the molecule's assembly index is at most 7.
+/// let (faster_index, _, _) = index_search(
+///     &anthracene,
+///     None,
+///     7,
+///     CanonizeMode::TreeNauty,
+///     ParallelMode::DepthOne,
+///     MemoizeMode::CanonIndex,
+///     KernelMode::None,
+///     &[Bound::Log, Bound::Int],
+/// );
+/// assert_eq!(faster_index, 6);
+///
+/// // Limit an inefficient search to 1 ms, which should time out.
 /// let (index_bound, _, states_searched) = index_search(
 ///     &anthracene,
 ///     Some(1),
+///     None,
 ///     CanonizeMode::TreeNauty,
 ///     ParallelMode::None,
 ///     MemoizeMode::None,
 ///     KernelMode::None,
 ///     &[],
 /// );
-///
-/// assert_eq!(slow_index, 6);
-/// assert_eq!(fast_index, 6);
 /// assert!(index_bound >= fast_index && states_searched == None);
 /// # Ok(())
 /// # }
@@ -318,6 +341,7 @@ pub fn recurse_index_search(
 pub fn index_search(
     mol: &Molecule,
     timeout: Option<u64>,
+    index_limit: Option<usize>,
     canonize_mode: CanonizeMode,
     parallel_mode: ParallelMode,
     memoize_mode: MemoizeMode,
@@ -337,7 +361,11 @@ pub fn index_search(
     let matches = Matches::new(mol, canonize_mode);
 
     // Use an `Arc` to track the best assembly index across parallel threads.
-    let best_index = Arc::new(AtomicUsize::from(mol.graph().edge_count() - 1));
+    let mut best_index = mol.graph().edge_count() - 1;
+    if let Some(index_limit) = index_limit {
+        best_index = best_index.min(index_limit);
+    }
+    let best_index = Arc::new(AtomicUsize::from(best_index));
 
     // Search for the shortest assembly pathway recursively.
     if let Some(timeout) = timeout {
@@ -416,6 +444,7 @@ pub fn index_search(
 pub fn index(mol: &Molecule) -> u32 {
     index_search(
         mol,
+        None,
         None,
         CanonizeMode::TreeNauty,
         ParallelMode::DepthOne,
