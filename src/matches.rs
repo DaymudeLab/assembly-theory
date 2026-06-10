@@ -8,10 +8,32 @@ use petgraph::graph::EdgeIndex;
 use crate::{
     bounds::{match_bounds, Bound},
     canonize::{canonize, CanonizeMode, Labeling},
-    molecule::Molecule,
+    molecule::{Bond, Element, Molecule},
     state::State,
     utils::{connected_components_under_edges, edge_neighbors},
 };
+
+/// Cached features of a fragment used for heuristic ordering.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+struct FragFeatures {
+    len: u16,
+    bond_single: u16,
+    bond_double: u16,
+    bond_triple: u16,
+    hetero_endpoints: u16,
+}
+
+impl FragFeatures {
+    fn score(self) -> u32 {
+        // Deterministic, cheap heuristic:
+        // - Prefer rarer/higher-order chemistry (triple > double > single)
+        // - Prefer fragments with more heteroatom participation
+        (self.bond_triple as u32) * 1000
+            + (self.bond_double as u32) * 100
+            + (self.bond_single as u32) * 10
+            + (self.hetero_endpoints as u32)
+    }
+}
 
 /// A node in the DAG storing fragment information; see [`Matches`].
 struct DagNode {
@@ -20,6 +42,8 @@ struct DagNode {
     /// The canonical ID of this node's fragment. Two [`DagNode`]s have the
     /// same canonical ID iff their fragments are isomorphic.
     canonical_id: usize,
+    /// Cached features used for heuristic ordering.
+    features: FragFeatures,
     /// Indices of this node's children/out-neighbors in the DAG. If u is a
     /// child of v then u.fragment is v.fragment with an additional edge.
     children: Vec<usize>,
@@ -46,16 +70,57 @@ pub struct Matches {
 
 impl DagNode {
     /// Create a new [`DagNode`].
-    pub fn new(fragment: BitSet, canonical_id: usize) -> Self {
+    pub fn new(fragment: BitSet, canonical_id: usize, features: FragFeatures) -> Self {
         Self {
             fragment,
             canonical_id,
+            features,
             children: Vec::new(),
         }
     }
 }
 
 impl Matches {
+    fn fragment_features(mol: &Molecule, fragment: &BitSet) -> FragFeatures {
+        let g = mol.graph();
+
+        let len: u16 = fragment.len().try_into().unwrap_or(u16::MAX);
+        let mut bond_single: u16 = 0;
+        let mut bond_double: u16 = 0;
+        let mut bond_triple: u16 = 0;
+        let mut hetero_endpoints: u16 = 0;
+
+        for idx in fragment.iter() {
+            let e = EdgeIndex::new(idx);
+            let bond = *g.edge_weight(e).expect("bad edge index");
+            match bond {
+                Bond::Single => bond_single = bond_single.saturating_add(1),
+                Bond::Double => bond_double = bond_double.saturating_add(1),
+                Bond::Triple => bond_triple = bond_triple.saturating_add(1),
+            }
+
+            let (e1, e2) = g.edge_endpoints(e).expect("bad edge endpoints");
+            let e1 = g.node_weight(e1).expect("bad node index").element();
+            let e2 = g.node_weight(e2).expect("bad node index").element();
+
+            let is_hetero = |el: Element| el != Element::Carbon && el != Element::Hydrogen;
+            if is_hetero(e1) {
+                hetero_endpoints = hetero_endpoints.saturating_add(1);
+            }
+            if is_hetero(e2) {
+                hetero_endpoints = hetero_endpoints.saturating_add(1);
+            }
+        }
+
+        FragFeatures {
+            len,
+            bond_single,
+            bond_double,
+            bond_triple,
+            hetero_endpoints,
+        }
+    }
+
     /// Generate [`Matches`] from the given molecule and canonization mode.
     pub fn new(mol: &Molecule, canonize_mode: CanonizeMode) -> Self {
         let num_edges = mol.graph().edge_count();
@@ -71,7 +136,11 @@ impl Matches {
 
             // Add the fragment to the DAG. Since all singleton edge fragments
             // are trivially isomorphic, give them the same canonical ID.
-            dag.push(DagNode::new(frag, 0));
+            dag.push(DagNode::new(
+                frag.clone(),
+                0,
+                Self::fragment_features(mol, &frag),
+            ));
             parent_frag_ixs.push(i);
         }
 
@@ -129,14 +198,22 @@ impl Matches {
                             // Add matched fragments to the DAG on first match.
                             if frag_has_match.insert(iso_ix1) {
                                 let frag1_ix = dag.len();
-                                dag.push(DagNode::new(frag1.clone(), next_canonical_id));
+                                dag.push(DagNode::new(
+                                    frag1.clone(),
+                                    next_canonical_id,
+                                    Self::fragment_features(mol, frag1),
+                                ));
                                 dag[*frag1_parent_ix].children.push(frag1_ix);
                                 iso_to_frag_ix.insert(iso_ix1, frag1_ix);
                                 child_frag_ixs.push(frag1_ix);
                             }
                             if frag_has_match.insert(iso_ix2) {
                                 let frag2_ix = dag.len();
-                                dag.push(DagNode::new(frag2.clone(), next_canonical_id));
+                                dag.push(DagNode::new(
+                                    frag2.clone(),
+                                    next_canonical_id,
+                                    Self::fragment_features(mol, frag2),
+                                ));
                                 dag[*frag2_parent_ix].children.push(frag2_ix);
                                 iso_to_frag_ix.insert(iso_ix2, frag2_ix);
                                 child_frag_ixs.push(frag2_ix);
@@ -372,7 +449,38 @@ impl Matches {
 
         // Sort removable matches in ascending order of match index (i.e.,
         // those with larger fragments first).
-        removable_matches.sort();
+        //
+        // We refine this ordering deterministically using cached fragment
+        // features as a tie-breaker among same-size fragments.
+        removable_matches.sort_unstable_by(|&a, &b| {
+            let (a1, a2) = self.matches[a];
+            let (b1, b2) = self.matches[b];
+
+            let a_len = self.dag[a1].features.len.max(self.dag[a2].features.len);
+            let b_len = self.dag[b1].features.len.max(self.dag[b2].features.len);
+
+            // Descending match length (critical: removal sizes must be non-increasing
+            // so bounds that rely on `largest_removed` remain sound).
+            match b_len.cmp(&a_len) {
+                std::cmp::Ordering::Equal => {
+                    let a_score = self.dag[a1]
+                        .features
+                        .score()
+                        .max(self.dag[a2].features.score());
+                    let b_score = self.dag[b1]
+                        .features
+                        .score()
+                        .max(self.dag[b2].features.score());
+
+                    // Descending chemical score within same match length.
+                    match b_score.cmp(&a_score) {
+                        std::cmp::Ordering::Equal => a.cmp(&b), // Ascending match_ix.
+                        ord => ord,
+                    }
+                }
+                ord => ord,
+            }
+        });
         (intermediate_frags, removable_matches)
     }
 

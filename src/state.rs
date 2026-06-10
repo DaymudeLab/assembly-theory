@@ -11,7 +11,7 @@ pub struct State {
     /// The current upper bound on the assembly index, i.e., edges(mol) - 1 -
     /// [edges(subgraphs removed) - #(subgraphs removed)].
     index: usize,
-    /// The indices of previously removed duplicate subgraphs. Used for
+    /// The indices of previously removed matches (`match_ix`). Used for
     /// disambiguating the serial order of two states during memoization.
     removal_order: Vec<usize>,
     /// Size of the largest duplicatable subgraph removed up to this point.
@@ -40,19 +40,13 @@ impl State {
 
     /// Construct the child [`State`] resulting from removing the specified
     /// match from this [`State`].
-    pub fn update(
-        &self,
-        fragments: Vec<BitSet>,
-        remove_ix: usize,
-        match_ix: usize,
-        remove_len: usize,
-    ) -> Self {
+    pub fn update(&self, fragments: Vec<BitSet>, match_ix: usize, remove_len: usize) -> Self {
         Self {
             fragments,
             index: self.index - remove_len + 1,
             removal_order: {
                 let mut clone = self.removal_order.clone();
-                clone.push(remove_ix);
+                clone.push(match_ix);
                 clone
             },
             largest_removed: remove_len,
