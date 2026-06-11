@@ -187,7 +187,7 @@ pub fn recurse_index_search(
 
     // Define a closure that handles recursing to a new assembly state based on
     // the given match.
-    let recurse_on_match = |i: usize, match_ix: usize| {
+    let recurse_on_match = |match_ix: usize| {
         let (h1, h2) = matches.match_fragments(match_ix);
 
         if let Some(fragments) = fragments(mol, &intermediate_frags, h1, h2) {
@@ -203,7 +203,7 @@ pub fn recurse_index_search(
             let (child_index, child_states_searched) = recurse_index_search(
                 mol,
                 matches,
-                &state.update(fragments, i, match_ix, h1.len()),
+                &state.update(fragments, match_ix, h1.len()),
                 best_index.clone(),
                 bounds,
                 &mut cache.clone(),
@@ -222,14 +222,12 @@ pub fn recurse_index_search(
     if parallel_mode == ParallelMode::None {
         matches_to_remove
             .iter()
-            .enumerate()
-            .for_each(|(i, match_ix)| recurse_on_match(i, *match_ix));
+            .for_each(|match_ix| recurse_on_match(*match_ix));
     } else {
         matches_to_remove
             .iter()
-            .enumerate()
             .par_bridge()
-            .for_each(|(i, match_ix)| recurse_on_match(i, *match_ix));
+            .for_each(|match_ix| recurse_on_match(*match_ix));
     }
 
     (
