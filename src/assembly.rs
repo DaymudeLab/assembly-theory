@@ -180,13 +180,9 @@ pub fn recurse_index_search(
     let (intermediate_frags, matches_to_remove): (Vec<BitSet>, Vec<usize>) =
         matches.matches_to_remove(mol, state, best_index.load(Relaxed), bounds);
 
-    // Keep track of the best assembly index bound across this assembly state's
-    // children.
-    let best_child_index = AtomicUsize::from(state.index());
-
     // Define a closure that handles recursing to a new assembly state based on
     // the given match.
-    let recurse_on_match = |match_ix: usize| -> usize {
+    let recurse_on_match = |match_ix: usize| -> (usize, usize) {
         let (h1, h2) = matches.match_fragments(match_ix);
 
         if let Some(fragments) = fragments(mol, &intermediate_frags, h1, h2) {
@@ -199,7 +195,7 @@ pub fn recurse_index_search(
             };
 
             // Recurse using the remaining matches and updated fragments.
-            let (child_index, child_states_searched) = recurse_index_search(
+            recurse_index_search(
                 mol,
                 matches,
                 &state.update(fragments, match_ix, h1.len()),
@@ -207,23 +203,14 @@ pub fn recurse_index_search(
                 bounds,
                 &mut cache.clone(),
                 new_parallel,
-            );
-
-            // Find the best assembly index bound across children states and
-            // use it to update the global best index bound.
-            best_child_index.fetch_min(child_index, Relaxed);
-            best_index.fetch_min(best_child_index.load(Relaxed), Relaxed);
-
-            // Return the number of descendant states searched...
-            child_states_searched
+            )
         } else {
-            // ...which is zero if the child state was empty.
-            0
+            (state.index(), 0)
         }
     };
 
     // Use the iterator type corresponding to the specified parallelism mode.
-    let results: Vec<usize> = if parallel_mode == ParallelMode::None {
+    let results: Vec<(usize, usize)> = if parallel_mode == ParallelMode::None {
         matches_to_remove
             .iter()
             .map(|match_ix| recurse_on_match(*match_ix))
@@ -235,9 +222,16 @@ pub fn recurse_index_search(
             .map(|match_ix| recurse_on_match(*match_ix))
             .collect()
     };
-    let states_searched: usize = results.iter().sum();
 
-    (best_child_index.load(Relaxed), states_searched + 1)
+    // Compute the best assembly index bound and the total number of descendant
+    // states searched across all children assembly states.
+    let best_child_index = results.iter().map(|r| r.0).min().unwrap_or(state.index());
+    let states_searched: usize = results.iter().map(|r| r.1).sum();
+
+    // Update the globally best assembly index bound found so far.
+    best_index.fetch_min(best_child_index, Relaxed);
+
+    (best_child_index, states_searched + 1)
 }
 
 /// Compute a molecule's assembly index and related information using a
