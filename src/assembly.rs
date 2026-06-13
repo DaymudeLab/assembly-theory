@@ -19,6 +19,7 @@
 //! ```
 
 use std::{
+    collections::HashSet,
     sync::{
         atomic::{AtomicUsize, Ordering::Relaxed},
         Arc,
@@ -162,6 +163,8 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Vec<
 ///   state is pruned by bounds or deemed redundant by memoization, then the
 ///   upper bound returned is unchanged.)
 /// - `usize`: The number of assembly states searched.
+/// - `HashSet<Vec<usize>>`: A set of assembly states' match removal orders
+///   that attain the updated assembly index upper bound.
 pub fn recurse_index_search(
     mol: &Molecule,
     matches: &Matches,
@@ -170,12 +173,16 @@ pub fn recurse_index_search(
     bounds: &[Bound],
     cache: &mut Cache,
     parallel_mode: ParallelMode,
-) -> (usize, usize) {
+) -> (usize, usize, HashSet<Vec<usize>>) {
     // If any bounds would prune this assembly state or if memoization is
     // enabled and this assembly state is preempted by the cached state, halt.
     if state_bounds(mol, state, best_index.load(Relaxed), bounds) || cache.memoize_state(mol, state)
     {
-        return (state.index(), 1);
+        return (
+            state.index(),
+            1,
+            HashSet::from([state.removal_order().clone()]),
+        );
     }
 
     // Generate a list of matches (i.e., pairs of edge-disjoint, isomorphic
@@ -185,7 +192,7 @@ pub fn recurse_index_search(
 
     // Define a closure that handles recursing to a new assembly state based on
     // the given match.
-    let recurse_on_match = |match_ix: usize| -> (usize, usize) {
+    let recurse_on_match = |match_ix: usize| -> (usize, usize, HashSet<Vec<usize>>) {
         let (h1, h2) = matches.match_fragments(match_ix);
         let fragments = fragments(mol, &intermediate_frags, h1, h2);
 
@@ -210,7 +217,7 @@ pub fn recurse_index_search(
     };
 
     // Use the iterator type corresponding to the specified parallelism mode.
-    let results: Vec<(usize, usize)> = if parallel_mode == ParallelMode::None {
+    let results: Vec<(usize, usize, HashSet<Vec<usize>>)> = if parallel_mode == ParallelMode::None {
         matches_to_remove
             .iter()
             .map(|match_ix| recurse_on_match(*match_ix))
@@ -231,7 +238,20 @@ pub fn recurse_index_search(
     // Update the globally best assembly index bound found so far.
     best_index.fetch_min(best_child_index, Relaxed);
 
-    (best_child_index, states_searched + 1)
+    // Collect all descendant match removal orders attaining the best assembly
+    // index bound across children assembly states.
+    let mut best_removal_orders = if state.index() == best_child_index {
+        HashSet::from([state.removal_order().clone()])
+    } else {
+        HashSet::<Vec<usize>>::new()
+    };
+    for r in results {
+        if r.0 == best_child_index {
+            best_removal_orders.extend(r.2);
+        }
+    }
+
+    (best_child_index, states_searched + 1, best_removal_orders)
 }
 
 /// Compute a molecule's assembly index and related information using a
@@ -367,14 +387,14 @@ pub fn index_search(
         // index. Otherwise, return the best upper bound on the assembly index
         // found before timing out.
         let (index, states_searched) = match result {
-            Ok(Ok((index, states_searched))) => (index, Some(states_searched)),
+            Ok(Ok((index, states_searched, removal_orders))) => (index, Some(states_searched)),
             Err(_) => (best_index.load(Relaxed), None),
             _ => panic!("An unexpected error occurred in async index_search"),
         };
         (index as u32, num_matches as u32, states_searched)
     } else {
         // Otherwise, if no timeout is provided, run the search normally.
-        let (index, states_searched) = recurse_index_search(
+        let (index, states_searched, removal_orders) = recurse_index_search(
             mol,
             &matches,
             &state,
