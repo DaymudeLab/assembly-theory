@@ -453,7 +453,8 @@ pub fn _index_search(
     let boundlist = make_boundlist(&pybounds);
 
     // Compute assembly index.
-    Ok(index_search(
+    // TODO: Update to also return pathways in a sensible way.
+    let (index, num_matches, states_searched, _) = index_search(
         &mol,
         timeout,
         canonize_mode,
@@ -462,7 +463,8 @@ pub fn _index_search(
         kernel_mode,
         &boundlist,
         max_pathways,
-    ))
+    );
+    Ok((index, num_matches, states_searched))
 }
 
 /// A Python wrapper for the assembly_theory Rust crate.

@@ -39,6 +39,7 @@ use crate::{
     matches::Matches,
     memoize::{Cache, MemoizeMode},
     molecule::Molecule,
+    pathway::Pathway,
     state::State,
     utils::connected_components_under_edges,
 };
@@ -292,6 +293,7 @@ pub fn recurse_index_search(
 /// - The molecule's `u32` number of edge-disjoint isomorphic subgraph pairs.
 /// - The `usize` total number of assembly [`State`]s searched if search
 ///   completes, and `None` otherwise (i.e., if search timed out).
+/// - A vector of of minimum assembly [`Pathway`]s.
 ///
 /// # Example
 /// ```
@@ -313,7 +315,7 @@ pub fn recurse_index_search(
 ///
 /// // Compute the molecule's assembly index without parallelism, memoization,
 /// // kernelization, or bounds.
-/// let (slow_index, _, _) = index_search(
+/// let (slow_index, _, _, _) = index_search(
 ///     &anthracene,
 ///     None,
 ///     CanonizeMode::TreeNauty,
@@ -327,7 +329,7 @@ pub fn recurse_index_search(
 ///
 /// // Compute the molecule's assembly index with parallelism, memoization, and
 /// // some bounds.
-/// let (fast_index, _, _) = index_search(
+/// let (fast_index, _, _, _) = index_search(
 ///     &anthracene,
 ///     None,
 ///     CanonizeMode::TreeNauty,
@@ -340,7 +342,7 @@ pub fn recurse_index_search(
 /// assert_eq!(fast_index, 6);
 ///
 /// // Limit search to 1 ms, which should time out.
-/// let (index_bound, _, states_searched) = index_search(
+/// let (index_bound, _, states_searched, _) = index_search(
 ///     &anthracene,
 ///     Some(1),
 ///     CanonizeMode::TreeNauty,
@@ -363,7 +365,7 @@ pub fn index_search(
     kernel_mode: KernelMode,
     bounds: &[Bound],
     max_pathways: Option<usize>,
-) -> (u32, u32, Option<usize>) {
+) -> (u32, u32, Option<usize>, Vec<Pathway>) {
     // Catch not-yet-implemented modes.
     if kernel_mode != KernelMode::None {
         panic!("The chosen --kernel mode is not implemented yet!")
@@ -380,7 +382,7 @@ pub fn index_search(
     let best_index = Arc::new(AtomicUsize::from(mol.graph().edge_count() - 1));
 
     // Search for the shortest assembly pathway recursively.
-    let (index, states_searched, _) = if let Some(timeout) = timeout {
+    let (index, states_searched, removal_orders) = if let Some(timeout) = timeout {
         // If a timeout is provided, we will search within an asynchronous task
         // that can be interrupted after the specified duration (see below). To
         // avoid subsequent scope issues, make copies of various variables.
@@ -433,7 +435,27 @@ pub fn index_search(
         (index, Some(states_searched), removal_orders)
     };
 
-    (index as u32, matches.len() as u32, states_searched)
+    // Generate at most the given number of minimum assembly pathways from the
+    // returned match removal orders.
+    let mut pathways = Vec::<Pathway>::new();
+    if let Some(max_pathways) = max_pathways {
+        if let Some(mut removal_orders) = removal_orders {
+            for (ix, removal_order) in removal_orders.drain().enumerate() {
+                if ix >= max_pathways {
+                    break;
+                } else {
+                    pathways.push(Pathway::new(mol, &matches, &removal_order));
+                }
+            }
+        }
+    }
+
+    (
+        index as u32,
+        matches.len() as u32,
+        states_searched,
+        pathways,
+    )
 }
 
 /// Compute a molecule's assembly index using an efficient default strategy.
@@ -461,7 +483,7 @@ pub fn index_search(
 pub fn index(mol: &Molecule) -> u32 {
     index_search(
         mol,
-        None,
+        None, // Run without a timeout.
         CanonizeMode::TreeNauty,
         ParallelMode::DepthOne,
         MemoizeMode::CanonIndex,
