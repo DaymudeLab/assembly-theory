@@ -157,14 +157,17 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Vec<
 /// - `bounds`: The list of bounding strategies to apply.
 /// - `cache`: Memoization cache storing previously searched assembly states.
 /// - `parallel_mode`: The parallelism mode for this state's match iteration.
+/// - `collect_removal_orders`: `true` iff match removal orders should be
+///   collected for later assembly pathway reconstruction.
 ///
 /// Returns, from this assembly state and any of its descendents:
 /// - `usize`: An updated upper bound on the assembly index. (Note: If this
 ///   state is pruned by bounds or deemed redundant by memoization, then the
 ///   upper bound returned is unchanged.)
 /// - `usize`: The number of assembly states searched.
-/// - `HashSet<Vec<usize>>`: A set of assembly states' match removal orders
-///   that attain the updated assembly index upper bound.
+/// - `Option<HashSet<Vec<usize>>>`: A set of assembly states' match removal
+///   orders that attain the updated assembly index upper bound, or `None` if
+///   `collect_removal_orders == false`.
 pub fn recurse_index_search(
     mol: &Molecule,
     matches: &Matches,
@@ -173,7 +176,8 @@ pub fn recurse_index_search(
     bounds: &[Bound],
     cache: &mut Cache,
     parallel_mode: ParallelMode,
-) -> (usize, usize, HashSet<Vec<usize>>) {
+    collect_removal_orders: bool,
+) -> (usize, usize, Option<HashSet<Vec<usize>>>) {
     // If any bounds would prune this assembly state or if memoization is
     // enabled and this assembly state is preempted by the cached state, halt.
     if state_bounds(mol, state, best_index.load(Relaxed), bounds) || cache.memoize_state(mol, state)
@@ -181,7 +185,11 @@ pub fn recurse_index_search(
         return (
             state.index(),
             1,
-            HashSet::from([state.removal_order().clone()]),
+            if collect_removal_orders {
+                Some(HashSet::from([state.removal_order().clone()]))
+            } else {
+                None
+            },
         );
     }
 
@@ -192,7 +200,7 @@ pub fn recurse_index_search(
 
     // Define a closure that handles recursing to a new assembly state based on
     // the given match.
-    let recurse_on_match = |match_ix: usize| -> (usize, usize, HashSet<Vec<usize>>) {
+    let recurse_on_match = |match_ix: usize| -> (usize, usize, Option<HashSet<Vec<usize>>>) {
         let (h1, h2) = matches.match_fragments(match_ix);
         let fragments = fragments(mol, &intermediate_frags, h1, h2);
 
@@ -213,22 +221,24 @@ pub fn recurse_index_search(
             bounds,
             &mut cache.clone(),
             new_parallel,
+            collect_removal_orders,
         )
     };
 
     // Use the iterator type corresponding to the specified parallelism mode.
-    let results: Vec<(usize, usize, HashSet<Vec<usize>>)> = if parallel_mode == ParallelMode::None {
-        matches_to_remove
-            .iter()
-            .map(|match_ix| recurse_on_match(*match_ix))
-            .collect()
-    } else {
-        matches_to_remove
-            .iter()
-            .par_bridge()
-            .map(|match_ix| recurse_on_match(*match_ix))
-            .collect()
-    };
+    let results: Vec<(usize, usize, Option<HashSet<Vec<usize>>>)> =
+        if parallel_mode == ParallelMode::None {
+            matches_to_remove
+                .iter()
+                .map(|match_ix| recurse_on_match(*match_ix))
+                .collect()
+        } else {
+            matches_to_remove
+                .iter()
+                .par_bridge()
+                .map(|match_ix| recurse_on_match(*match_ix))
+                .collect()
+        };
 
     // Compute the best assembly index bound and the total number of descendant
     // states searched across all children assembly states.
@@ -240,18 +250,25 @@ pub fn recurse_index_search(
 
     // Collect all descendant match removal orders attaining the best assembly
     // index bound across children assembly states.
-    let mut best_removal_orders = if state.index() == best_child_index {
-        HashSet::from([state.removal_order().clone()])
-    } else {
-        HashSet::<Vec<usize>>::new()
-    };
-    for r in results {
-        if r.0 == best_child_index {
-            best_removal_orders.extend(r.2);
+    if collect_removal_orders {
+        let mut best_removal_orders = if state.index() == best_child_index {
+            HashSet::from([state.removal_order().clone()])
+        } else {
+            HashSet::<Vec<usize>>::new()
+        };
+        for r in results {
+            if r.0 == best_child_index {
+                best_removal_orders.extend(r.2.unwrap());
+            }
         }
+        (
+            best_child_index,
+            states_searched + 1,
+            Some(best_removal_orders),
+        )
+    } else {
+        (best_child_index, states_searched + 1, None)
     }
-
-    (best_child_index, states_searched + 1, best_removal_orders)
 }
 
 /// Compute a molecule's assembly index and related information using a
@@ -378,6 +395,7 @@ pub fn index_search(
                     &bounds,
                     &mut cache,
                     parallel_mode,
+                    true,
                 ));
             });
             tktimeout(Duration::from_millis(timeout), recv).await
@@ -402,6 +420,7 @@ pub fn index_search(
             bounds,
             &mut cache,
             parallel_mode,
+            true,
         );
         (index as u32, matches.len() as u32, Some(states_searched))
     }
