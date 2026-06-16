@@ -96,17 +96,20 @@ pub fn depth(mol: &Molecule) -> u32 {
     ix
 }
 
-/// Determine the fragments produced from the given assembly state by removing
-/// the given pair of edge-disjoint, isomorphic subgraphs and then adding one
-/// back; return `None` if not possible.
-fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Option<Vec<BitSet>> {
-    // Attempt to find fragments f1 and f2 containing h1 and h2, respectively;
-    // if either do not exist, exit without further fragmentation.
-    let f1 = state.iter().enumerate().find(|(_, c)| h1.is_subset(c));
-    let f2 = state.iter().enumerate().find(|(_, c)| h2.is_subset(c));
-    let (Some((i1, f1)), Some((i2, f2))) = (f1, f2) else {
-        return None;
-    };
+/// Find all fragments in the given assembly state after removing the given
+/// pair of edge-disjoint, isomorphic subgraphs and then adding one back.
+fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Vec<BitSet> {
+    // Find fragments f1 and f2 containing h1 and h2, respectively.
+    let (i1, f1) = state
+        .iter()
+        .enumerate()
+        .find(|(_, c)| h1.is_subset(c))
+        .unwrap();
+    let (i2, f2) = state
+        .iter()
+        .enumerate()
+        .find(|(_, c)| h2.is_subset(c))
+        .unwrap();
 
     let mut fragments = state.to_owned();
 
@@ -117,9 +120,9 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Opti
     if i1 == i2 {
         let mut union = h1.clone();
         union.union_with(h2);
-        let mut difference = f1.clone();
-        difference.difference_with(&union);
-        let c = connected_components_under_edges(mol.graph(), &difference);
+        let mut diff = f1.clone();
+        diff.difference_with(&union);
+        let c = connected_components_under_edges(mol.graph(), &diff);
         fragments.extend(c);
         fragments.swap_remove(i1);
     } else {
@@ -140,7 +143,7 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Opti
     // Drop any singleton fragments, add h1 as a fragment, and return.
     fragments.retain(|i| i.len() > 1);
     fragments.push(h1.clone());
-    Some(fragments)
+    fragments
 }
 
 /// Recursive helper for [`index_search`], only public for benchmarking.
@@ -184,29 +187,26 @@ pub fn recurse_index_search(
     // the given match.
     let recurse_on_match = |match_ix: usize| -> (usize, usize) {
         let (h1, h2) = matches.match_fragments(match_ix);
+        let fragments = fragments(mol, &intermediate_frags, h1, h2);
 
-        if let Some(fragments) = fragments(mol, &intermediate_frags, h1, h2) {
-            // If using depth-one parallelism, all descendant states should be
-            // computed serially.
-            let new_parallel = if parallel_mode == ParallelMode::DepthOne {
-                ParallelMode::None
-            } else {
-                parallel_mode
-            };
-
-            // Recurse using the remaining matches and updated fragments.
-            recurse_index_search(
-                mol,
-                matches,
-                &state.update(fragments, match_ix, h1.len()),
-                best_index.clone(),
-                bounds,
-                &mut cache.clone(),
-                new_parallel,
-            )
+        // If using depth-one parallelism, all descendant states should be
+        // computed serially.
+        let new_parallel = if parallel_mode == ParallelMode::DepthOne {
+            ParallelMode::None
         } else {
-            (state.index(), 0)
-        }
+            parallel_mode
+        };
+
+        // Recurse using the remaining matches and updated fragments.
+        recurse_index_search(
+            mol,
+            matches,
+            &state.update(fragments, match_ix, h1.len()),
+            best_index.clone(),
+            bounds,
+            &mut cache.clone(),
+            new_parallel,
+        )
     };
 
     // Use the iterator type corresponding to the specified parallelism mode.
