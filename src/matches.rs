@@ -14,6 +14,7 @@ use crate::{
 };
 
 /// A node in the DAG storing fragment information; see [`Matches`].
+#[derive(Clone)]
 struct DagNode {
     /// The fragment (i.e., connected molecular subgraph) this node represents.
     fragment: BitSet,
@@ -27,6 +28,7 @@ struct DagNode {
 
 /// Structural information on "matches" in a molecular graph, i.e., pairs of
 /// edge-disjoint, isomorphic subgraphs.
+#[derive(Clone)]
 pub struct Matches {
     /// [Seet et al. (2025)](https://doi.org/10.1021/acs.jcim.5c01964) perform
     /// match enumeration by constructing a directed acyclic graph (DAG). Each

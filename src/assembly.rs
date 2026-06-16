@@ -375,7 +375,6 @@ pub fn index_search(
 
     // Enumerate matches (i.e., pairs of edge-disjoint isomorphic fragments).
     let matches = Matches::new(mol, canonize_mode);
-    let num_matches = matches.len();
 
     // Use an `Arc` to track the best assembly index across parallel threads.
     let best_index = Arc::new(AtomicUsize::from(mol.graph().edge_count() - 1));
@@ -385,8 +384,9 @@ pub fn index_search(
         // If a timeout is provided, we will search within an asynchronous task
         // that can be interrupted after the specified duration (see below). To
         // avoid subsequent scope issues, make copies of various variables.
-        let best_index_copy = best_index.clone();
         let mol = mol.clone();
+        let matches = matches.clone();
+        let best_index_copy = best_index.clone();
         let bounds = bounds.to_vec();
 
         // Search within a dedicated asynchronous runtime.
@@ -433,7 +433,7 @@ pub fn index_search(
         (index, Some(states_searched), removal_orders)
     };
 
-    (index as u32, num_matches as u32, states_searched)
+    (index as u32, matches.len() as u32, states_searched)
 }
 
 /// Compute a molecule's assembly index using an efficient default strategy.
