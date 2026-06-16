@@ -373,6 +373,9 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 /// `"int"`, `"vec-simple"`, `"vec-small-frags"`, `"matchable-edges"`].
 /// The default bounds are [`"int"`, `"matchable-edges"`]. See
 /// [`crate::bounds::Bound`] for details.
+/// - `max_pathways`: An `int` maximum number of minimum assembly pathways to
+/// reconstruct, `0` for all such pathways, or `None` to disable pathway
+/// reconstruction.
 ///
 /// # Python Returns
 ///
@@ -398,14 +401,15 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 ///     parallel_str="none",
 ///     memoize_str="none",
 ///     kernel_str="none",
-///     bound_strs=["int", "matchable-edges"])
+///     bound_strs=["int", "matchable-edges"],
+///     max_pathways=None)
 ///
 /// print(f"Assembly Index:  {index}")            # 6
 /// print(f"Matches:         {num_matches}")      # 466
 /// print(f"States Searched: {states_searched}")  # 491
 /// ```
 #[pyfunction(name = "index_search")]
-#[pyo3(signature = (mol_block, timeout=None, canonize_str="tree-nauty", parallel_str="depth-one", memoize_str="canon-index", kernel_str="none", bound_strs=vec!["int".to_string(), "matchable-edges".to_string()]), text_signature = "(mol_block, canonize_str=\"tree-nauty\", parallel_str=\"depth-one\", memoize_str=\"canon-index\", kernel_str=\"none\", bound_strs=[\"int\", \"matchable-edges\"]))")]
+#[pyo3(signature = (mol_block, timeout=None, canonize_str="tree-nauty", parallel_str="depth-one", memoize_str="canon-index", kernel_str="none", bound_strs=vec!["int".to_string(), "matchable-edges".to_string()], max_pathways=None), text_signature = "(mol_block, timeout=None, canonize_str=\"tree-nauty\", parallel_str=\"depth-one\", memoize_str=\"canon-index\", kernel_str=\"none\", bound_strs=[\"int\", \"matchable-edges\"], max_pathways=None)")]
 pub fn _index_search(
     mol_block: &str,
     timeout: Option<u64>,
@@ -414,6 +418,7 @@ pub fn _index_search(
     memoize_str: &str,
     kernel_str: &str,
     bound_strs: Vec<String>,
+    max_pathways: Option<usize>,
 ) -> PyResult<(u32, u32, Option<usize>)> {
     // Parse the .mol file contents as a molecule::Molecule.
     let mol = parse_molfile_str(mol_block)?;
@@ -456,6 +461,7 @@ pub fn _index_search(
         memoize_mode,
         kernel_mode,
         &boundlist,
+        max_pathways,
     ))
 }
 

@@ -283,6 +283,10 @@ pub fn recurse_index_search(
 /// the order they appear in the `bounds` slice. It is generally better to
 /// provide bounds that are quick to compute first.
 ///
+/// If `max_pathways` is `None`, skip minimum assembly pathway reconstruction.
+/// Otherwise, reconstruct all such pathways from the completed search results
+/// if `max_pathways == 0` or at most `max_pathways` such pathways otherwise.
+///
 /// The results returned are:
 /// - The molecule's `u32` assembly index (or an upper bound if timed out).
 /// - The molecule's `u32` number of edge-disjoint isomorphic subgraph pairs.
@@ -317,7 +321,9 @@ pub fn recurse_index_search(
 ///     MemoizeMode::None,
 ///     KernelMode::None,
 ///     &[],
+///     None,
 /// );
+/// assert_eq!(slow_index, 6);
 ///
 /// // Compute the molecule's assembly index with parallelism, memoization, and
 /// // some bounds.
@@ -329,7 +335,9 @@ pub fn recurse_index_search(
 ///     MemoizeMode::CanonIndex,
 ///     KernelMode::None,
 ///     &[Bound::Log, Bound::Int],
+///     None,
 /// );
+/// assert_eq!(fast_index, 6);
 ///
 /// // Limit search to 1 ms, which should time out.
 /// let (index_bound, _, states_searched) = index_search(
@@ -340,10 +348,8 @@ pub fn recurse_index_search(
 ///     MemoizeMode::None,
 ///     KernelMode::None,
 ///     &[],
+///     None,
 /// );
-///
-/// assert_eq!(slow_index, 6);
-/// assert_eq!(fast_index, 6);
 /// assert!(index_bound >= fast_index && states_searched == None);
 /// # Ok(())
 /// # }
@@ -356,6 +362,7 @@ pub fn index_search(
     memoize_mode: MemoizeMode,
     kernel_mode: KernelMode,
     bounds: &[Bound],
+    max_pathways: Option<usize>,
 ) -> (u32, u32, Option<usize>) {
     // Catch not-yet-implemented modes.
     if kernel_mode != KernelMode::None {
@@ -368,19 +375,19 @@ pub fn index_search(
 
     // Enumerate matches (i.e., pairs of edge-disjoint isomorphic fragments).
     let matches = Matches::new(mol, canonize_mode);
+    let num_matches = matches.len();
 
     // Use an `Arc` to track the best assembly index across parallel threads.
     let best_index = Arc::new(AtomicUsize::from(mol.graph().edge_count() - 1));
 
     // Search for the shortest assembly pathway recursively.
-    if let Some(timeout) = timeout {
+    let (index, states_searched, _) = if let Some(timeout) = timeout {
         // If a timeout is provided, we will search within an asynchronous task
         // that can be interrupted after the specified duration (see below). To
         // avoid subsequent scope issues, make copies of various variables.
         let best_index_copy = best_index.clone();
         let mol = mol.clone();
         let bounds = bounds.to_vec();
-        let num_matches = matches.len();
 
         // Search within a dedicated asynchronous runtime.
         let rt = Runtime::new().unwrap();
@@ -395,7 +402,7 @@ pub fn index_search(
                     &bounds,
                     &mut cache,
                     parallel_mode,
-                    true,
+                    max_pathways.is_some(),
                 ));
             });
             tktimeout(Duration::from_millis(timeout), recv).await
@@ -404,12 +411,13 @@ pub fn index_search(
         // If the search completes before the timeout, return the true assembly
         // index. Otherwise, return the best upper bound on the assembly index
         // found before timing out.
-        let (index, states_searched) = match result {
-            Ok(Ok((index, states_searched, removal_orders))) => (index, Some(states_searched)),
-            Err(_) => (best_index.load(Relaxed), None),
+        match result {
+            Ok(Ok((index, states_searched, removal_orders))) => {
+                (index, Some(states_searched), removal_orders)
+            }
+            Err(_) => (best_index.load(Relaxed), None, None),
             _ => panic!("An unexpected error occurred in async index_search"),
-        };
-        (index as u32, num_matches as u32, states_searched)
+        }
     } else {
         // Otherwise, if no timeout is provided, run the search normally.
         let (index, states_searched, removal_orders) = recurse_index_search(
@@ -420,16 +428,18 @@ pub fn index_search(
             bounds,
             &mut cache,
             parallel_mode,
-            true,
+            max_pathways.is_some(),
         );
-        (index as u32, matches.len() as u32, Some(states_searched))
-    }
+        (index, Some(states_searched), removal_orders)
+    };
+
+    (index as u32, num_matches as u32, states_searched)
 }
 
 /// Compute a molecule's assembly index using an efficient default strategy.
 ///
-/// To customize assembly index calculation beyond the default strategy, see
-/// [`index_search`].
+/// To customize assembly index calculation beyond the default strategy and/or
+/// reconstruct minimum assembly pathways, see [`index_search`].
 ///
 /// # Example
 /// ```
@@ -457,6 +467,7 @@ pub fn index(mol: &Molecule) -> u32 {
         MemoizeMode::CanonIndex,
         KernelMode::None,
         &[Bound::Int, Bound::MatchableEdges],
+        None, // Disable pathway reconstruction.
     )
     .0
 }

@@ -79,6 +79,7 @@ fn test_reference_dataset(
             memoize_mode,
             kernel_mode,
             bounds,
+            None,
         );
 
         // Compare calculated assembly index to ground truth.

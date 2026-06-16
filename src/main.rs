@@ -117,6 +117,7 @@ fn main() -> Result<()> {
         cli.memoize,
         cli.kernel,
         boundlist,
+        None,
     );
 
     // Print final output, depending on --verbose.
