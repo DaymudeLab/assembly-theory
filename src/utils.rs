@@ -77,7 +77,7 @@ where
         node_set.insert(src.index());
         node_set.insert(dst.index());
     }
-    node_set.len()
+    node_set.count()
 }
 
 pub fn node_induced_subgraph<N, E, Ty, Ix>(
@@ -141,11 +141,11 @@ where
     let mut components = Vec::new();
     while let Some(c) = remainder.iter().next() {
         let mut queue = BitSet::new();
-        queue.reserve_len(s.len());
+        queue.reserve_len(s.count());
         queue.insert(c);
 
         let mut visited = BitSet::new();
-        visited.reserve_len(s.len());
+        visited.reserve_len(s.count());
 
         while let Some(e) = queue.iter().next() {
             queue.remove(e);

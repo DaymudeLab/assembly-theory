@@ -138,7 +138,7 @@ pub(crate) fn match_bounds(
 fn log_bound(fragments: &[BitSet]) -> usize {
     let mut size = 0;
     for f in fragments {
-        size += f.len();
+        size += f.count();
     }
 
     size - (size as f32).log2().ceil() as usize
@@ -150,7 +150,7 @@ fn int_bound(fragments: &[BitSet], m: usize) -> usize {
     let mut frag_sizes: Vec<usize> = Vec::new();
 
     for f in fragments {
-        frag_sizes.push(f.len());
+        frag_sizes.push(f.count());
     }
 
     let size_sum: usize = frag_sizes.iter().sum();
@@ -211,7 +211,7 @@ fn vec_simple_bound(fragments: &[BitSet], m: usize, mol: &Molecule) -> usize {
     // Calculate z (number of unique edges)
     let mut s = 0;
     for f in fragments {
-        s += f.len();
+        s += f.count();
     }
 
     let mut union_set = BitSet::new();
@@ -231,7 +231,7 @@ fn vec_small_frags_bound(fragments: &[BitSet], m: usize, mol: &Molecule) -> usiz
 
     // Find and remove fragments of size 2
     for (i, frag) in fragments.iter().enumerate() {
-        if frag.len() == 2 {
+        if frag.count() == 2 {
             indices_to_remove.push(i);
         }
     }
@@ -257,10 +257,10 @@ fn vec_small_frags_bound(fragments: &[BitSet], m: usize, mol: &Molecule) -> usiz
     let mut s = 0;
     let mut sl = 0;
     for f in fragments {
-        s += f.len();
+        s += f.count();
     }
     for f in large_fragments {
-        sl += f.len();
+        sl += f.count();
     }
 
     // Find number of unique size two fragments
@@ -286,8 +286,8 @@ fn usable_edges_bound(matchable_edge_masks: &[Vec<BitSet>], removal_size: usize)
     let mut bound = 0;
 
     for (frag_ix, frag) in matchable_edge_masks[removal_size - 2].iter().enumerate() {
-        let total_removable_edges = matchable_edge_masks[0][frag_ix].len();
-        let removable_edges = frag.len();
+        let total_removable_edges = matchable_edge_masks[0][frag_ix].count();
+        let removable_edges = frag.count();
         let leftover_edges =
             (total_removable_edges - removable_edges) + (removable_edges % removal_size);
         bound += total_removable_edges

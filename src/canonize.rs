@@ -72,7 +72,7 @@ type CGraph = Graph<AtomOrBond, (), Undirected, Index>;
 
 /// Convert the specified `subgraph` to the format expected by Nauty.
 fn subgraph_to_cgraph(mol: &Molecule, subgraph: &BitSet) -> CGraph {
-    let mut h = CGraph::with_capacity(subgraph.len(), 2 * subgraph.len());
+    let mut h = CGraph::with_capacity(subgraph.count(), 2 * subgraph.count());
     let mut vtx_map = HashMap::<NodeIndex, NodeIndex>::new();
     for e in subgraph {
         let eix = EdgeIndex::new(e);
@@ -98,7 +98,7 @@ fn subgraph_to_cgraph(mol: &Molecule, subgraph: &BitSet) -> CGraph {
 
 /// Returns `True` iff the *connected* `subgraph` induces a tree.
 fn is_tree(mol: &Molecule, subgraph: &BitSet) -> bool {
-    node_count_under_edge_mask(mol.graph(), subgraph) == subgraph.len() + 1
+    node_count_under_edge_mask(mol.graph(), subgraph) == subgraph.count() + 1
 }
 
 /// Wrap a bytevec with 0..vec..255.
@@ -161,10 +161,10 @@ fn tree_canonize(mol: &Molecule, subgraph: &BitSet) -> Vec<u8> {
     }
 
     // Leaf pruning proceeds until the tree is an isolated edge or node.
-    while unlabeled_vertices.len() > 2 {
+    while unlabeled_vertices.count() > 2 {
         let leaves = unlabeled_vertices
             .iter()
-            .filter(|&i| adjacencies[i].len() == 1)
+            .filter(|&i| adjacencies[i].count() == 1)
             .collect::<Vec<_>>();
 
         for leaf in leaves {
@@ -182,13 +182,13 @@ fn tree_canonize(mol: &Molecule, subgraph: &BitSet) -> Vec<u8> {
             partial_canonical_sets[parent].push(canonical_label);
 
             // Proceed as though the pruned leaf no longer exists.
-            adjacencies[leaf].clear();
+            adjacencies[leaf].make_empty();
             adjacencies[parent].remove(leaf);
             unlabeled_vertices.remove(leaf);
         }
     }
 
-    if unlabeled_vertices.len() == 2 {
+    if unlabeled_vertices.count() == 2 {
         // Case 1: Tree collapses into isolated edge. Obtain node labels,
         // lexicographically sort, and then glue together into canonical label
         // alongside edge weight.

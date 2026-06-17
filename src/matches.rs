@@ -329,7 +329,7 @@ impl Matches {
                 matchable_edge_masks[0]
                     .iter()
                     .flat_map(|frag| connected_components_under_edges(mol.graph(), frag))
-                    .filter(|frag| frag.len() >= 2)
+                    .filter(|frag| frag.count() >= 2)
                     .collect::<Vec<BitSet>>()
             } else {
                 vec![]

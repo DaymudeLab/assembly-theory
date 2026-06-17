@@ -141,7 +141,7 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Vec<
     }
 
     // Drop any singleton fragments, add h1 as a fragment, and return.
-    fragments.retain(|i| i.len() > 1);
+    fragments.retain(|i| i.count() > 1);
     fragments.push(h1.clone());
     fragments
 }
@@ -201,7 +201,7 @@ pub fn recurse_index_search(
         recurse_index_search(
             mol,
             matches,
-            &state.update(fragments, match_ix, h1.len()),
+            &state.update(fragments, match_ix, h1.count()),
             best_index.clone(),
             bounds,
             &mut cache.clone(),
