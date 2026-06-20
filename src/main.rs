@@ -56,6 +56,12 @@ struct Cli {
     /// Strategy for performing graph kernelization during the search phase.
     #[arg(long, value_enum, default_value_t = KernelMode::None)]
     kernel: KernelMode,
+
+    /// Maximum number of minimum assembly pathways to reconstruct, or `None`
+    /// (default) to disable pathway reconstruction. Set this option to 0 to
+    /// reconstruct all minimum assembly pathways.
+    #[arg(long)]
+    pathways: Option<usize>,
 }
 
 #[derive(Args, Debug)]
@@ -109,7 +115,7 @@ fn main() -> Result<()> {
     };
 
     // Call index calculation with all the various options.
-    let (index, num_matches, states_searched) = index_search(
+    let (index, num_matches, states_searched, _) = index_search(
         &mol,
         cli.timeout,
         cli.canonize,
@@ -117,7 +123,7 @@ fn main() -> Result<()> {
         cli.memoize,
         cli.kernel,
         boundlist,
-        None,
+        cli.pathways,
     );
 
     // Print final output, depending on --verbose.

@@ -441,7 +441,7 @@ pub fn index_search(
     if let Some(max_pathways) = max_pathways {
         if let Some(mut removal_orders) = removal_orders {
             for (ix, removal_order) in removal_orders.drain().enumerate() {
-                if ix >= max_pathways {
+                if max_pathways > 0 && ix >= max_pathways {
                     break;
                 } else {
                     pathways.push(Pathway::new(mol, &matches, &removal_order));
