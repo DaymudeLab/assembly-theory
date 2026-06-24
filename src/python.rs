@@ -394,7 +394,7 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 ///     mol_block = f.read()
 ///
 /// # Calculate the molecule's assembly index using the specified options.
-/// (index, num_matches, states_searched) = at.index_search(
+/// (index, num_matches, states_searched, _) = at.index_search(
 ///     mol_block,
 ///     timeout=None,
 ///     canonize_str="tree-nauty",
@@ -419,7 +419,7 @@ pub fn _index_search(
     kernel_str: &str,
     bound_strs: Vec<String>,
     max_pathways: Option<usize>,
-) -> PyResult<(u32, u32, Option<usize>)> {
+) -> PyResult<(u32, u32, Option<usize>, Vec<String>)> {
     // Parse the .mol file contents as a molecule::Molecule.
     let mol = parse_molfile_str(mol_block)?;
 
@@ -453,8 +453,7 @@ pub fn _index_search(
     let boundlist = make_boundlist(&pybounds);
 
     // Compute assembly index.
-    // TODO: Update to also return pathways in a sensible way.
-    let (index, num_matches, states_searched, _) = index_search(
+    let (index, num_matches, states_searched, pathways) = index_search(
         &mol,
         timeout,
         canonize_mode,
@@ -464,7 +463,14 @@ pub fn _index_search(
         &boundlist,
         max_pathways,
     );
-    Ok((index, num_matches, states_searched))
+
+    // Format assembly pathways as DOT strings.
+    let mut pathways_dot = Vec::<String>::new();
+    for pathway in pathways {
+        pathways_dot.push(format!("{pathway}"));
+    }
+
+    Ok((index, num_matches, states_searched, pathways_dot))
 }
 
 /// A Python wrapper for the assembly_theory Rust crate.
