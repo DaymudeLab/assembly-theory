@@ -1,12 +1,21 @@
 //! Reconstruct minimum assembly pathways from recursive search information.
 
+use std::fmt;
+
 use bit_set::BitSet;
-use petgraph::{dot::Dot, graph::EdgeIndex};
+use petgraph::{
+    dot::{Config, Dot},
+    graph::{DiGraph, EdgeIndex, NodeIndex},
+};
 
 use crate::{matches::Matches, molecule::Molecule, utils::subgraph_from_edge_mask};
 
 /// Assembly pathway of pairwise joining operations yielding the target graph.
-pub struct Pathway {}
+pub struct Pathway {
+    /// A directed, acyclic graph representation of the assembly pathway; see
+    /// [`Pathway::dag`] for details.
+    dag: DiGraph<String, ()>,
+}
 
 impl Pathway {
     /// Construct the assembly [`Pathway`] of the given molecule corresponding
@@ -48,6 +57,7 @@ impl Pathway {
 
         // Use the bag of pieces to construct all duplicate fragments across
         // matches, starting with the smallest matches and building up.
+        let mut dag = DiGraph::<String, ()>::new();
         for (h1, h2) in &duplicates {
             // If h1 is not already in the bag (as it could be if it is used in
             // multiple matches), construct it by joining pieces in the bag.
@@ -58,7 +68,7 @@ impl Pathway {
                     pieces.extract_if(.., |p| p.is_subset(h1)).collect();
 
                 // Join those pieces iteratively into h1 and add it to the bag.
-                join_pieces(mol, &mut h1_pieces);
+                join_pieces(mol, &mut h1_pieces, &mut dag);
                 pieces.push(h1.clone());
             }
 
@@ -68,15 +78,38 @@ impl Pathway {
 
         // Join whatever fragments are left in the bag until the original
         // molecular graph is recovered.
-        join_pieces(mol, &mut pieces);
+        join_pieces(mol, &mut pieces, &mut dag);
 
-        Self {}
+        Self { dag }
+    }
+
+    /// Get the pathway's directed, acyclic graph representation.
+    ///
+    /// Nodes are fragments (represented as DOT strings) and edges `(u1, v)`
+    /// and `(u2, v)` exist if fragments `u1` and `u2` are joined to produce
+    /// fragment `v`. If `u` is duplicated and joined to itself to produce `v`,
+    /// then the edge `(u, v)` is included twice.
+    pub fn dag(&self) -> &DiGraph<String, ()> {
+        &self.dag
+    }
+}
+
+impl fmt::Display for Pathway {
+    /// Format the assembly pathway DAG as a DOT string whose node labels are
+    /// the DOT strings of their respective fragments.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{:?}",
+            Dot::with_config(self.dag(), &[Config::EdgeNoLabel])
+        )
     }
 }
 
 /// Helper function for [`Pathway::new`] that takes as input an edge-disjoint
-/// set of pieces and repeatedly joins all compatible pairs of pieces together.
-fn join_pieces(mol: &Molecule, pieces: &mut Vec<BitSet>) {
+/// set of pieces and repeatedly joins all compatible pairs of pieces together,
+/// tracking these join operations in the given assembly pathway.
+fn join_pieces(mol: &Molecule, pieces: &mut Vec<BitSet>, pathway: &mut DiGraph<String, ()>) {
     // For each piece, identify the set of nodes it contains.
     let mut piece_nodes = Vec::<BitSet>::new();
     for piece in pieces.iter() {
@@ -97,27 +130,44 @@ fn join_pieces(mol: &Molecule, pieces: &mut Vec<BitSet>) {
         while j < pieces.len() {
             // If pieces i and j share a node, join them into one piece.
             if !piece_nodes[i].is_disjoint(&piece_nodes[j]) {
-                // DEBUG: For now, I am just printing the assembly steps
-                // instead of storing them in a dedicated data structure.
-                print!(
-                    "Joining {:?}",
+                // Get the DOT string representations of pieces i and j.
+                let dot_i = format!(
+                    "{:?}",
                     Dot::new(&subgraph_from_edge_mask(mol.graph(), &pieces[i]))
                 );
-                print!(
-                    "and {:?}",
+                let dot_j = format!(
+                    "{:?}",
                     Dot::new(&subgraph_from_edge_mask(mol.graph(), &pieces[j]))
                 );
 
+                // Ensure pieces i and j exist as nodes in the pathway DAG.
+                let i_ix = match pathway.raw_nodes().iter().position(|v| v.weight == dot_i) {
+                    Some(v_ix) => NodeIndex::new(v_ix),
+                    _ => pathway.add_node(dot_i),
+                };
+                let j_ix = match pathway.raw_nodes().iter().position(|v| v.weight == dot_j) {
+                    Some(v_ix) => NodeIndex::new(v_ix),
+                    _ => pathway.add_node(dot_j),
+                };
+
+                // Join piece j into piece i and update the nodes contained in
+                // the newly formed piece.
                 let piece_j = pieces.swap_remove(j);
                 pieces[i].union_with(&piece_j);
-
-                println!(
-                    "to construct {:?}",
-                    Dot::new(&subgraph_from_edge_mask(mol.graph(), &pieces[i]))
-                );
-
                 let piece_nodes_j = piece_nodes.swap_remove(j);
                 piece_nodes[i].union_with(&piece_nodes_j);
+
+                // Get the DOT string representation of the new piece and add
+                // it as a node to the pathway DAG.
+                let dot_joined = format!(
+                    "{:?}",
+                    Dot::new(&subgraph_from_edge_mask(mol.graph(), &pieces[i]))
+                );
+                let joined_ix = pathway.add_node(dot_joined);
+
+                // Add edges in the pathway DAG representing the join.
+                pathway.add_edge(i_ix, joined_ix, ());
+                pathway.add_edge(j_ix, joined_ix, ());
 
                 joined_piece_i = true;
             } else {

@@ -25,15 +25,16 @@ struct Cli {
     #[arg(long)]
     depth: bool,
 
-    /// Print the assembly index, assembly depth, number of edge-disjoint
-    /// isomorphic subgraph pairs, and size of the search space. Note that the
-    /// search space size is nondeterministic owing to some `HashMap` details.
+    /// Print the molecule's assembly index, number of matches (edge-disjoint
+    /// isomorphic subgraph pairs), number of states searched, and assembly
+    /// pathways (if `--pathways` is given). When using parallelism, the number
+    /// of states searched is nondeterministic.
     #[arg(long)]
     verbose: bool,
 
     /// Timeout duration in milliseconds after which search is stopped and the
-    /// best assembly index found so far is returned, or `None` if search is
-    /// run until the true assembly index is found.
+    /// best assembly index found so far is returned, or `None` (default) if
+    /// search is run until the true assembly index is found.
     #[arg(long)]
     timeout: Option<u64>,
 
@@ -59,7 +60,7 @@ struct Cli {
 
     /// Maximum number of minimum assembly pathways to reconstruct, or `None`
     /// (default) to disable pathway reconstruction. Set this option to 0 to
-    /// reconstruct all minimum assembly pathways.
+    /// reconstruct all minimum assembly pathways found during search.
     #[arg(long)]
     pathways: Option<usize>,
 }
@@ -115,7 +116,7 @@ fn main() -> Result<()> {
     };
 
     // Call index calculation with all the various options.
-    let (index, num_matches, states_searched, _) = index_search(
+    let (index, num_matches, states_searched, pathways) = index_search(
         &mol,
         cli.timeout,
         cli.canonize,
@@ -126,22 +127,29 @@ fn main() -> Result<()> {
         cli.pathways,
     );
 
-    // Print final output, depending on --verbose.
+    // Print final output, depending on --verbose and timeout status.
     match (cli.verbose, states_searched) {
         // Found the exact assembly index.
         (true, Some(states_searched)) => {
             println!("Assembly Index:  {index}");
             println!("Matches:         {num_matches}");
             println!("States Searched: {states_searched}");
+            for (i, pathway) in pathways.iter().enumerate() {
+                println!("Pathway {i}: {pathway}");
+            }
         }
         (false, Some(_)) => {
             println!("{index}");
+            for pathway in pathways {
+                println!("{pathway}");
+            }
         }
         // Search timed out and returned an upper bound.
         (true, None) => {
             println!("Assembly Index:  <= {index} (timed out)");
             println!("Matches:         {num_matches}");
             println!("States Searched: not computed on timeout");
+            println!("Pathways:        not computed on timeout");
         }
         (false, None) => {
             println!("<= {index} (timed out)");
