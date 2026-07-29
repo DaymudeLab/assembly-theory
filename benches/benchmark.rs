@@ -126,7 +126,7 @@ pub fn bench_bounds(c: &mut Criterion) {
                                     bounds,
                                     &mut cache,
                                     ParallelMode::DepthOne,
-                                    false,
+                                    None,
                                 );
                                 total_time += start.elapsed();
                             }
@@ -191,7 +191,7 @@ pub fn bench_memoize(c: &mut Criterion) {
                                     &[Bound::Int, Bound::MatchableEdges],
                                     &mut cache,
                                     ParallelMode::DepthOne,
-                                    false,
+                                    None,
                                 );
                                 total_time += start.elapsed();
                             }
@@ -216,41 +216,48 @@ pub fn bench_removal_orders(c: &mut Criterion) {
 
     // Define datasets.
     let datasets = ["gdb13_1201", "gdb17_200", "checks", "coconut_55"];
+    let nums_orders = [(None, "none"), (Some(1), "one"), (Some(0), "all")];
 
     // Run the benchmark for each dataset and bound list.
     for dataset in &datasets {
         let mol_list = load_dataset_molecules(dataset);
-        bench_group.bench_with_input(*dataset, &(), |b, ()| {
-            b.iter_custom(|iters| {
-                let mut total_time = Duration::new(0, 0);
-                for mol in &mol_list {
-                    // Precompute the molecule's matches and setup.
-                    let matches = Matches::new(mol, CanonizeMode::TreeNauty);
-                    let state = State::new(mol);
-                    let edge_count = mol.graph().edge_count();
+        for (num_orders, name) in &nums_orders {
+            bench_group.bench_with_input(
+                BenchmarkId::new(*dataset, &name),
+                &num_orders,
+                |b, &num_orders| {
+                    b.iter_custom(|iters| {
+                        let mut total_time = Duration::new(0, 0);
+                        for mol in &mol_list {
+                            // Precompute the molecule's matches and setup.
+                            let matches = Matches::new(mol, CanonizeMode::TreeNauty);
+                            let state = State::new(mol);
+                            let edge_count = mol.graph().edge_count();
 
-                    // Benchmark the search phase.
-                    for _ in 0..iters {
-                        let mut cache =
-                            Cache::new(MemoizeMode::CanonIndex, CanonizeMode::TreeNauty);
-                        let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
-                        let start = Instant::now();
-                        recurse_index_search(
-                            mol,
-                            &matches,
-                            &state,
-                            best_index,
-                            &[Bound::Int, Bound::MatchableEdges],
-                            &mut cache,
-                            ParallelMode::DepthOne,
-                            true,
-                        );
-                        total_time += start.elapsed();
-                    }
-                }
-                total_time
-            });
-        });
+                            // Benchmark the search phase.
+                            for _ in 0..iters {
+                                let mut cache =
+                                    Cache::new(MemoizeMode::CanonIndex, CanonizeMode::TreeNauty);
+                                let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
+                                let start = Instant::now();
+                                recurse_index_search(
+                                    mol,
+                                    &matches,
+                                    &state,
+                                    best_index,
+                                    &[Bound::Int, Bound::MatchableEdges],
+                                    &mut cache,
+                                    ParallelMode::DepthOne,
+                                    *num_orders,
+                                );
+                                total_time += start.elapsed();
+                            }
+                        }
+                        total_time
+                    });
+                },
+            );
+        }
     }
 
     bench_group.finish();

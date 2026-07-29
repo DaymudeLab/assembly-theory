@@ -22,7 +22,7 @@
 //! pathways, see [`index_search`].
 
 use std::{
-    collections::HashSet,
+    collections::BTreeSet,
     sync::{
         atomic::{AtomicUsize, Ordering::Relaxed},
         Arc,
@@ -161,17 +161,16 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Vec<
 /// - `bounds`: The list of bounding strategies to apply.
 /// - `cache`: Memoization cache storing previously searched assembly states.
 /// - `parallel_mode`: The parallelism mode for this state's match iteration.
-/// - `collect_removal_orders`: `true` iff match removal orders should be
-///   collected for later assembly pathway reconstruction.
+/// - `max_pathways`: The number of distinct match removal orders attaining the best assembly index
+///   bound to collect; `0` for all, `x > 0` for at most `x`, or `None` for none.
 ///
 /// Returns, from this assembly state and any of its descendents:
 /// - `usize`: An updated upper bound on the assembly index. (Note: If this
 ///   state is pruned by bounds or deemed redundant by memoization, then the
 ///   upper bound returned is unchanged.)
 /// - `usize`: The number of assembly states searched.
-/// - `Option<HashSet<Vec<usize>>>`: A set of assembly states' match removal
-///   orders that attain the updated assembly index upper bound, or `None` if
-///   `collect_removal_orders == false`.
+/// - `BTreeSet<Vec<usize>>`: A set of assembly states' match removal orders that attain the
+///   updated assembly index upper bound. Nonempty iff `max_pathways` is not `None`.
 #[allow(clippy::too_many_arguments)]
 pub fn recurse_index_search(
     mol: &Molecule,
@@ -181,8 +180,8 @@ pub fn recurse_index_search(
     bounds: &[Bound],
     cache: &mut Cache,
     parallel_mode: ParallelMode,
-    collect_removal_orders: bool,
-) -> (usize, usize, Option<HashSet<Vec<usize>>>) {
+    max_pathways: Option<usize>,
+) -> (usize, usize, BTreeSet<Vec<usize>>) {
     // If any bounds would prune this assembly state or if memoization is
     // enabled and this assembly state is preempted by the cached state, halt.
     if state_bounds(mol, state, best_index.load(Relaxed), bounds) || cache.memoize_state(mol, state)
@@ -190,10 +189,10 @@ pub fn recurse_index_search(
         return (
             state.index(),
             1,
-            if collect_removal_orders {
-                Some(HashSet::from([state.removal_order().clone()]))
+            if max_pathways.is_some() {
+                BTreeSet::from([state.removal_order().clone()])
             } else {
-                None
+                BTreeSet::<Vec<usize>>::new()
             },
         );
     }
@@ -205,7 +204,7 @@ pub fn recurse_index_search(
 
     // Define a closure that handles recursing to a new assembly state based on
     // the given match.
-    let recurse_on_match = |match_ix: usize| -> (usize, usize, Option<HashSet<Vec<usize>>>) {
+    let recurse_on_match = |match_ix: usize| -> (usize, usize, BTreeSet<Vec<usize>>) {
         let (h1, h2) = matches.match_fragments(match_ix);
         let fragments = fragments(mol, &intermediate_frags, h1, h2);
 
@@ -226,25 +225,24 @@ pub fn recurse_index_search(
             bounds,
             &mut cache.clone(),
             new_parallel,
-            collect_removal_orders,
+            max_pathways,
         )
     };
 
     // Use the iterator type corresponding to the specified parallelism mode.
-    #[allow(clippy::type_complexity)]
-    let results: Vec<(usize, usize, Option<HashSet<Vec<usize>>>)> =
-        if parallel_mode == ParallelMode::None {
-            matches_to_remove
-                .iter()
-                .map(|match_ix| recurse_on_match(*match_ix))
-                .collect()
-        } else {
-            matches_to_remove
-                .iter()
-                .par_bridge()
-                .map(|match_ix| recurse_on_match(*match_ix))
-                .collect()
-        };
+    let results: Vec<(usize, usize, BTreeSet<Vec<usize>>)> = if parallel_mode == ParallelMode::None
+    {
+        matches_to_remove
+            .iter()
+            .map(|match_ix| recurse_on_match(*match_ix))
+            .collect()
+    } else {
+        matches_to_remove
+            .iter()
+            .par_bridge()
+            .map(|match_ix| recurse_on_match(*match_ix))
+            .collect()
+    };
 
     // Compute the best assembly index bound and the total number of descendant
     // states searched across all children assembly states.
@@ -256,25 +254,25 @@ pub fn recurse_index_search(
 
     // Collect all descendant match removal orders attaining the best assembly
     // index bound across children assembly states.
-    if collect_removal_orders {
-        let mut best_removal_orders = if state.index() == best_child_index {
-            HashSet::from([state.removal_order().clone()])
-        } else {
-            HashSet::<Vec<usize>>::new()
-        };
-        for r in results {
+    let mut best_removal_orders = BTreeSet::<Vec<usize>>::new();
+    if let Some(max_pathways) = max_pathways {
+        if state.index() == best_child_index {
+            best_removal_orders.insert(state.removal_order().clone());
+        }
+        for mut r in results {
             if r.0 == best_child_index {
-                best_removal_orders.extend(r.2.unwrap());
+                if max_pathways == 0 || best_removal_orders.len() + r.2.len() <= max_pathways {
+                    best_removal_orders.extend(r.2)
+                } else {
+                    while best_removal_orders.len() < max_pathways {
+                        best_removal_orders.insert(r.2.pop_first().unwrap());
+                    }
+                    break; // Collected desired number of removal orders; no need to check more.
+                }
             }
         }
-        (
-            best_child_index,
-            states_searched + 1,
-            Some(best_removal_orders),
-        )
-    } else {
-        (best_child_index, states_searched + 1, None)
     }
+    (best_child_index, states_searched + 1, best_removal_orders)
 }
 
 /// Compute a molecule's assembly index and related information using a
@@ -536,7 +534,7 @@ pub fn index_search(
                     &bounds,
                     &mut cache,
                     parallel_mode,
-                    max_pathways.is_some(),
+                    max_pathways,
                 ));
             });
             tktimeout(Duration::from_millis(timeout), recv).await
@@ -549,7 +547,11 @@ pub fn index_search(
             Ok(Ok((index, states_searched, removal_orders))) => {
                 (index, Some(states_searched), removal_orders)
             }
-            Err(_) => (best_index.load(Relaxed), None, None),
+            Err(_) => (
+                best_index.load(Relaxed),
+                None,
+                BTreeSet::<Vec<usize>>::new(),
+            ),
             _ => panic!("An unexpected error occurred in async index_search"),
         }
     } else {
@@ -562,7 +564,7 @@ pub fn index_search(
             bounds,
             &mut cache,
             parallel_mode,
-            max_pathways.is_some(),
+            max_pathways,
         );
         (index, Some(states_searched), removal_orders)
     };
@@ -571,19 +573,11 @@ pub fn index_search(
     // returned match removal orders.
     let mut pathways = Vec::<Pathway>::new();
     if let Some(max_pathways) = max_pathways {
-        if let Some(removal_orders) = removal_orders {
-            // Sort the removal orders, which guarantees deterministic output
-            // if search returns the same set of removal orders.
-            let mut removal_orders = Vec::from_iter(removal_orders);
-            removal_orders.sort();
-
-            // Extract the desired number of pathways.
-            for (ix, removal_order) in removal_orders.iter().enumerate() {
-                if max_pathways > 0 && ix >= max_pathways {
-                    break;
-                } else {
-                    pathways.push(Pathway::new(mol, &matches, removal_order));
-                }
+        for (ix, removal_order) in removal_orders.iter().enumerate() {
+            if max_pathways > 0 && ix >= max_pathways {
+                break;
+            } else {
+                pathways.push(Pathway::new(mol, &matches, removal_order));
             }
         }
     }
