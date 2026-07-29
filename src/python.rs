@@ -59,6 +59,10 @@
 //! # Calculate the molecule's assembly index.
 //! at.index(mol_block)  # 6
 //! ```
+//!
+//! To customize assembly index calculation beyond the default strategy, set a
+//! timeout for long-running calculations, and/or reconstruct minimum assembly
+//! pathways, see [`_index_search`].
 
 use std::str::FromStr;
 
@@ -244,7 +248,8 @@ fn make_boundlist(pybounds: &[PyBound]) -> Vec<OurBound> {
     boundlist
 }
 
-/// Get a pretty-printable string of this molecule's graph representation.
+/// Return a [DOT-formatted](https://graphviz.org/doc/info/lang.html) string
+/// representation of this molecule's graph structure.
 ///
 /// Python version of [`crate::molecule::Molecule::info`].
 ///
@@ -252,7 +257,7 @@ fn make_boundlist(pybounds: &[PyBound]) -> Vec<OurBound> {
 /// - `mol_block`: The contents of a `.mol` file as a `str`.
 ///
 /// # Python Returns
-/// - A pretty-printable `str` detailing the molecule's atoms and bonds.
+/// - A DOT-formatted `str` representing the molecule's atoms and bonds.
 ///
 /// # Python Example
 ///
@@ -318,9 +323,13 @@ pub fn _depth(mol_block: &str) -> PyResult<u32> {
     Ok(depth(&mol))
 }
 
-/// Computes a molecule's assembly index using an efficient default strategy.
+/// Compute a molecule's assembly index using an efficient default strategy.
 ///
 /// Python version of [`index`].
+///
+/// To customize assembly index calculation beyond the default strategy, set a
+/// timeout for long-running calculations, and/or reconstruct minimum assembly
+/// pathways, see [`_index_search`].
 ///
 /// # Python Parameters
 /// - `mol_block`: The contents of a `.mol` file as a `str`.
@@ -349,8 +358,8 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
     Ok(index(&mol))
 }
 
-/// Computes a molecule's assembly index and related information using a
-/// top-down recursive search, parameterized by the specified options.
+/// Compute a molecule's assembly index and related information using a
+/// top-down recursive algorithm, parameterized by the specified options.
 ///
 /// Python version of [`index_search`].
 ///
@@ -358,34 +367,43 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 ///
 /// - `mol_block`: The contents of a `.mol` file as a `str`.
 /// - `timeout`: An `int` duration in milliseconds after which search is
-/// stopped and the best assembly index found so far is returned, or `None` if
-/// search is run until the true assembly index is found.
+///   stopped and the best upper bound on the assembly index found so far is
+///   returned, or `None` (default) if search is run to completion.
 /// - `canonize_str`: A canonization mode from [`"nauty"`, `"faulon"`,
-/// `"tree-nauty"` (default), `"tree-faulon"`]. See [`CanonizeMode`] for
-/// details.
+///   `"tree-nauty"` (default), `"tree-faulon"`]. See [`CanonizeMode`] for
+///   details.
 /// - `parallel_str`: A parallelization mode from [`"none"`, `"depth-one"`
-/// (default), `"always"`]. See [`ParallelMode`] for details.
-/// - `memoize_str`: A memoization mode from [`none`, `frags-index`,
-/// `canon-index` (default)]. See [`MemoizeMode`] for details.
+///   (default), `"always"`]. See [`ParallelMode`] for details.
+/// - `memoize_str`: A memoization mode from [`none`, `canon-index` (default)].
+///   See [`MemoizeMode`] for details.
 /// - `kernel_str`: A kernelization mode from [`"none"` (default), `"once"`,
-/// `"depth-one"`, `"always"`]. See [`KernelMode`] for details.
+///   `"depth-one"`, `"always"`]. See [`KernelMode`] for details.
 /// - `bound_strs`: A list of bounds containing zero or more of [`"log"`,
-/// `"int"`, `"vec-simple"`, `"vec-small-frags"`, `"matchable-edges"`].
-/// The default bounds are [`"int"`, `"matchable-edges"`]. See
-/// [`crate::bounds::Bound`] for details.
+///   `"int"`, `"vec-simple"`, `"vec-small-frags"`, `"matchable-edges"`].
+///   The default bounds are [`"int"`, `"matchable-edges"`]. See
+///   [`crate::bounds::Bound`] for details.
 /// - `max_pathways`: An `int` maximum number of minimum assembly pathways to
-/// reconstruct, `0` for all such pathways, or `None` to disable pathway
-/// reconstruction.
+///   reconstruct, `0` for all such pathways, or `None` (default) to disable
+///   pathway reconstruction.
 ///
 /// # Python Returns
 ///
-/// A 3-tuple containing:
+/// A 4-tuple containing:
 /// - The molecule's `int` assembly index (or an upper bound if timed out).
 /// - The molecule's `int` number of edge-disjoint isomorphic subgraph pairs.
-/// - The `int` number of assembly states searched, or `None` if timed out.
+/// - The `int` number of assembly states searched if search completes, or
+///   `None` otherwise (i.e., if search timed out).
+/// - A list of [DOT-formatted](https://graphviz.org/doc/info/lang.html) `str`
+///   representations of the molecule's minimum assembly pathways. This list is
+///   nonempty if and only if search did not time out and `max_pathways` is not
+///   `None`.
 ///
-/// # Python Example
+/// # Python Examples
 ///
+/// ## Customizing Assembly Index Search Options
+///
+/// The two examples below show different customizations of the assembly index
+/// search options, enabling/disabling parallelism, memoization, and bounding.
 /// ```custom,{class=language-python}
 /// import assembly_theory as at
 ///
@@ -393,20 +411,130 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 /// with open('data/checks/anthracene.mol') as f:
 ///     mol_block = f.read()
 ///
-/// # Calculate the molecule's assembly index using the specified options.
-/// (index, num_matches, states_searched, _) = at.index_search(
+/// # Calculate the molecule's assembly index without any search optimizations
+/// # like parallelism, memoization, kernelization, or bounding.
+/// (slow_index, num_matches, states_searched, _) = at.index_search(
 ///     mol_block,
 ///     timeout=None,
 ///     canonize_str="tree-nauty",
-///     parallel_str="none",
-///     memoize_str="none",
-///     kernel_str="none",
-///     bound_strs=["int", "matchable-edges"],
+///     parallel_str="none",        # Disable parallelism.
+///     memoize_str="none",         # Disable memoization.
+///     kernel_str="none",          # Disable kernelization.
+///     bound_strs=[],              # Disable bounding.
 ///     max_pathways=None)
-///
-/// print(f"Assembly Index:  {index}")            # 6
+/// print(f"Assembly Index:  {slow_index}")       # 6
 /// print(f"Matches:         {num_matches}")      # 466
-/// print(f"States Searched: {states_searched}")  # 491
+/// print(f"States Searched: {states_searched}")  # 133814
+///
+/// # Repeat the calculation with parallelism, memoization, and some bounds.
+/// (fast_index, num_matches, states_searched, _) = at.index_search(
+///     mol_block,
+///     timeout=None,
+///     canonize_str="tree-nauty",
+///     parallel_str="depth-one",   # Enable parallelism.
+///     memoize_str="canon-index",  # Enable memoization.
+///     kernel_str="none",
+///     bound_strs=["log", "int"],  # Enable some bounds.
+///     max_pathways=None)
+/// print(f"Assembly Index:  {fast_index}")       # 6, unchanged
+/// print(f"Matches:         {num_matches}")      # 466, unchanged
+/// print(f"States Searched: {states_searched}")  # 1607, e.g., but parallelism makes this nondeterministic
+/// ```
+///
+/// ## Setting a Timeout for Long Calculations
+///
+/// Assembly index calculation can be slow on large molecules, even with search
+/// optimizations enabled. If `timeout` is set, two outcomes are possible:
+/// 1. Search completes before the timeout and everything behaves as usual.
+/// 2. The timeout is reached before search completes, search is interrupted,
+///    and the best upper bound on the assembly index found so far is returned.
+///    The number of states searched and assembly pathways are not returned.
+/// ```custom,{class=language-python}
+/// # Limit search to 10 s, which is plenty for search to complete as usual,
+/// # even with some search optimizations disabled.
+/// (true_index, num_matches, states_searched, pathways) = at.index_search(
+///     mol_block,
+///     timeout=10000,              # Set a 10 s timeout.
+///     canonize_str="tree-nauty",
+///     parallel_str="none",        # Disable parallelism.
+///     memoize_str="none",         # Disable memoization.
+///     kernel_str="none",          # Disable kernelization.
+///     bound_strs=["log", "int"],  # Enable some bounds.
+///     max_pathways=1)             # Reconstruct one pathway.
+/// print(f"Assembly Index:         {true_index}")       # 6
+/// print(f"Matches:                {num_matches}")      # 466
+/// print(f"States Searched:        {states_searched}")  # 2454
+/// print(f"Pathways Reconstructed: {len(pathways)}")    # 1
+///
+/// # Limit search to 1 ms, which will time out without more optimizations.
+/// (index_bound, num_matches, states_searched, pathways) = at.index_search(
+///     mol_block,
+///     timeout=1,                  # Set a 1 ms timeout.
+///     canonize_str="tree-nauty",
+///     parallel_str="none",        # Disable parallelism.
+///     memoize_str="none",         # Disable memoization.
+///     kernel_str="none",          # Disable kernelization.
+///     bound_strs=["log", "int"],  # Enable some bounds.
+///     max_pathways=1)             # Reconstruct one pathway.
+/// print(f"Assembly Index:         {index_bound}")      # >= 6
+/// print(f"Matches:                {num_matches}")      # 466, unaffected
+/// print(f"States Searched:        {states_searched}")  # None, not computed on timeout
+/// print(f"Pathways Reconstructed: {len(pathways)}")    # 0, not computed on timeout
+/// ```
+///
+/// ## Reconstructing Minimum Assembly Pathways
+///
+/// An assembly pathway records the fragment join operations producing the
+/// target molecule. Set `max_pathways` to `0` to reconstruct all minimum
+/// assembly pathways discovered by the search process, `n` for at most the
+/// first `n` such pathways, or `None` to disable pathway reconstruction.
+/// See [`crate::pathway::Pathway::dag`] for details on the pathway data
+/// structure.
+///
+/// Note that the definition of `max_pathway = 0`'s behavior is very carefully
+/// worded: it finds all minimum assembly pathways *discovered by the search
+/// process*. This is not to be taken as *all possible minimum assembly
+/// pathways*. When search optimizations like parallelism, memoization, and
+/// bounding are used, search prunes pathways that cannot yield a better
+/// assembly index. This may include pathways that yield an *equal* (i.e., also
+/// minimum) assembly index. Once pruned, these pathways will not survive to
+/// pathway reconstruction.
+/// ```custom,{class=language-python}
+/// # Reconstruct a minimum assembly pathway discovered during search.
+/// (_, _, _, pathways) = at.index_search(
+///     mol_block,
+///     timeout=None,
+///     canonize_str="tree-nauty",
+///     parallel_str="none",        # Disable parallelism for determinism.
+///     memoize_str="canon-index",
+///     kernel_str="none",
+///     bound_strs=["log", "int"],
+///     max_pathways=1)             # Reconstruct one pathway.
+/// print(pathways[0])
+///
+/// # digraph {
+/// #     0 [ label = "{14}" ]
+/// #     1 [ label = "{15}" ]
+/// #     2 [ label = "{14, 15}" ]
+/// #     3 [ label = "{7, 14, 15}" ]
+/// #     4 [ label = "{6, 7, 14, 15}" ]
+/// #     5 [ label = "{3, 4, 5, 6, 7, 14, 15}" ]
+/// #     6 [ label = "{2, 3, 4, 5, 6, 7, 13, 14, 15}" ]
+/// #     7 [ label = "{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}" ]
+/// #     0 -> 2 [ label = "{14}" ]
+/// #     1 -> 2 [ label = "{15}" ]
+/// #     0 -> 3 [ label = "{7}" ]
+/// #     2 -> 3 [ label = "{14, 15}" ]
+/// #     1 -> 4 [ label = "{6}" ]
+/// #     3 -> 4 [ label = "{7, 14, 15}" ]
+/// #     4 -> 5 [ label = "{6, 7, 14, 15}" ]
+/// #     3 -> 5 [ label = "{3, 4, 5}" ]
+/// #     2 -> 6 [ label = "{2, 13}" ]
+/// #     5 -> 6 [ label = "{3, 4, 5, 6, 7, 14, 15}" ]
+/// #     6 -> 7 [ label = "{2, 3, 4, 5, 6, 7, 13, 14, 15}" ]
+/// #     5 -> 7 [ label = "{0, 1, 8, 9, 10, 11, 12}" ]
+/// # }
+/// #
 /// ```
 #[pyfunction(name = "index_search")]
 #[pyo3(signature = (mol_block, timeout=None, canonize_str="tree-nauty", parallel_str="depth-one", memoize_str="canon-index", kernel_str="none", bound_strs=vec!["int".to_string(), "matchable-edges".to_string()], max_pathways=None), text_signature = "(mol_block, timeout=None, canonize_str=\"tree-nauty\", parallel_str=\"depth-one\", memoize_str=\"canon-index\", kernel_str=\"none\", bound_strs=[\"int\", \"matchable-edges\"], max_pathways=None)")]

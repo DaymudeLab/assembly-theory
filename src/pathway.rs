@@ -1,4 +1,7 @@
 //! Reconstruct minimum assembly pathways from recursive search information.
+//!
+//! See [`Pathway::dag`] for details on the assembly pathway data structure and
+//! [`crate::assembly::index_search`] for examples of pathway reconstruction.
 
 use std::fmt;
 
@@ -107,8 +110,9 @@ impl Pathway {
 }
 
 impl fmt::Display for Pathway {
-    /// Format the assembly pathway DAG as a DOT string whose node and edge
-    /// labels are the BitSets of their respective fragments' bonds.
+    /// Format the assembly pathway DAG as a
+    /// [DOT string](https://graphviz.org/doc/info/lang.html) whose node and
+    /// edge labels are the indices of their respective fragments' bonds.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -181,7 +185,7 @@ fn join_pieces(mol: &Molecule, pieces: &mut Vec<BitSet>, pathway: &mut DiGraph<B
 }
 
 // Helper function for [`join_pieces`] that finds the pathway node isomorphic
-// to the given piece or adds a new node if one doesn't exist.
+// to the given piece or adds a new node if one doesn't already exist.
 fn find_or_add_dag_node(
     mol: &Molecule,
     piece: &BitSet,

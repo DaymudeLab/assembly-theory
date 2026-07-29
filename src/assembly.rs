@@ -296,14 +296,15 @@ pub fn recurse_index_search(
 /// - The molecule's `u32` number of edge-disjoint isomorphic subgraph pairs.
 /// - The `usize` total number of assembly [`State`]s searched if search
 ///   completes, and `None` otherwise (i.e., if search timed out).
-/// - A vector of of minimum assembly [`Pathway`]s that is nonempty if and only
-///   if search did not time out and `max_pathways` is not `None`.
+/// - A vector of the molecule's minimum assembly [`Pathway`]s that is nonempty
+///   if and only if search did not time out and `max_pathways` is not `None`.
 ///
-/// # Customizing Assembly Index Search Options
+/// # Examples
+///
+/// ## Customizing Assembly Index Search Options
 ///
 /// The two examples below show different customizations of the assembly index
-/// search options, enabling/disabling parallelism and memoization and choosing
-/// different combinations of bounds.
+/// search options, enabling/disabling parallelism, memoization, and bounding.
 /// ```
 /// # use std::{fs, path::PathBuf};
 /// use assembly_theory::{
@@ -321,9 +322,9 @@ pub fn recurse_index_search(
 /// let molfile = fs::read_to_string(path)?;
 /// let anthracene = parse_molfile_str(&molfile).expect("Parsing failure.");
 ///
-/// // Compute the molecule's assembly index without parallelism, memoization,
-/// // kernelization, or bounds.
-/// let (slow_index, _, _, _) = index_search(
+/// // Calculate the molecule's assembly index without any search optimizations
+/// // like parallelism, memoization, kernelization, or bounding.
+/// let (slow_index, num_matches, states_searched, _) = index_search(
 ///     &anthracene,
 ///     None,
 ///     CanonizeMode::TreeNauty,
@@ -334,10 +335,11 @@ pub fn recurse_index_search(
 ///     None,
 /// );
 /// assert_eq!(slow_index, 6);
+/// assert_eq!(num_matches, 466);
+/// assert_eq!(states_searched, Some(133814));
 ///
-/// // Compute the molecule's assembly index with parallelism, memoization, and
-/// // some bounds.
-/// let (fast_index, _, _, _) = index_search(
+/// // Repeat the calculation with parallelism, memoization, and some bounds.
+/// let (fast_index, num_matches, states_searched, _) = index_search(
 ///     &anthracene,
 ///     None,
 ///     CanonizeMode::TreeNauty,
@@ -348,11 +350,13 @@ pub fn recurse_index_search(
 ///     None,
 /// );
 /// assert_eq!(fast_index, 6);
+/// assert_eq!(num_matches, 466);
+/// // Note: states_searched is now nondeterministic because of parallelism.
 /// # Ok(())
 /// # }
 /// ```
 ///
-/// # Setting a Timeout for Long Calculations
+/// ## Setting a Timeout for Long Calculations
 ///
 /// Assembly index calculation can be slow on large molecules, even with search
 /// optimizations enabled. If `timeout` is set, two outcomes are possible:
@@ -380,29 +384,29 @@ pub fn recurse_index_search(
 /// // even with some search optimizations disabled.
 /// let (true_index, num_matches, states_searched, pathways) = index_search(
 ///     &anthracene,
-///     Some(10000), // Set a 10 s timeout.
+///     Some(10000),               // Set a 10 s timeout.
 ///     CanonizeMode::TreeNauty,
-///     ParallelMode::None,
-///     MemoizeMode::None,
-///     KernelMode::None,
-///     &[Bound::Int, Bound::MatchableEdges],
-///     Some(1),
+///     ParallelMode::None,        // Disable parallelism.
+///     MemoizeMode::None,         // Disable memoization.
+///     KernelMode::None,          // Disable kernelization.
+///     &[Bound::Log, Bound::Int], // Enable some bounds.
+///     Some(1),                   // Reconstuct one pathway.
 /// );
 /// assert_eq!(true_index, 6);
 /// assert_eq!(num_matches, 466);
-/// assert_eq!(states_searched, Some(491));
+/// assert_eq!(states_searched, Some(2454));
 /// assert_eq!(pathways.len(), 1);
 ///
 /// // Limit search to 1 ms, which will time out without more optimizations.
 /// let (index_bound, num_matches, states_searched, pathways) = index_search(
 ///     &anthracene,
-///     Some(1), // Set a 1 ms timeout.
+///     Some(1),                   // Set a 1 ms timeout.
 ///     CanonizeMode::TreeNauty,
-///     ParallelMode::None,
-///     MemoizeMode::None,
-///     KernelMode::None,
-///     &[Bound::Int, Bound::MatchableEdges],
-///     Some(1),
+///     ParallelMode::None,        // Disable parallelism.
+///     MemoizeMode::None,         // Disable memoization.
+///     KernelMode::None,          // Disable kernelization.
+///     &[Bound::Log, Bound::Int], // Enable some bounds.
+///     Some(1),                   // Reconstuct one pathway.
 /// );
 /// assert!(index_bound >= true_index); // Index is an upper bound on timeout.
 /// assert_eq!(num_matches, 466);       // The number of matches is unaffected.
@@ -412,13 +416,13 @@ pub fn recurse_index_search(
 /// # }
 /// ```
 ///
-/// # Reconstructing Minimum Assembly Pathways
+/// ## Reconstructing Minimum Assembly Pathways
 ///
 /// An assembly [`Pathway`] records the fragment join operations producing the
 /// target molecule. Set `max_pathways` to `Some(0)` to reconstruct all minimum
-/// assembly pathways discovered by the search process, `Some(n)` for the first
-/// `n` such pathways, or `None` to disable pathway reconstruction. See
-/// [`Pathway::dag`] for details on the pathway data structure.
+/// assembly pathways discovered by the search process, `Some(n)` for at most
+/// the first `n` such pathways, or `None` to disable pathway reconstruction.
+/// See [`Pathway::dag`] for details on the pathway data structure.
 ///
 /// Note that the definition of `Some(0)`'s behavior is very carefully worded:
 /// it finds all minimum assembly pathways *discovered by the search process*.
