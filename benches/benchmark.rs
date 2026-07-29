@@ -150,7 +150,7 @@ pub fn bench_bounds(c: &mut Criterion) {
 pub fn bench_memoize(c: &mut Criterion) {
     let mut bench_group = c.benchmark_group("bench_memoize");
 
-    // Define datasets and bound lists.
+    // Define datasets and memoization modes.
     let datasets = ["gdb13_1201", "gdb17_200", "checks", "coconut_55"];
     let memoize_modes = [
         (MemoizeMode::None, CanonizeMode::Nauty, "no-memoize"),
@@ -162,7 +162,7 @@ pub fn bench_memoize(c: &mut Criterion) {
         ),
     ];
 
-    // Run the benchmark for each dataset and bound list.
+    // Run the benchmark for each dataset and memoization mode.
     for dataset in &datasets {
         let mol_list = load_dataset_molecules(dataset);
         for (memoize_mode, canonize_mode, name) in &memoize_modes {
@@ -206,11 +206,12 @@ pub fn bench_memoize(c: &mut Criterion) {
     bench_group.finish();
 }
 
-/// Benchmark the search step of [`index_search`] when assembly pathway reconstruction is enabled,
-/// recursively collecting all minimum match removal orders.
+/// Benchmark the search step of [`index_search`] when recursively collecting different numbers of
+/// match removal orders.
 ///
 /// This benchmark precomputes matches information using the fastest options and times only the
-/// search step with default search options and removal order collection enabled.
+/// search step when collecting no, one, and all match removal orders. This benchmark otherwise
+/// usese the default search options.
 pub fn bench_removal_orders(c: &mut Criterion) {
     let mut bench_group = c.benchmark_group("bench_removal_orders");
 
@@ -218,7 +219,7 @@ pub fn bench_removal_orders(c: &mut Criterion) {
     let datasets = ["gdb13_1201", "gdb17_200", "checks", "coconut_55"];
     let nums_orders = [(None, "none"), (Some(1), "one"), (Some(0), "all")];
 
-    // Run the benchmark for each dataset and bound list.
+    // Run the benchmark for each dataset and number of match removal orders to collect.
     for dataset in &datasets {
         let mol_list = load_dataset_molecules(dataset);
         for (num_orders, name) in &nums_orders {
