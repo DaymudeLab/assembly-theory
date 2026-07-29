@@ -172,6 +172,7 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Vec<
 /// - `Option<HashSet<Vec<usize>>>`: A set of assembly states' match removal
 ///   orders that attain the updated assembly index upper bound, or `None` if
 ///   `collect_removal_orders == false`.
+#[allow(clippy::too_many_arguments)]
 pub fn recurse_index_search(
     mol: &Molecule,
     matches: &Matches,
@@ -230,6 +231,7 @@ pub fn recurse_index_search(
     };
 
     // Use the iterator type corresponding to the specified parallelism mode.
+    #[allow(clippy::type_complexity)]
     let results: Vec<(usize, usize, Option<HashSet<Vec<usize>>>)> =
         if parallel_mode == ParallelMode::None {
             matches_to_remove
@@ -485,6 +487,7 @@ pub fn recurse_index_search(
 /// # Ok(())
 /// # }
 /// ```
+#[allow(clippy::too_many_arguments)]
 pub fn index_search(
     mol: &Molecule,
     timeout: Option<u64>,
@@ -579,7 +582,7 @@ pub fn index_search(
                 if max_pathways > 0 && ix >= max_pathways {
                     break;
                 } else {
-                    pathways.push(Pathway::new(mol, &matches, &removal_order));
+                    pathways.push(Pathway::new(mol, &matches, removal_order));
                 }
             }
         }

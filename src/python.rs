@@ -538,6 +538,7 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 /// ```
 #[pyfunction(name = "index_search")]
 #[pyo3(signature = (mol_block, timeout=None, canonize_str="tree-nauty", parallel_str="depth-one", memoize_str="canon-index", kernel_str="none", bound_strs=vec!["int".to_string(), "matchable-edges".to_string()], max_pathways=None), text_signature = "(mol_block, timeout=None, canonize_str=\"tree-nauty\", parallel_str=\"depth-one\", memoize_str=\"canon-index\", kernel_str=\"none\", bound_strs=[\"int\", \"matchable-edges\"], max_pathways=None)")]
+#[allow(clippy::too_many_arguments)]
 pub fn _index_search(
     mol_block: &str,
     timeout: Option<u64>,

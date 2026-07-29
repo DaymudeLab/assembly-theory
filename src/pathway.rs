@@ -29,7 +29,7 @@ impl Pathway {
     /// to the given order of removed matches. Efficiently implements the
     /// duplicate/remnant algorithm described in the Supporting Information
     /// of [Seet et al. (2025)](https://doi.org/10.1021/acs.jcim.5c01964).
-    pub fn new(mol: &Molecule, matches: &Matches, removal_order: &Vec<usize>) -> Self {
+    pub fn new(mol: &Molecule, matches: &Matches, removal_order: &[usize]) -> Self {
         // Create a fragment representing the complete molecule.
         let mut mol_frag = BitSet::new();
         mol_frag.extend(mol.graph().edge_indices().map(|ix| ix.index()));
@@ -68,7 +68,7 @@ impl Pathway {
         for (h1, h2) in &duplicates {
             // If h1 is not already in the bag (as it could be if it is used in
             // multiple matches), construct it by joining pieces in the bag.
-            if pieces.iter().find(|&p| p == h1) == None {
+            if pieces.iter().find(|&p| p == h1).is_none() {
                 // Take all pieces that are part of h1; this algorithm ensures
                 // that such pieces are an edge-disjoint partition of h1.
                 let mut h1_pieces: Vec<BitSet> =
