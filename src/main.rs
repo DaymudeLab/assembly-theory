@@ -27,9 +27,7 @@ struct Cli {
 
     /// Print the molecule's assembly index, number of matches (edge-disjoint
     /// isomorphic subgraph pairs), number of states searched, molecule graph
-    /// structure, and assembly pathways (if `--pathways` is given). When using
-    /// parallelism, number of states searched and assembly pathways are
-    /// nondeterministic.
+    /// structure, and assembly pathways (if --pathways is given).
     #[arg(long)]
     verbose: bool,
 
@@ -43,7 +41,9 @@ struct Cli {
     #[arg(long, value_enum, default_value_t = CanonizeMode::TreeNauty)]
     canonize: CanonizeMode,
 
-    /// Parallelization strategy for the search phase.
+    /// Parallelism strategy for the search phase. When parallelism is enabled, the number of
+    /// states searched (visible with --verbose) and the minimum assembly pathways reconstructed
+    /// (obtained with --pathways) are nondeterministic.
     #[arg(long, value_enum, default_value_t = ParallelMode::DepthOne)]
     parallel: ParallelMode,
 
