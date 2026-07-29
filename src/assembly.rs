@@ -17,6 +17,9 @@
 //! # Ok(())
 //! # }
 //! ```
+//! To customize assembly index calculation beyond the default strategy, set a
+//! timeout for long-running calculations, and/or reconstruct minimum assembly
+//! pathways, see [`index_search`].
 
 use std::{
     collections::HashSet,
@@ -293,9 +296,14 @@ pub fn recurse_index_search(
 /// - The molecule's `u32` number of edge-disjoint isomorphic subgraph pairs.
 /// - The `usize` total number of assembly [`State`]s searched if search
 ///   completes, and `None` otherwise (i.e., if search timed out).
-/// - A vector of of minimum assembly [`Pathway`]s.
+/// - A vector of of minimum assembly [`Pathway`]s that is nonempty if and only
+///   if search did not time out and `max_pathways` is not `None`.
 ///
-/// # Example
+/// # Customizing Assembly Index Search Options
+///
+/// The two examples below show different customizations of the assembly index
+/// search options, enabling/disabling parallelism and memoization and choosing
+/// different combinations of bounds.
 /// ```
 /// # use std::{fs, path::PathBuf};
 /// use assembly_theory::{
@@ -319,10 +327,10 @@ pub fn recurse_index_search(
 ///     &anthracene,
 ///     None,
 ///     CanonizeMode::TreeNauty,
-///     ParallelMode::None,
-///     MemoizeMode::None,
-///     KernelMode::None,
-///     &[],
+///     ParallelMode::None,      // Disable parallelism.
+///     MemoizeMode::None,       // Disable memoization.
+///     KernelMode::None,        // Disable kernelization.
+///     &[],                     // Do not use any bounds.
 ///     None,
 /// );
 /// assert_eq!(slow_index, 6);
@@ -340,19 +348,136 @@ pub fn recurse_index_search(
 ///     None,
 /// );
 /// assert_eq!(fast_index, 6);
+/// # Ok(())
+/// # }
+/// ```
 ///
-/// // Limit search to 1 ms, which should time out.
-/// let (index_bound, _, states_searched, _) = index_search(
+/// # Setting a Timeout for Long Calculations
+///
+/// Assembly index calculation can be slow on large molecules, even with search
+/// optimizations enabled. If `timeout` is set, two outcomes are possible:
+/// 1. Search completes before the timeout and everything behaves as usual.
+/// 2. The timeout is reached before search completes, search is interrupted,
+///    and the best upper bound on the assembly index found so far is returned.
+///    The number of states searched and assembly pathways are not returned.
+/// ```
+/// # use std::{fs, path::PathBuf};
+/// # use assembly_theory::{
+/// #     assembly::{index_search, ParallelMode},
+/// #     bounds::Bound,
+/// #     canonize::CanonizeMode,
+/// #     kernels::KernelMode,
+/// #     loader::parse_molfile_str,
+/// #     memoize::MemoizeMode,
+/// # };
+/// #
+/// # fn main() -> Result<(), std::io::Error> {
+/// # let path = PathBuf::from(format!("./data/checks/anthracene.mol"));
+/// # let molfile = fs::read_to_string(path)?;
+/// # let anthracene = parse_molfile_str(&molfile).expect("Parsing failure.");
+/// #
+/// // Limit search to 10 s, which is plenty for search to complete as usual,
+/// // even with some search optimizations disabled.
+/// let (true_index, num_matches, states_searched, pathways) = index_search(
 ///     &anthracene,
-///     Some(1),
+///     Some(10000), // Set a 10 s timeout.
 ///     CanonizeMode::TreeNauty,
 ///     ParallelMode::None,
 ///     MemoizeMode::None,
 ///     KernelMode::None,
-///     &[],
-///     None,
+///     &[Bound::Int, Bound::MatchableEdges],
+///     Some(1),
 /// );
-/// assert!(index_bound >= fast_index && states_searched == None);
+/// assert_eq!(true_index, 6);
+/// assert_eq!(num_matches, 466);
+/// assert_eq!(states_searched, Some(491));
+/// assert_eq!(pathways.len(), 1);
+///
+/// // Limit search to 1 ms, which will time out without more optimizations.
+/// let (index_bound, num_matches, states_searched, pathways) = index_search(
+///     &anthracene,
+///     Some(1), // Set a 1 ms timeout.
+///     CanonizeMode::TreeNauty,
+///     ParallelMode::None,
+///     MemoizeMode::None,
+///     KernelMode::None,
+///     &[Bound::Int, Bound::MatchableEdges],
+///     Some(1),
+/// );
+/// assert!(index_bound >= true_index); // Index is an upper bound on timeout.
+/// assert_eq!(num_matches, 466);       // The number of matches is unaffected.
+/// assert_eq!(states_searched, None);  // States searched is not computed on timeout.
+/// assert_eq!(pathways.len(), 0);      // Pathways are not computed on timeout.
+/// # Ok(())
+/// # }
+/// ```
+///
+/// # Reconstructing Minimum Assembly Pathways
+///
+/// An assembly [`Pathway`] records the fragment join operations producing the
+/// target molecule. Set `max_pathways` to `Some(0)` to reconstruct all minimum
+/// assembly pathways discovered by the search process, `Some(n)` for the first
+/// `n` such pathways, or `None` to disable pathway reconstruction. See
+/// [`Pathway::dag`] for details on the pathway data structure.
+///
+/// Note that the definition of `Some(0)`'s behavior is very carefully worded:
+/// it finds all minimum assembly pathways *discovered by the search process*.
+/// This is not to be taken as *all possible minimum assembly pathways*. When
+/// search optimizations like parallelism, memoization, and bounding are used,
+/// search prunes pathways that cannot yield a better assembly index. This may
+/// include pathways that yield an *equal* (i.e., also minimum) assembly index.
+/// Once pruned, these pathways will not survive to pathway reconstruction.
+/// ```
+/// # use std::{fs, path::PathBuf};
+/// # use assembly_theory::{
+/// #     assembly::{index_search, ParallelMode},
+/// #     bounds::Bound,
+/// #     canonize::CanonizeMode,
+/// #     kernels::KernelMode,
+/// #     loader::parse_molfile_str,
+/// #     memoize::MemoizeMode,
+/// # };
+/// #
+/// # fn main() -> Result<(), std::io::Error> {
+/// # let path = PathBuf::from(format!("./data/checks/anthracene.mol"));
+/// # let molfile = fs::read_to_string(path)?;
+/// # let anthracene = parse_molfile_str(&molfile).expect("Parsing failure.");
+/// #
+/// // Reconstruct a minimum assembly pathway discovered during search.
+/// let (_, _, _, pathways) = index_search(
+///     &anthracene,
+///     None,
+///     CanonizeMode::TreeNauty,
+///     ParallelMode::None,        // Disable parallelism for determinism.
+///     MemoizeMode::CanonIndex,
+///     KernelMode::None,
+///     &[Bound::Log, Bound::Int],
+///     Some(1),                   // Reconstuct one pathway.
+/// );
+/// let pathway_str = r#"digraph {
+///     0 [ label = "{14}" ]
+///     1 [ label = "{15}" ]
+///     2 [ label = "{14, 15}" ]
+///     3 [ label = "{7, 14, 15}" ]
+///     4 [ label = "{6, 7, 14, 15}" ]
+///     5 [ label = "{3, 4, 5, 6, 7, 14, 15}" ]
+///     6 [ label = "{2, 3, 4, 5, 6, 7, 13, 14, 15}" ]
+///     7 [ label = "{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}" ]
+///     0 -> 2 [ label = "{14}" ]
+///     1 -> 2 [ label = "{15}" ]
+///     0 -> 3 [ label = "{7}" ]
+///     2 -> 3 [ label = "{14, 15}" ]
+///     1 -> 4 [ label = "{6}" ]
+///     3 -> 4 [ label = "{7, 14, 15}" ]
+///     4 -> 5 [ label = "{6, 7, 14, 15}" ]
+///     3 -> 5 [ label = "{3, 4, 5}" ]
+///     2 -> 6 [ label = "{2, 13}" ]
+///     5 -> 6 [ label = "{3, 4, 5, 6, 7, 14, 15}" ]
+///     6 -> 7 [ label = "{2, 3, 4, 5, 6, 7, 13, 14, 15}" ]
+///     5 -> 7 [ label = "{0, 1, 8, 9, 10, 11, 12}" ]
+/// }
+/// "#;
+/// assert_eq!(format!("{}", pathways[0]), pathway_str);
 /// # Ok(())
 /// # }
 /// ```
@@ -439,8 +564,14 @@ pub fn index_search(
     // returned match removal orders.
     let mut pathways = Vec::<Pathway>::new();
     if let Some(max_pathways) = max_pathways {
-        if let Some(mut removal_orders) = removal_orders {
-            for (ix, removal_order) in removal_orders.drain().enumerate() {
+        if let Some(removal_orders) = removal_orders {
+            // Sort the removal orders, which guarantees deterministic output
+            // if search returns the same set of removal orders.
+            let mut removal_orders = Vec::from_iter(removal_orders);
+            removal_orders.sort();
+
+            // Extract the desired number of pathways.
+            for (ix, removal_order) in removal_orders.iter().enumerate() {
                 if max_pathways > 0 && ix >= max_pathways {
                     break;
                 } else {
@@ -460,8 +591,9 @@ pub fn index_search(
 
 /// Compute a molecule's assembly index using an efficient default strategy.
 ///
-/// To customize assembly index calculation beyond the default strategy and/or
-/// reconstruct minimum assembly pathways, see [`index_search`].
+/// To customize assembly index calculation beyond the default strategy, set a
+/// timeout for long-running calculations, and/or reconstruct minimum assembly
+/// pathways, see [`index_search`].
 ///
 /// # Example
 /// ```
