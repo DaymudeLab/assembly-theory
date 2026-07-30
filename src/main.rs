@@ -59,10 +59,11 @@ struct Cli {
     #[arg(long, value_enum, default_value_t = KernelMode::None)]
     kernel: KernelMode,
 
-    /// Maximum number of minimum assembly pathways to reconstruct, or `None`
-    /// (default) to disable pathway reconstruction. Set this option to 0 to
-    /// reconstruct all minimum assembly pathways found during search. If not
-    /// `None`, output will automatically use --verbose formatting.
+    /// Maximum number of minimum assembly pathways to reconstruct, or `None` (default) to disable
+    /// pathway reconstruction. Set this option to 0 to reconstruct all minimum assembly pathways
+    /// found during search. If not `None`, output will automatically use --verbose formatting.
+    /// Reconstructing minimum assembly pathways incurs a 5-20% runtime overhead; disable for
+    /// faster assembly index calculation.
     #[arg(long)]
     pathways: Option<usize>,
 }

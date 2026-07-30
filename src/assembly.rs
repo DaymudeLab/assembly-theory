@@ -287,17 +287,18 @@ pub fn recurse_index_search(
 /// the order they appear in the `bounds` slice. It is generally better to
 /// provide bounds that are quick to compute first.
 ///
-/// If `max_pathways` is `None`, skip minimum assembly pathway reconstruction.
-/// Otherwise, reconstruct all such pathways from the completed search results
-/// if `max_pathways == 0` or at most `max_pathways` such pathways otherwise.
+/// If `max_pathways` is `None`, skip minimum assembly pathway reconstruction. Otherwise,
+/// reconstruct all such pathways from the completed search results if `max_pathways == 0` or at
+/// most `max_pathways` such pathways otherwise. Reconstructing minimum assembly pathways incurs a
+/// 5&ndash;20% runtime overhead; disable for faster assembly index calculation.
 ///
 /// The results returned are:
 /// - The molecule's `u32` assembly index (or an upper bound if timed out).
 /// - The molecule's `u32` number of edge-disjoint isomorphic subgraph pairs.
 /// - The `usize` total number of assembly [`State`]s searched if search
 ///   completes, and `None` otherwise (i.e., if search timed out).
-/// - A vector of the molecule's minimum assembly [`Pathway`]s that is nonempty
-///   if and only if search did not time out and `max_pathways` is not `None`.
+/// - A vector of the molecule's minimum assembly [`Pathway`]s that is nonempty if and only if
+///   search did not time out and `max_pathways` is not `None`.
 ///
 /// If `parallel_mode` is set to anything other than [`ParallelMode::None`], the total number of
 /// assembly states searched and the minimum assembly pathways reconstructed are nondeterministic.

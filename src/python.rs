@@ -382,9 +382,10 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 ///   `"int"`, `"vec-simple"`, `"vec-small-frags"`, `"matchable-edges"`].
 ///   The default bounds are [`"int"`, `"matchable-edges"`]. See
 ///   [`crate::bounds::Bound`] for details.
-/// - `max_pathways`: An `int` maximum number of minimum assembly pathways to
-///   reconstruct, `0` for all such pathways, or `None` (default) to disable
-///   pathway reconstruction.
+/// - `max_pathways`: An `int` maximum number of minimum assembly pathways to reconstruct, `0` for
+///   all such pathways, or `None` (default) to disable pathway reconstruction. Reconstructing
+///   minimum assembly pathways incurs a 5&ndash;20% runtime overhead; disable for faster assembly
+///   index calculation.
 ///
 /// # Python Returns
 ///
