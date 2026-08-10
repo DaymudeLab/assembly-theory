@@ -144,21 +144,19 @@ fn main() -> Result<()> {
             // Timed out but not verbose.
             println!("<= {index} (timed out)");
         }
-    } else {
-        if cli.verbose || !cli.pathways.is_none() {
-            // Did not time out AND [verbose OR at least one pathway].
-            println!("Assembly Index:  {index}");
-            println!("Matches:         {num_matches}");
-            println!("States Searched: {}", states_searched.unwrap());
-            println!("Pathways Found:  {}", pathways.len());
-            println!("\nMolecule Graph: {}", mol.info());
-            for (i, pathway) in pathways.iter().enumerate() {
-                println!("Pathway {i}: {pathway}");
-            }
-        } else {
-            // Did not time out and only assembly index is desired.
-            println!("{index}");
+    } else if cli.verbose || cli.pathways.is_some() {
+        // Did not time out AND [verbose OR at least one pathway].
+        println!("Assembly Index:  {index}");
+        println!("Matches:         {num_matches}");
+        println!("States Searched: {}", states_searched.unwrap());
+        println!("Pathways Found:  {}", pathways.len());
+        println!("\nMolecule Graph: {}", mol.info());
+        for (i, pathway) in pathways.iter().enumerate() {
+            println!("Pathway {i}: {pathway}");
         }
+    } else {
+        // Did not time out and only assembly index is desired.
+        println!("{index}");
     }
 
     Ok(())

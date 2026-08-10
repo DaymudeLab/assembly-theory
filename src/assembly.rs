@@ -290,7 +290,7 @@ pub fn recurse_index_search(
 /// If `max_pathways` is `None`, skip minimum assembly pathway reconstruction. Otherwise,
 /// reconstruct all such pathways from the completed search results if `max_pathways == 0` or at
 /// most `max_pathways` such pathways otherwise. Reconstructing minimum assembly pathways incurs a
-/// 5&ndash;20% runtime overhead; disable for faster assembly index calculation.
+/// 5-20% runtime overhead; disable for faster assembly index calculation.
 ///
 /// The results returned are:
 /// - The molecule's `u32` assembly index (or an upper bound if timed out).

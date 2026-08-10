@@ -68,7 +68,7 @@ impl Pathway {
         for (h1, h2) in &duplicates {
             // If h1 is not already in the bag (as it could be if it is used in
             // multiple matches), construct it by joining pieces in the bag.
-            if pieces.iter().find(|&p| p == h1).is_none() {
+            if !pieces.iter().any(|p| p == h1) {
                 // Take all pieces that are part of h1; this algorithm ensures
                 // that such pieces are an edge-disjoint partition of h1.
                 let mut h1_pieces: Vec<BitSet> =
@@ -121,7 +121,7 @@ impl fmt::Display for Pathway {
                 self.dag(),
                 &[Config::EdgeNoLabel, Config::NodeNoLabel], // Suppress default labels.
                 &|_, e| format!("label = \"{}\" ", e.weight()),
-                &|_, (_, n_weight)| format!("label = \"{}\" ", n_weight)
+                &|_, (_, n_weight)| format!("label = \"{n_weight}\" ")
             )
         )
     }
