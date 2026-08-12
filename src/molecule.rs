@@ -271,7 +271,8 @@ impl Molecule {
         &self.graph
     }
 
-    /// Return a pretty-printable representation of this molecule.
+    /// Return a [DOT-formatted](https://graphviz.org/doc/info/lang.html)
+    /// string representation of this molecule's graph structure.
     pub fn info(&self) -> String {
         let dot = Dot::new(&self.graph);
         format!("{dot:?}")

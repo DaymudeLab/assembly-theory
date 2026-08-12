@@ -53,6 +53,7 @@ pub mod kernels;
 pub mod matches;
 pub mod memoize;
 mod nauty;
+pub mod pathway;
 pub mod state;
 mod vf3;
 

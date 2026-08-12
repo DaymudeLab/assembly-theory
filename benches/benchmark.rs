@@ -126,6 +126,7 @@ pub fn bench_bounds(c: &mut Criterion) {
                                     bounds,
                                     &mut cache,
                                     ParallelMode::DepthOne,
+                                    None,
                                 );
                                 total_time += start.elapsed();
                             }
@@ -149,7 +150,7 @@ pub fn bench_bounds(c: &mut Criterion) {
 pub fn bench_memoize(c: &mut Criterion) {
     let mut bench_group = c.benchmark_group("bench_memoize");
 
-    // Define datasets and bound lists.
+    // Define datasets and memoization modes.
     let datasets = ["gdb13_1201", "gdb17_200", "checks", "coconut_55"];
     let memoize_modes = [
         (MemoizeMode::None, CanonizeMode::Nauty, "no-memoize"),
@@ -161,7 +162,7 @@ pub fn bench_memoize(c: &mut Criterion) {
         ),
     ];
 
-    // Run the benchmark for each dataset and bound list.
+    // Run the benchmark for each dataset and memoization mode.
     for dataset in &datasets {
         let mol_list = load_dataset_molecules(dataset);
         for (memoize_mode, canonize_mode, name) in &memoize_modes {
@@ -190,6 +191,65 @@ pub fn bench_memoize(c: &mut Criterion) {
                                     &[Bound::Int, Bound::MatchableEdges],
                                     &mut cache,
                                     ParallelMode::DepthOne,
+                                    None,
+                                );
+                                total_time += start.elapsed();
+                            }
+                        }
+                        total_time
+                    });
+                },
+            );
+        }
+    }
+
+    bench_group.finish();
+}
+
+/// Benchmark the search step of [`index_search`] when recursively collecting different numbers of
+/// match removal orders.
+///
+/// This benchmark precomputes matches information using the fastest options and times only the
+/// search step when collecting no, one, and all match removal orders. This benchmark otherwise
+/// usese the default search options.
+pub fn bench_removal_orders(c: &mut Criterion) {
+    let mut bench_group = c.benchmark_group("bench_removal_orders");
+
+    // Define datasets.
+    let datasets = ["gdb13_1201", "gdb17_200", "checks", "coconut_55"];
+    let nums_orders = [(None, "none"), (Some(1), "one"), (Some(0), "all")];
+
+    // Run the benchmark for each dataset and number of match removal orders to collect.
+    for dataset in &datasets {
+        let mol_list = load_dataset_molecules(dataset);
+        for (num_orders, name) in &nums_orders {
+            bench_group.bench_with_input(
+                BenchmarkId::new(*dataset, &name),
+                &num_orders,
+                |b, &num_orders| {
+                    b.iter_custom(|iters| {
+                        let mut total_time = Duration::new(0, 0);
+                        for mol in &mol_list {
+                            // Precompute the molecule's matches and setup.
+                            let matches = Matches::new(mol, CanonizeMode::TreeNauty);
+                            let state = State::new(mol);
+                            let edge_count = mol.graph().edge_count();
+
+                            // Benchmark the search phase.
+                            for _ in 0..iters {
+                                let mut cache =
+                                    Cache::new(MemoizeMode::CanonIndex, CanonizeMode::TreeNauty);
+                                let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
+                                let start = Instant::now();
+                                recurse_index_search(
+                                    mol,
+                                    &matches,
+                                    &state,
+                                    best_index,
+                                    &[Bound::Int, Bound::MatchableEdges],
+                                    &mut cache,
+                                    ParallelMode::DepthOne,
+                                    *num_orders,
                                 );
                                 total_time += start.elapsed();
                             }
@@ -207,6 +267,6 @@ pub fn bench_memoize(c: &mut Criterion) {
 criterion_group! {
     name = benchmark;
     config = Criterion::default().sample_size(20);
-    targets = bench_matches, bench_bounds, bench_memoize
+    targets = bench_matches, bench_bounds, bench_memoize, bench_removal_orders
 }
 criterion_main!(benchmark);
