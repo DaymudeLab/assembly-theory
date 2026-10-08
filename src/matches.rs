@@ -106,7 +106,7 @@ impl Matches {
                         isomorphism_classes
                             .entry(canonize(mol, &child_fragment, canonize_mode))
                             .and_modify(|c| c.push((child_fragment.clone(), parent_frag_ix)))
-                            .or_insert(vec![(child_fragment, parent_frag_ix)]);
+                            .or_insert_with(|| vec![(child_fragment, parent_frag_ix)]);
                     }
                 }
             }
@@ -246,7 +246,7 @@ impl Matches {
                         isomorphism_classes
                             .entry(child_dag_node.canonical_id)
                             .and_modify(|c| c.push((*child_frag_ix, state_ix)))
-                            .or_insert(vec![(*child_frag_ix, state_ix)]);
+                            .or_insert_with(|| vec![(*child_frag_ix, state_ix)]);
                     }
                 }
             }
