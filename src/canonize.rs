@@ -90,7 +90,7 @@ fn subgraph_to_cgraph(mol: &Molecule, subgraph: &BitSet) -> CGraph {
 
         let h_dst = vtx_map
             .entry(dst)
-            .or_insert(h.add_node(AtomOrBond::Atom(*dst_w)));
+            .or_insert_with(|| h.add_node(AtomOrBond::Atom(*dst_w)));
         h.add_edge(*h_dst, h_enode, ());
     }
     h

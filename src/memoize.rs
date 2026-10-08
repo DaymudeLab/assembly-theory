@@ -125,7 +125,7 @@ impl Cache {
                         result = true;
                     }
                 })
-                .or_insert((state_index, removal_order.clone()));
+                .or_insert_with(||(state_index, removal_order.clone()));
         }
 
         result
