@@ -325,17 +325,6 @@ impl Matches {
         // will be empty and can be discarded.
         matchable_edge_masks.pop();
 
-        // Create new fragments for the current assembly state by removing
-        // non-matched edges. Such edges will remain non-matchable lower in the
-        // search tree and thus can be discarded.
-        let mut intermediate_frags = Vec::new();
-        if !matchable_edge_masks.is_empty() {
-            for frag in &matchable_edge_masks[0] {
-                connected_components_under_edges(&self.edge_nbrs, frag, &mut intermediate_frags);
-            }
-            intermediate_frags.retain(|frag| frag.count() >= 2);
-        }
-
         // Get a lower bound on the size of the largest match whose removal may
         // yield a better assembly index.
         let match_bound = match_bounds(state.index(), best, &matchable_edge_masks, bounds);
@@ -373,6 +362,18 @@ impl Matches {
         // Sort removable matches in ascending order of match index (i.e.,
         // those with larger fragments first).
         removable_matches.sort();
+
+        // Create new fragments for the current assembly state by removing
+        // non-matched edges. Such edges will remain non-matchable lower in the
+        // search tree and thus can be discarded.
+        let mut intermediate_frags = Vec::new();
+        if !removable_matches.is_empty() {
+            for frag in &matchable_edge_masks[0] {
+                connected_components_under_edges(&self.edge_nbrs, frag, &mut intermediate_frags);
+            }
+            intermediate_frags.retain(|frag| frag.count() >= 2);
+        }
+
         (intermediate_frags, removable_matches)
     }
 
