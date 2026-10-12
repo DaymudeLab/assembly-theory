@@ -5,7 +5,11 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use bit_set::BitSet;
 
 use crate::{
-    bounds::{Bound, match_bounds}, canonize::{CanonizeMode, Labeling, canonize}, molecule::Molecule, state::State, utils::{connected_components_under_edges, edge_neighbor_masks},
+    bounds::{match_bounds, Bound},
+    canonize::{canonize, CanonizeMode, Labeling},
+    molecule::Molecule,
+    state::State,
+    utils::{connected_components_under_edges, edge_neighbor_masks},
 };
 
 /// A node in the DAG storing fragment information; see [`Matches`].
