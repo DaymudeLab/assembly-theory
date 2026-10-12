@@ -361,7 +361,7 @@ impl Matches {
 
         // Sort removable matches in ascending order of match index (i.e.,
         // those with larger fragments first).
-        removable_matches.sort();
+        removable_matches.sort_unstable();
 
         // Create new fragments for the current assembly state by removing
         // non-matched edges. Such edges will remain non-matchable lower in the
