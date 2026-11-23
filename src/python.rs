@@ -389,15 +389,15 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 ///
 /// # Python Returns
 ///
-/// A 4-tuple containing:
+/// A 5-tuple containing:
 /// - The molecule's `int` assembly index (or an upper bound if timed out).
 /// - The molecule's `int` number of edge-disjoint isomorphic subgraph pairs.
-/// - The `int` number of assembly states searched if search completes, or
-///   `None` otherwise (i.e., if search timed out).
+/// - The `int` number of assembly states searched.
 /// - A list of [DOT-formatted](https://graphviz.org/doc/info/lang.html) `str`
 ///   representations of the molecule's minimum assembly pathways. This list is
 ///   nonempty if and only if search did not time out and `max_pathways` is not
 ///   `None`.
+/// - A `bool` that is `True` if and only if search timed out.
 ///
 /// # Python Examples
 ///
@@ -549,7 +549,7 @@ pub fn _index_search(
     kernel_str: &str,
     bound_strs: Vec<String>,
     max_pathways: Option<usize>,
-) -> PyResult<(u32, u32, Option<usize>, Vec<String>)> {
+) -> PyResult<(u32, u32, usize, Vec<String>, bool)> {
     // Parse the .mol file contents as a molecule::Molecule.
     let mol = parse_molfile_str(mol_block)?;
 
@@ -583,7 +583,7 @@ pub fn _index_search(
     let boundlist = make_boundlist(&pybounds);
 
     // Compute assembly index.
-    let (index, num_matches, states_searched, pathways) = index_search(
+    let (index, num_matches, states_searched, pathways, timed_out) = index_search(
         &mol,
         timeout,
         canonize_mode,
@@ -600,7 +600,7 @@ pub fn _index_search(
         pathways_dot.push(format!("{pathway}"));
     }
 
-    Ok((index, num_matches, states_searched, pathways_dot))
+    Ok((index, num_matches, states_searched, pathways_dot, timed_out))
 }
 
 /// A Python wrapper for the assembly_theory Rust crate.

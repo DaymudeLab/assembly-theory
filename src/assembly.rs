@@ -24,10 +24,10 @@
 use std::{
     collections::BTreeSet,
     sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering::Relaxed},
-        mpsc, Arc,
+        atomic::{AtomicUsize, Ordering::Relaxed},
+        Arc,
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use bit_set::BitSet;
@@ -157,12 +157,13 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Vec<
 /// - `matches`: Structural information about the molecule's matched fragments.
 /// - `state`: The current assembly state.
 /// - `best_index`: The smallest assembly index for all assembly states so far.
-/// - `cancel_search`: True iff search has timed out and further search calls should cancel.
 /// - `bounds`: The list of bounding strategies to apply.
 /// - `cache`: Memoization cache storing previously searched assembly states.
 /// - `parallel_mode`: The parallelism mode for this state's match iteration.
 /// - `max_pathways`: The number of distinct match removal orders attaining the best assembly index
 ///   bound to collect; `0` for all, `x > 0` for at most `x`, or `None` for none.
+/// - `deadline`: The time instant after which recursive search calls should cancel, or `None` if
+///   search should run to completion.
 ///
 /// Returns, from this assembly state and any of its descendents:
 /// - `usize`: An updated upper bound on the assembly index. (Note: If this
@@ -171,21 +172,29 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Vec<
 /// - `usize`: The number of assembly states searched.
 /// - `BTreeSet<Vec<usize>>`: A set of assembly states' match removal orders that attain the
 ///   updated assembly index upper bound. Nonempty iff `max_pathways` is not `None`.
+/// - `bool`: Whether this search call timed out, canceling after the search deadline.
 #[allow(clippy::too_many_arguments)]
 pub fn recurse_index_search(
     mol: &Molecule,
     matches: &Matches,
     state: &State,
     best_index: Arc<AtomicUsize>,
-    cancel_search: Arc<AtomicBool>,
     bounds: &[Bound],
     cache: &mut Cache,
     parallel_mode: ParallelMode,
     max_pathways: Option<usize>,
-) -> (usize, usize, BTreeSet<Vec<usize>>) {
-    // If any bounds would prune this assembly state or if memoization is
-    // enabled and this assembly state is preempted by the cached state, halt.
-    if cancel_search.load(Relaxed)
+    deadline: Option<Instant>,
+) -> (usize, usize, BTreeSet<Vec<usize>>, bool) {
+    // Check whether this recursive call is past the search deadline and should be canceled.
+    let timed_out = if let Some(deadline) = deadline {
+        Instant::now() > deadline
+    } else {
+        false
+    };
+
+    // If search timed out, any bounds would prune this assembly state, or memoization is enabled
+    // and this assembly state is preempted by the cached state, halt.
+    if timed_out
         || state_bounds(mol, state, best_index.load(Relaxed), bounds)
         || cache.memoize_state(mol, state)
     {
@@ -197,17 +206,17 @@ pub fn recurse_index_search(
             } else {
                 BTreeSet::<Vec<usize>>::new()
             },
+            timed_out,
         );
     }
 
-    // Generate a list of matches (i.e., pairs of edge-disjoint, isomorphic
-    // fragments) to remove from this state.
+    // Generate a list of matches (i.e., pairs of edge-disjoint, isomorphic fragments) to remove
+    // from this state.
     let (intermediate_frags, matches_to_remove): (Vec<BitSet>, Vec<usize>) =
         matches.matches_to_remove(mol, state, best_index.load(Relaxed), bounds);
 
-    // Define a closure that handles recursing to a new assembly state based on
-    // the given match.
-    let recurse_on_match = |match_ix: usize| -> (usize, usize, BTreeSet<Vec<usize>>) {
+    // Define a closure that handles recursing to a new assembly state based on the given match.
+    let recurse_on_match = |match_ix: usize| -> (usize, usize, BTreeSet<Vec<usize>>, bool) {
         let (h1, h2) = matches.match_fragments(match_ix);
         let fragments = fragments(mol, &intermediate_frags, h1, h2);
 
@@ -225,39 +234,40 @@ pub fn recurse_index_search(
             matches,
             &state.update(fragments, match_ix, h1.count()),
             best_index.clone(),
-            cancel_search.clone(),
             bounds,
             &mut cache.clone(),
             new_parallel,
             max_pathways,
+            deadline,
         )
     };
 
     // Use the iterator type corresponding to the specified parallelism mode.
-    let results: Vec<(usize, usize, BTreeSet<Vec<usize>>)> = if parallel_mode == ParallelMode::None
-    {
-        matches_to_remove
-            .iter()
-            .map(|match_ix| recurse_on_match(*match_ix))
-            .collect()
-    } else {
-        matches_to_remove
-            .iter()
-            .par_bridge()
-            .map(|match_ix| recurse_on_match(*match_ix))
-            .collect()
-    };
+    let results: Vec<(usize, usize, BTreeSet<Vec<usize>>, bool)> =
+        if parallel_mode == ParallelMode::None {
+            matches_to_remove
+                .iter()
+                .map(|match_ix| recurse_on_match(*match_ix))
+                .collect()
+        } else {
+            matches_to_remove
+                .iter()
+                .par_bridge()
+                .map(|match_ix| recurse_on_match(*match_ix))
+                .collect()
+        };
 
-    // Compute the best assembly index bound and the total number of descendant
-    // states searched across all children assembly states.
+    // Compute the best assembly index bound, the total number of descendant states searched, and
+    // the search timeout status across all children assembly states.
     let best_child_index = results.iter().map(|r| r.0).min().unwrap_or(state.index());
     let states_searched: usize = results.iter().map(|r| r.1).sum();
+    let timed_out = results.iter().any(|r| r.3);
 
     // Update the globally best assembly index bound found so far.
     best_index.fetch_min(best_child_index, Relaxed);
 
-    // Collect all descendant match removal orders attaining the best assembly
-    // index bound across children assembly states.
+    // Collect all descendant match removal orders attaining the best assembly index bound across
+    // children assembly states.
     let mut best_removal_orders = BTreeSet::<Vec<usize>>::new();
     if let Some(max_pathways) = max_pathways {
         if state.index() == best_child_index {
@@ -276,7 +286,14 @@ pub fn recurse_index_search(
             }
         }
     }
-    (best_child_index, states_searched + 1, best_removal_orders)
+
+    // Return results.
+    (
+        best_child_index,
+        states_searched + 1,
+        best_removal_orders,
+        timed_out,
+    )
 }
 
 /// Compute a molecule's assembly index and related information using a
@@ -299,10 +316,10 @@ pub fn recurse_index_search(
 /// The results returned are:
 /// - The molecule's `u32` assembly index (or an upper bound if timed out).
 /// - The molecule's `u32` number of edge-disjoint isomorphic subgraph pairs.
-/// - The `usize` total number of assembly [`State`]s searched if search
-///   completes, and `None` otherwise (i.e., if search timed out).
+/// - The `usize` total number of assembly [`State`]s searched.
 /// - A vector of the molecule's minimum assembly [`Pathway`]s that is nonempty if and only if
 ///   search did not time out and `max_pathways` is not `None`.
+/// - A `bool` that is `true` if and only if search timed out.
 ///
 /// If `parallel_mode` is set to anything other than [`ParallelMode::None`], the total number of
 /// assembly states searched and the minimum assembly pathways reconstructed are nondeterministic.
@@ -503,7 +520,7 @@ pub fn index_search(
     kernel_mode: KernelMode,
     bounds: &[Bound],
     max_pathways: Option<usize>,
-) -> (u32, u32, Option<usize>, Vec<Pathway>) {
+) -> (u32, u32, usize, Vec<Pathway>, bool) {
     // Catch not-yet-implemented modes.
     if kernel_mode != KernelMode::None {
         panic!("The chosen --kernel mode is not implemented yet!")
@@ -519,74 +536,24 @@ pub fn index_search(
     // Use an `Arc<AtomicUsize>` to track the best assembly index across parallel threads.
     let best_index = Arc::new(AtomicUsize::from(mol.graph().edge_count() - 1));
 
-    // Use an `Arc<AtomicBool>` to flag timeouts.
-    let cancel_search = Arc::new(AtomicBool::new(false));
+    // If a timeout is set, compute the deadline by which search must complete.
+    let deadline: Option<Instant> = timeout.map(|t| Instant::now() + Duration::from_millis(t));
 
-    // Search for the shortest assembly pathway recursively.
-    let (index, states_searched, removal_orders) = if let Some(timeout) = timeout {
-        // If a timeout is provided, search occurs within a rayon thread pool that is canceled
-        // after the specified duration (see below). To avoid subsequent scope issues, make copies
-        // of various variables.
-        let mol = mol.clone();
-        let matches = matches.clone();
-        let best_index_copy = best_index.clone();
-        let cancel_search_copy = cancel_search.clone();
-        let bounds = bounds.to_vec();
+    // Run the search.
+    let (index, states_searched, removal_orders, timed_out) = recurse_index_search(
+        mol,
+        &matches,
+        &state,
+        best_index,
+        bounds,
+        &mut cache,
+        parallel_mode,
+        max_pathways,
+        deadline,
+    );
 
-        // Search within a dedicated synchronous/blocking channel handling the timeout.
-        let (send, recv) = mpsc::sync_channel(1);
-        rayon::spawn(move || {
-            let _ = send.send(recurse_index_search(
-                &mol,
-                &matches,
-                &state,
-                best_index_copy,
-                cancel_search_copy,
-                &bounds,
-                &mut cache,
-                parallel_mode,
-                max_pathways,
-            ));
-        });
-
-        // If the search completes before the timeout, return the true assembly index and related
-        // information. Otherwise, return the best upper bound on the assembly index found before
-        // timing out.
-        match recv.recv_timeout(Duration::from_millis(timeout)) {
-            Ok((index, states_searched, removal_orders)) => {
-                (index, Some(states_searched), removal_orders)
-            }
-            Err(mpsc::RecvTimeoutError::Timeout) => {
-                // Set the timeout flag so the recursive search threads know they should cancel.
-                cancel_search.store(true, Relaxed);
-
-                // Return the best results so far.
-                (
-                    best_index.load(Relaxed),
-                    None,
-                    BTreeSet::<Vec<usize>>::new(),
-                )
-            }
-            _ => panic!("An unexpected error occurred when index_search timed out"),
-        }
-    } else {
-        // Otherwise, if no timeout is provided, run the search normally.
-        let (index, states_searched, removal_orders) = recurse_index_search(
-            mol,
-            &matches,
-            &state,
-            best_index,
-            cancel_search,
-            bounds,
-            &mut cache,
-            parallel_mode,
-            max_pathways,
-        );
-        (index, Some(states_searched), removal_orders)
-    };
-
-    // Generate at most the given number of minimum assembly pathways from the
-    // returned match removal orders.
+    // Generate at most the given number of minimum assembly pathways from the returned match
+    // removal orders.
     let mut pathways = Vec::<Pathway>::new();
     if let Some(max_pathways) = max_pathways {
         for (ix, removal_order) in removal_orders.iter().enumerate() {
@@ -598,11 +565,13 @@ pub fn index_search(
         }
     }
 
+    // Return results.
     (
         index as u32,
         matches.len() as u32,
         states_searched,
         pathways,
+        timed_out,
     )
 }
 

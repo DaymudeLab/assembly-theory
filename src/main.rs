@@ -119,7 +119,7 @@ fn main() -> Result<()> {
     };
 
     // Call index calculation with all the various options.
-    let (index, num_matches, states_searched, pathways) = index_search(
+    let (index, num_matches, states_searched, pathways, timed_out) = index_search(
         &mol,
         cli.timeout,
         cli.canonize,
@@ -131,7 +131,6 @@ fn main() -> Result<()> {
     );
 
     // Print final output depending on --verbose, pathways, and timeout status.
-    let timed_out = states_searched.is_none();
     if timed_out {
         if cli.verbose {
             // Timed out and verbose.
@@ -148,7 +147,7 @@ fn main() -> Result<()> {
         // Did not time out AND [verbose OR at least one pathway].
         println!("Assembly Index:  {index}");
         println!("Matches:         {num_matches}");
-        println!("States Searched: {}", states_searched.unwrap());
+        println!("States Searched: {}", states_searched);
         println!("Pathways Found:  {}", pathways.len());
         println!("\nMolecule Graph: {}", mol.info());
         for (i, pathway) in pathways.iter().enumerate() {
