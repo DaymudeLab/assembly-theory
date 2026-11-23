@@ -64,7 +64,7 @@ def test_index_search():
     with open(osp.join("data", "checks", "anthracene.mol")) as f:
         mol_block = f.read()
 
-    (index, num_matches, states_searched, pathways) = at.index_search(
+    (index, num_matches, states_searched, pathways, timed_out) = at.index_search(
         mol_block,
         timeout=None,
         canonize_str="tree-nauty",
@@ -99,11 +99,12 @@ def test_index_search():
 }
 """
 
-    assert (index, num_matches, states_searched, pathways) == (
+    assert (index, num_matches, states_searched, pathways, timed_out) == (
         6,
         466,
         491,
         [pathway_str],
+        False,
     )
 
 
@@ -111,7 +112,7 @@ def test_index_search_timeout():
     with open(osp.join("data", "checks", "anthracene.mol")) as f:
         mol_block = f.read()
 
-    (_, _, states_searched, pathways) = at.index_search(
+    (_, _, _, _, timed_out) = at.index_search(
         mol_block,
         timeout=1,  # Limit search to 1 ms, which should time out.
         canonize_str="tree-nauty",
@@ -122,7 +123,7 @@ def test_index_search_timeout():
         max_pathways=0,
     )
 
-    assert (states_searched is None) and (pathways == [])
+    assert timed_out
 
 
 def test_index_search_bad_molblock():

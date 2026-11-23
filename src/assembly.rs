@@ -349,7 +349,7 @@ pub fn recurse_index_search(
 ///
 /// // Calculate the molecule's assembly index without any search optimizations
 /// // like parallelism, memoization, kernelization, or bounding.
-/// let (slow_index, num_matches, states_searched, _) = index_search(
+/// let (slow_index, num_matches, states_searched, _, _) = index_search(
 ///     &anthracene,
 ///     None,
 ///     CanonizeMode::TreeNauty,
@@ -361,10 +361,10 @@ pub fn recurse_index_search(
 /// );
 /// assert_eq!(slow_index, 6);
 /// assert_eq!(num_matches, 466);
-/// assert_eq!(states_searched, Some(133814));
+/// assert_eq!(states_searched, 133814);
 ///
 /// // Repeat the calculation with parallelism, memoization, and some bounds.
-/// let (fast_index, num_matches, states_searched, _) = index_search(
+/// let (fast_index, num_matches, states_searched, _, _) = index_search(
 ///     &anthracene,
 ///     None,
 ///     CanonizeMode::TreeNauty,
@@ -386,9 +386,10 @@ pub fn recurse_index_search(
 /// Assembly index calculation can be slow on large molecules, even with search
 /// optimizations enabled. If `timeout` is set, two outcomes are possible:
 /// 1. Search completes before the timeout and everything behaves as usual.
-/// 2. The timeout is reached before search completes, search is interrupted,
-///    and the best upper bound on the assembly index found so far is returned.
-///    The number of states searched and assembly pathways are not returned.
+/// 2. The timeout is reached before search completes and search is interrupted.
+///    The assembly index returned in this case is an upper bound on the true
+///    assembly index, and the number of states searched and assembly pathways
+///    reflect this partial search.
 /// ```
 /// # use std::{fs, path::PathBuf};
 /// # use assembly_theory::{
@@ -407,7 +408,7 @@ pub fn recurse_index_search(
 /// #
 /// // Limit search to 10 s, which is plenty for search to complete as usual,
 /// // even with some search optimizations disabled.
-/// let (true_index, num_matches, states_searched, pathways) = index_search(
+/// let (true_index, num_matches, states_searched, pathways, timed_out) = index_search(
 ///     &anthracene,
 ///     Some(10000),               // Set a 10 s timeout.
 ///     CanonizeMode::TreeNauty,
@@ -419,11 +420,12 @@ pub fn recurse_index_search(
 /// );
 /// assert_eq!(true_index, 6);
 /// assert_eq!(num_matches, 466);
-/// assert_eq!(states_searched, Some(2454));
+/// assert_eq!(states_searched, 2454);
 /// assert_eq!(pathways.len(), 1);
+/// assert!(!timed_out);
 ///
 /// // Limit search to 1 ms, which will time out without more optimizations.
-/// let (index_bound, num_matches, states_searched, pathways) = index_search(
+/// let (index_bound, num_matches, states_searched, pathways, timed_out) = index_search(
 ///     &anthracene,
 ///     Some(1),                   // Set a 1 ms timeout.
 ///     CanonizeMode::TreeNauty,
@@ -433,10 +435,11 @@ pub fn recurse_index_search(
 ///     &[Bound::Log, Bound::Int], // Enable some bounds.
 ///     Some(1),                   // Reconstuct one pathway.
 /// );
-/// assert!(index_bound >= true_index); // Index is an upper bound on timeout.
+/// assert!(index_bound >= true_index); // On timeout, index is an upper bound on the true value.
 /// assert_eq!(num_matches, 466);       // The number of matches is unaffected.
-/// assert_eq!(states_searched, None);  // States searched is not computed on timeout.
-/// assert_eq!(pathways.len(), 0);      // Pathways are not computed on timeout.
+/// assert!(states_searched <= 2454);   // Fewer states are searched before the timeout.
+/// assert_eq!(pathways.len(), 1);      // Computed pathways are of length `index_bound`.
+/// assert!(timed_out);                 // Search timed out.
 /// # Ok(())
 /// # }
 /// ```
@@ -473,7 +476,7 @@ pub fn recurse_index_search(
 /// # let anthracene = parse_molfile_str(&molfile).expect("Parsing failure.");
 /// #
 /// // Reconstruct a minimum assembly pathway discovered during search.
-/// let (_, _, _, pathways) = index_search(
+/// let (_, _, _, pathways, _) = index_search(
 ///     &anthracene,
 ///     None,
 ///     CanonizeMode::TreeNauty,
