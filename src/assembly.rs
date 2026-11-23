@@ -24,8 +24,8 @@
 use std::{
     collections::BTreeSet,
     sync::{
-        atomic::{AtomicUsize, Ordering::Relaxed},
-        Arc,
+        atomic::{AtomicBool, AtomicUsize, Ordering::Relaxed},
+        mpsc, Arc,
     },
     time::Duration,
 };
@@ -33,7 +33,6 @@ use std::{
 use bit_set::BitSet;
 use clap::ValueEnum;
 use rayon::iter::{ParallelBridge, ParallelIterator};
-use tokio::{runtime::Runtime, sync::oneshot, time::timeout as tktimeout};
 
 use crate::{
     bounds::{state_bounds, Bound},
@@ -158,6 +157,7 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Vec<
 /// - `matches`: Structural information about the molecule's matched fragments.
 /// - `state`: The current assembly state.
 /// - `best_index`: The smallest assembly index for all assembly states so far.
+/// - `cancel_search`: True iff search has timed out and further search calls should cancel.
 /// - `bounds`: The list of bounding strategies to apply.
 /// - `cache`: Memoization cache storing previously searched assembly states.
 /// - `parallel_mode`: The parallelism mode for this state's match iteration.
@@ -177,6 +177,7 @@ pub fn recurse_index_search(
     matches: &Matches,
     state: &State,
     best_index: Arc<AtomicUsize>,
+    cancel_search: Arc<AtomicBool>,
     bounds: &[Bound],
     cache: &mut Cache,
     parallel_mode: ParallelMode,
@@ -184,7 +185,9 @@ pub fn recurse_index_search(
 ) -> (usize, usize, BTreeSet<Vec<usize>>) {
     // If any bounds would prune this assembly state or if memoization is
     // enabled and this assembly state is preempted by the cached state, halt.
-    if state_bounds(mol, state, best_index.load(Relaxed), bounds) || cache.memoize_state(mol, state)
+    if cancel_search.load(Relaxed)
+        || state_bounds(mol, state, best_index.load(Relaxed), bounds)
+        || cache.memoize_state(mol, state)
     {
         return (
             state.index(),
@@ -222,6 +225,7 @@ pub fn recurse_index_search(
             matches,
             &state.update(fragments, match_ix, h1.count()),
             best_index.clone(),
+            cancel_search.clone(),
             bounds,
             &mut cache.clone(),
             new_parallel,
@@ -512,51 +516,58 @@ pub fn index_search(
     // Enumerate matches (i.e., pairs of edge-disjoint isomorphic fragments).
     let matches = Matches::new(mol, canonize_mode);
 
-    // Use an `Arc` to track the best assembly index across parallel threads.
+    // Use an `Arc<AtomicUsize>` to track the best assembly index across parallel threads.
     let best_index = Arc::new(AtomicUsize::from(mol.graph().edge_count() - 1));
+
+    // Use an `Arc<AtomicBool>` to flag timeouts.
+    let cancel_search = Arc::new(AtomicBool::new(false));
 
     // Search for the shortest assembly pathway recursively.
     let (index, states_searched, removal_orders) = if let Some(timeout) = timeout {
-        // If a timeout is provided, we will search within an asynchronous task
-        // that can be interrupted after the specified duration (see below). To
-        // avoid subsequent scope issues, make copies of various variables.
+        // If a timeout is provided, search occurs within a rayon thread pool that is canceled
+        // after the specified duration (see below). To avoid subsequent scope issues, make copies
+        // of various variables.
         let mol = mol.clone();
         let matches = matches.clone();
         let best_index_copy = best_index.clone();
+        let cancel_search_copy = cancel_search.clone();
         let bounds = bounds.to_vec();
 
-        // Search within a dedicated asynchronous runtime.
-        let rt = Runtime::new().unwrap();
-        let result = rt.block_on(async {
-            let (send, recv) = oneshot::channel();
-            rayon::spawn(move || {
-                let _ = send.send(recurse_index_search(
-                    &mol,
-                    &matches,
-                    &state,
-                    best_index_copy,
-                    &bounds,
-                    &mut cache,
-                    parallel_mode,
-                    max_pathways,
-                ));
-            });
-            tktimeout(Duration::from_millis(timeout), recv).await
+        // Search within a dedicated synchronous/blocking channel handling the timeout.
+        let (send, recv) = mpsc::sync_channel(1);
+        rayon::spawn(move || {
+            let _ = send.send(recurse_index_search(
+                &mol,
+                &matches,
+                &state,
+                best_index_copy,
+                cancel_search_copy,
+                &bounds,
+                &mut cache,
+                parallel_mode,
+                max_pathways,
+            ));
         });
 
-        // If the search completes before the timeout, return the true assembly
-        // index. Otherwise, return the best upper bound on the assembly index
-        // found before timing out.
-        match result {
-            Ok(Ok((index, states_searched, removal_orders))) => {
+        // If the search completes before the timeout, return the true assembly index and related
+        // information. Otherwise, return the best upper bound on the assembly index found before
+        // timing out.
+        match recv.recv_timeout(Duration::from_millis(timeout)) {
+            Ok((index, states_searched, removal_orders)) => {
                 (index, Some(states_searched), removal_orders)
             }
-            Err(_) => (
-                best_index.load(Relaxed),
-                None,
-                BTreeSet::<Vec<usize>>::new(),
-            ),
-            _ => panic!("An unexpected error occurred in async index_search"),
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                // Set the timeout flag so the recursive search threads know they should cancel.
+                cancel_search.store(true, Relaxed);
+
+                // Return the best results so far.
+                (
+                    best_index.load(Relaxed),
+                    None,
+                    BTreeSet::<Vec<usize>>::new(),
+                )
+            }
+            _ => panic!("An unexpected error occurred when index_search timed out"),
         }
     } else {
         // Otherwise, if no timeout is provided, run the search normally.
@@ -565,6 +576,7 @@ pub fn index_search(
             &matches,
             &state,
             best_index,
+            cancel_search,
             bounds,
             &mut cache,
             parallel_mode,
