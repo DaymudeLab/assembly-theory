@@ -2,7 +2,10 @@ use std::{
     ffi::OsStr,
     fs,
     path::Path,
-    sync::{atomic::AtomicUsize, Arc},
+    sync::{
+        atomic::{AtomicBool, AtomicUsize},
+        Arc,
+    },
     time::{Duration, Instant},
 };
 
@@ -117,12 +120,14 @@ pub fn bench_bounds(c: &mut Criterion) {
                                 let mut cache =
                                     Cache::new(MemoizeMode::CanonIndex, CanonizeMode::TreeNauty);
                                 let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
+                                let cancel_search = Arc::new(AtomicBool::new(false));
                                 let start = Instant::now();
                                 recurse_index_search(
                                     mol,
                                     &matches,
                                     &state,
                                     best_index,
+                                    cancel_search,
                                     bounds,
                                     &mut cache,
                                     ParallelMode::DepthOne,
@@ -182,12 +187,14 @@ pub fn bench_memoize(c: &mut Criterion) {
                             for _ in 0..iters {
                                 let mut cache = Cache::new(memoize_mode, canonize_mode);
                                 let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
+                                let cancel_search = Arc::new(AtomicBool::new(false));
                                 let start = Instant::now();
                                 recurse_index_search(
                                     mol,
                                     &matches,
                                     &state,
                                     best_index,
+                                    cancel_search,
                                     &[Bound::Int, Bound::MatchableEdges],
                                     &mut cache,
                                     ParallelMode::DepthOne,
@@ -240,12 +247,14 @@ pub fn bench_removal_orders(c: &mut Criterion) {
                                 let mut cache =
                                     Cache::new(MemoizeMode::CanonIndex, CanonizeMode::TreeNauty);
                                 let best_index = Arc::new(AtomicUsize::from(edge_count - 1));
+                                let cancel_search = Arc::new(AtomicBool::new(false));
                                 let start = Instant::now();
                                 recurse_index_search(
                                     mol,
                                     &matches,
                                     &state,
                                     best_index,
+                                    cancel_search,
                                     &[Bound::Int, Bound::MatchableEdges],
                                     &mut cache,
                                     ParallelMode::DepthOne,
