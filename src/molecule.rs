@@ -382,27 +382,6 @@ impl Molecule {
             && is_subset_connected(&self.graph, left)
             && is_subset_connected(&self.graph, right)
     }
-
-    #[allow(dead_code)]
-    fn print_edgelist(&self, list: &[EdgeIndex], name: &str) {
-        println!(
-            "{name}: {:?}",
-            list.iter()
-                .map(|e| (
-                    e.index(),
-                    self.graph
-                        .edge_endpoints(*e)
-                        .map(|(i, j)| (
-                            i.index(),
-                            self.graph.node_weight(i).unwrap().element(),
-                            j.index(),
-                            self.graph.node_weight(j).unwrap().element(),
-                        ))
-                        .unwrap()
-                ))
-                .collect::<Vec<_>>()
-        );
-    }
 }
 
 mod tests {

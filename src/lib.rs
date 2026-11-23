@@ -55,7 +55,6 @@ pub mod memoize;
 mod nauty;
 pub mod pathway;
 pub mod state;
-mod vf3;
 
 // Python wrapper.
 #[cfg(feature = "python")]
