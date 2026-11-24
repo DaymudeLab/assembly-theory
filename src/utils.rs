@@ -5,8 +5,53 @@ use std::collections::BTreeSet;
 use bit_set::BitSet;
 use petgraph::{
     graph::{EdgeIndex, Graph, IndexType, NodeIndex},
+    visit::EdgeRef,
     EdgeType,
 };
+
+// For each edge e of g, gives a bitset storing the edges adjacent to e.
+pub fn edge_neighbor_masks<N, E, Ty, Ix>(g: &Graph<N, E, Ty, Ix>) -> Vec<BitSet>
+where
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    let num_edges = g.edge_count();
+    let mut masks = vec![BitSet::with_capacity(num_edges); num_edges];
+    for node in g.node_indices() {
+        let incident: Vec<usize> = g.edges(node).map(|e| e.id().index()).collect();
+        for &e in &incident {
+            for &f in &incident {
+                if e != f {
+                    masks[e].insert(f);
+                }
+            }
+        }
+    }
+    masks
+}
+
+pub fn connected_components_under_edges(edge_nbrs: &[BitSet], s: &BitSet, out: &mut Vec<BitSet>) {
+    let mut remainder = s.clone();
+    let mut stack: Vec<usize> = Vec::new();
+
+    while let Some(seed) = remainder.iter().next() {
+        remainder.remove(seed);
+        let mut component = BitSet::with_capacity(edge_nbrs.len());
+        component.insert(seed);
+        stack.push(seed);
+
+        while let Some(e) = stack.pop() {
+            for f in edge_nbrs[e].iter() {
+                if remainder.remove(f) {
+                    component.insert(f);
+                    stack.push(f);
+                }
+            }
+        }
+
+        out.push(component);
+    }
+}
 
 pub fn is_subset_connected<N, E, Ty, Ix>(
     g: &Graph<N, E, Ty, Ix>,
@@ -124,52 +169,6 @@ where
             queue.extend(neighbors)
         }
         remainder = remainder.difference(&visited).cloned().collect();
-        components.push(visited);
-    }
-    components.into_iter()
-}
-
-pub fn connected_components_under_edges<N, E, Ty, Ix>(
-    g: &Graph<N, E, Ty, Ix>,
-    s: &BitSet,
-) -> impl Iterator<Item = BitSet>
-where
-    Ty: EdgeType,
-    Ix: IndexType,
-{
-    let mut remainder = s.clone();
-    let mut components = Vec::new();
-    while let Some(c) = remainder.iter().next() {
-        let mut queue = BitSet::new();
-        queue.reserve_len(s.count());
-        queue.insert(c);
-
-        let mut visited = BitSet::new();
-        visited.reserve_len(s.count());
-
-        while let Some(e) = queue.iter().next() {
-            queue.remove(e);
-            visited.insert(e);
-            let (src, dst) = g.edge_endpoints(EdgeIndex::new(e)).unwrap();
-
-            let nl = g.neighbors(src).filter_map(|n| {
-                g.find_edge(src, n).and_then(|f| {
-                    let ix = f.index();
-                    (ix != e && s.contains(ix) && !visited.contains(ix)).then_some(ix)
-                })
-            });
-
-            let nr = g.neighbors(dst).filter_map(|n| {
-                g.find_edge(dst, n).and_then(|f| {
-                    let ix = f.index();
-                    (ix != e && s.contains(ix) && !visited.contains(ix)).then_some(ix)
-                })
-            });
-
-            queue.extend(nl);
-            queue.extend(nr);
-        }
-        remainder.difference_with(&visited);
         components.push(visited);
     }
     components.into_iter()

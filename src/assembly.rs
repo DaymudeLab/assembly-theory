@@ -103,7 +103,7 @@ pub fn depth(mol: &Molecule) -> u32 {
 
 /// Find all fragments in the given assembly state after removing the given
 /// pair of edge-disjoint, isomorphic subgraphs and then adding one back.
-fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Vec<BitSet> {
+fn fragments(edge_nbrs: &[BitSet], state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Vec<BitSet> {
     // Find fragments f1 and f2 containing h1 and h2, respectively.
     let (i1, f1) = state
         .iter()
@@ -127,19 +127,16 @@ fn fragments(mol: &Molecule, state: &[BitSet], h1: &BitSet, h2: &BitSet) -> Vec<
         union.union_with(h2);
         let mut diff = f1.clone();
         diff.difference_with(&union);
-        let c = connected_components_under_edges(mol.graph(), &diff);
-        fragments.extend(c);
+        connected_components_under_edges(edge_nbrs, &diff, &mut fragments);
         fragments.swap_remove(i1);
     } else {
         let mut diff1 = f1.clone();
         diff1.difference_with(h1);
-        let c1 = connected_components_under_edges(mol.graph(), &diff1);
-        fragments.extend(c1);
+        connected_components_under_edges(edge_nbrs, &diff1, &mut fragments);
 
         let mut diff2 = f2.clone();
         diff2.difference_with(h2);
-        let c2 = connected_components_under_edges(mol.graph(), &diff2);
-        fragments.extend(c2);
+        connected_components_under_edges(edge_nbrs, &diff2, &mut fragments);
 
         fragments.swap_remove(i1.max(i2));
         fragments.swap_remove(i1.min(i2));
@@ -206,7 +203,7 @@ pub fn recurse_index_search(
     // the given match.
     let recurse_on_match = |match_ix: usize| -> (usize, usize, BTreeSet<Vec<usize>>) {
         let (h1, h2) = matches.match_fragments(match_ix);
-        let fragments = fragments(mol, &intermediate_frags, h1, h2);
+        let fragments = fragments(matches.edge_nbrs(), &intermediate_frags, h1, h2);
 
         // If using depth-one parallelism, all descendant states should be
         // computed serially.

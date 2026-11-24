@@ -3,14 +3,13 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use bit_set::BitSet;
-use petgraph::graph::EdgeIndex;
 
 use crate::{
     bounds::{match_bounds, Bound},
     canonize::{canonize, CanonizeMode, Labeling},
     molecule::Molecule,
     state::State,
-    utils::{connected_components_under_edges, edge_neighbors},
+    utils::{connected_components_under_edges, edge_neighbor_masks},
 };
 
 /// A node in the DAG storing fragment information; see [`Matches`].
@@ -44,6 +43,8 @@ pub struct Matches {
     matches: Vec<(usize, usize)>,
     /// Maps pairs of matched fragment indices to their indices in `matches`.
     match_to_ix: HashMap<(usize, usize), usize>,
+    /// Represents the adjacency of edges. Indexed by edge indices.
+    edge_nbrs: Vec<BitSet>,
 }
 
 impl DagNode {
@@ -61,6 +62,7 @@ impl Matches {
     /// Generate [`Matches`] from the given molecule and canonization mode.
     pub fn new(mol: &Molecule, canonize_mode: CanonizeMode) -> Self {
         let num_edges = mol.graph().edge_count();
+        let edge_nbrs = edge_neighbor_masks(mol.graph());
         let mut dag: Vec<DagNode> = Vec::with_capacity(num_edges);
         let mut matches: Vec<(usize, usize)> = Vec::new();
 
@@ -91,8 +93,7 @@ impl Matches {
                 let parent_frag = &dag[parent_frag_ix].fragment;
                 let mut incident_edges = BitSet::with_capacity(num_edges);
                 for e in parent_frag {
-                    incident_edges
-                        .extend(edge_neighbors(mol.graph(), EdgeIndex::new(e)).map(|x| x.index()));
+                    incident_edges.union_with(&edge_nbrs[e]);
                 }
                 incident_edges.difference_with(parent_frag);
 
@@ -178,6 +179,7 @@ impl Matches {
             dag,
             matches,
             match_to_ix,
+            edge_nbrs,
         }
     }
 
@@ -189,6 +191,10 @@ impl Matches {
     /// Return `true` if there are no matches.
     pub fn is_empty(&self) -> bool {
         self.matches.is_empty()
+    }
+
+    pub fn edge_nbrs(&self) -> &[BitSet] {
+        &self.edge_nbrs
     }
 
     /// Return all matches whose removal from the given assembly state may
@@ -323,21 +329,6 @@ impl Matches {
         // will be empty and can be discarded.
         matchable_edge_masks.pop();
 
-        // Create new fragments for the current assembly state by removing
-        // non-matched edges. Such edges will remain non-matchable lower in the
-        // search tree and thus can be discarded.
-        let intermediate_frags = {
-            if !matchable_edge_masks.is_empty() {
-                matchable_edge_masks[0]
-                    .iter()
-                    .flat_map(|frag| connected_components_under_edges(mol.graph(), frag))
-                    .filter(|frag| frag.count() >= 2)
-                    .collect::<Vec<BitSet>>()
-            } else {
-                vec![]
-            }
-        };
-
         // Get a lower bound on the size of the largest match whose removal may
         // yield a better assembly index.
         let match_bound = match_bounds(state.index(), best, &matchable_edge_masks, bounds);
@@ -374,7 +365,19 @@ impl Matches {
 
         // Sort removable matches in ascending order of match index (i.e.,
         // those with larger fragments first).
-        removable_matches.sort();
+        removable_matches.sort_unstable();
+
+        // Create new fragments for the current assembly state by removing
+        // non-matched edges. Such edges will remain non-matchable lower in the
+        // search tree and thus can be discarded.
+        let mut intermediate_frags = Vec::new();
+        if !removable_matches.is_empty() {
+            for frag in &matchable_edge_masks[0] {
+                connected_components_under_edges(&self.edge_nbrs, frag, &mut intermediate_frags);
+            }
+            intermediate_frags.retain(|frag| frag.count() >= 2);
+        }
+
         (intermediate_frags, removable_matches)
     }
 
