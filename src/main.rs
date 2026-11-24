@@ -25,9 +25,9 @@ struct Cli {
     #[arg(long)]
     depth: bool,
 
-    /// Print the molecule's assembly index, number of matches (edge-disjoint
-    /// isomorphic subgraph pairs), number of states searched, plus molecule graph
-    /// structure and assembly pathways if --pathways is given.
+    /// Print the molecule's assembly index, number of matches (pairs of edge-disjoint, isomorphic,
+    /// connected subgraphs), number of states searched, and (if `--pathways` is given) molecule
+    /// graph information and assembly pathways.
     #[arg(long)]
     verbose: bool,
 
@@ -42,8 +42,8 @@ struct Cli {
     canonize: CanonizeMode,
 
     /// Parallelism strategy for the search phase. When parallelism is enabled, the number of
-    /// states searched (visible with --verbose) and the minimum assembly pathways reconstructed
-    /// (obtained with --pathways) are nondeterministic.
+    /// states searched (visible with `--verbose`) and the minimum assembly pathways reconstructed
+    /// (obtained with `--pathways`) are nondeterministic.
     #[arg(long, value_enum, default_value_t = ParallelMode::DepthOne)]
     parallel: ParallelMode,
 
@@ -61,10 +61,10 @@ struct Cli {
 
     /// Maximum number of minimum assembly pathways to reconstruct, or `None` (default) to disable
     /// pathway reconstruction. Set this option to 0 to reconstruct all minimum assembly pathways
-    /// found during search. If --timeout is set and the computation is stopped early, then
-    /// pathways corresponding to the minimum assembly index found so far are returned. If not
-    /// `None`, output will automatically use --verbose formatting. Reconstructing minimum assembly
-    /// pathways incurs a 5-20% runtime overhead; disable for faster assembly index calculation.
+    /// found during search. If not `None`, output will automatically use `--verbose` formatting.
+    /// If search times out (see `--timeout`), then pathways corresponding to the minimum assembly
+    /// index found so far are returned. Reconstructing minimum assembly pathways incurs a 5-20%
+    /// runtime overhead; disable for faster assembly index calculation.
     #[arg(long)]
     pathways: Option<usize>,
 }
@@ -143,10 +143,8 @@ fn main() -> Result<()> {
         println!("Assembly Index:  {index_str}");
         println!("Matches:         {num_matches}");
         println!("States Searched: {states_searched}");
-        println!("Pathways Found:  {}", pathways.len());
-
-        // Pathway info
         if cli.pathways.is_some() {
+            println!("Pathways Found:  {}", pathways.len());
             println!("\nMolecule Graph: {}", mol.info());
             for (i, pathway) in pathways.iter().enumerate() {
                 println!("Pathway {i}: {pathway}");
