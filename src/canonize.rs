@@ -21,13 +21,8 @@ pub enum CanonizeMode {
     /// Use the Nauty algorithm of [McKay & Piperno
     /// (2014)](https://doi.org/10.1016/j.jsc.2013.09.003).
     Nauty,
-    /// Use the algorithm of
-    /// [Faulon et al. (2004)](https://doi.org/10.1021/ci0341823).
-    Faulon,
     /// Use a tree canonization algorithm if applicable; else use `Nauty`.
     TreeNauty,
-    /// Use a tree canonization algorithm if applicable; else use `Faulon`.
-    TreeFaulon,
 }
 
 /// Canonical labeling returned by our graph canonization functions.
@@ -35,11 +30,6 @@ pub enum CanonizeMode {
 pub enum Labeling {
     /// Labeling returned by the `graph_canon` crate.
     Nauty(CanonLabeling<AtomOrBond>),
-
-    /// A string labeling returned by our implementation of
-    /// [Faulon et al. (2004)](https://doi.org/10.1021/ci0341823).
-    // TODO: This should be a `Vec<u8>`
-    Faulon(String),
 
     /// Labeling returned by our implementation of tree canonization.
     Tree(Vec<u8>),
@@ -60,9 +50,6 @@ pub fn canonize(mol: &Molecule, subgraph: &BitSet, mode: CanonizeMode) -> Labeli
                 let cgraph = subgraph_to_cgraph(mol, subgraph);
                 Labeling::Nauty(CanonLabeling::new(&cgraph))
             }
-        }
-        _ => {
-            panic!("The chosen --canonize mode is not implemented yet!")
         }
     }
 }

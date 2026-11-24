@@ -94,9 +94,7 @@ impl From<ParserError> for PyErr {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum PyCanonizeMode {
     Nauty,
-    Faulon,
     TreeNauty,
-    TreeFaulon,
 }
 
 /// Mirrors the [`ParallelMode`] enum.
@@ -131,12 +129,9 @@ impl FromStr for PyCanonizeMode {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "nauty" => Ok(PyCanonizeMode::Nauty),
-            "faulon" => Ok(PyCanonizeMode::Faulon),
             "tree-nauty" => Ok(PyCanonizeMode::TreeNauty),
-            "tree-faulon" => Ok(PyCanonizeMode::TreeFaulon),
             _ => Err(PyValueError::new_err(format!(
-                "Invalid canonization mode \"{s}\", options are: \
-                [\"nauty\", \"faulon\", \"tree-nauty\", \"tree-faulon\"]"
+                "Invalid canonization mode \"{s}\", options are: [\"nauty\", \"tree-nauty\"]"
             ))),
         }
     }
@@ -341,9 +336,8 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 /// - `timeout`: An `int` duration in milliseconds after which search is
 ///   stopped and the best upper bound on the assembly index found so far is
 ///   returned, or `None` (default) if search is run to completion.
-/// - `canonize_str`: A canonization mode from [`"nauty"`, `"faulon"`,
-///   `"tree-nauty"` (default), `"tree-faulon"`]. See [`CanonizeMode`] for
-///   details.
+/// - `canonize_str`: A canonization mode from [`"nauty"`, `"tree-nauty"` (default)].
+///   See [`CanonizeMode`] for details.
 /// - `parallel_str`: A parallelization mode from [`"none"`, `"depth-one"`
 ///   (default), `"always"`]. See [`ParallelMode`] for details.
 /// - `memoize_str`: A memoization mode from [`none`, `canon-index` (default)].
@@ -522,9 +516,7 @@ pub fn _index_search(
     // Parse the various modes and bound options.
     let canonize_mode = match PyCanonizeMode::from_str(canonize_str) {
         Ok(PyCanonizeMode::Nauty) => CanonizeMode::Nauty,
-        Ok(PyCanonizeMode::Faulon) => CanonizeMode::Faulon,
         Ok(PyCanonizeMode::TreeNauty) => CanonizeMode::TreeNauty,
-        Ok(PyCanonizeMode::TreeFaulon) => CanonizeMode::TreeFaulon,
         Err(e) => return Err(e),
     };
     let parallel_mode = match PyParallelMode::from_str(parallel_str) {
