@@ -130,32 +130,29 @@ fn main() -> Result<()> {
         cli.pathways,
     );
 
-    // Print final output depending on --verbose, pathways, and timeout status.
-    if timed_out {
-        if cli.verbose {
-            // Timed out and verbose.
-            println!("Assembly Index:  <= {index} (timed out)");
-            println!("Matches:         {num_matches}");
-            println!("States Searched: not computed on timeout");
-            println!("Pathways Found:  not computed on timeout");
-            println!("\nMolecule Graph: {}", mol.info());
-        } else {
-            // Timed out but not verbose.
-            println!("<= {index} (timed out)");
-        }
-    } else if cli.verbose || cli.pathways.is_some() {
-        // Did not time out AND [verbose OR at least one pathway].
-        println!("Assembly Index:  {index}");
+    // Format the assembly index, marking it as an upper bound if search timed out.
+    let index_str = if timed_out {
+        format!("<= {index} (timed out)")
+    } else {
+        format!("{index}")
+    };
+
+    // Print final output depending on --verbose and --pathways.
+    if cli.verbose || cli.pathways.is_some() {
+        println!("Assembly Index:  {index_str}");
         println!("Matches:         {num_matches}");
-        println!("States Searched: {}", states_searched);
+        println!("States Searched: {states_searched}");
         println!("Pathways Found:  {}", pathways.len());
-        println!("\nMolecule Graph: {}", mol.info());
-        for (i, pathway) in pathways.iter().enumerate() {
-            println!("Pathway {i}: {pathway}");
+
+        // Pathway info
+        if cli.pathways.is_some() {
+            println!("\nMolecule Graph: {}", mol.info());
+            for (i, pathway) in pathways.iter().enumerate() {
+                println!("Pathway {i}: {pathway}");
+            }
         }
     } else {
-        // Did not time out and only assembly index is desired.
-        println!("{index}");
+        println!("{index_str}");
     }
 
     Ok(())
