@@ -25,9 +25,9 @@ struct Cli {
     #[arg(long)]
     depth: bool,
 
-    /// Print the molecule's assembly index, number of matches (edge-disjoint
-    /// isomorphic subgraph pairs), number of states searched, molecule graph
-    /// structure, and assembly pathways (if --pathways is given).
+    /// Print the molecule's assembly index, number of matches (pairs of edge-disjoint, isomorphic,
+    /// connected subgraphs), number of states searched, and (if `--pathways` is given) molecule
+    /// graph information and assembly pathways.
     #[arg(long)]
     verbose: bool,
 
@@ -42,8 +42,8 @@ struct Cli {
     canonize: CanonizeMode,
 
     /// Parallelism strategy for the search phase. When parallelism is enabled, the number of
-    /// states searched (visible with --verbose) and the minimum assembly pathways reconstructed
-    /// (obtained with --pathways) are nondeterministic.
+    /// states searched (visible with `--verbose`) and the minimum assembly pathways reconstructed
+    /// (obtained with `--pathways`) are nondeterministic.
     #[arg(long, value_enum, default_value_t = ParallelMode::DepthOne)]
     parallel: ParallelMode,
 
@@ -61,9 +61,10 @@ struct Cli {
 
     /// Maximum number of minimum assembly pathways to reconstruct, or `None` (default) to disable
     /// pathway reconstruction. Set this option to 0 to reconstruct all minimum assembly pathways
-    /// found during search. If not `None`, output will automatically use --verbose formatting.
-    /// Reconstructing minimum assembly pathways incurs a 5-20% runtime overhead; disable for
-    /// faster assembly index calculation.
+    /// found during search. If not `None`, output will automatically use `--verbose` formatting.
+    /// If search times out (see `--timeout`), then pathways corresponding to the minimum assembly
+    /// index found so far are returned. Reconstructing minimum assembly pathways incurs a 5-20%
+    /// runtime overhead; disable for faster assembly index calculation.
     #[arg(long)]
     pathways: Option<usize>,
 }
@@ -119,7 +120,7 @@ fn main() -> Result<()> {
     };
 
     // Call index calculation with all the various options.
-    let (index, num_matches, states_searched, pathways) = index_search(
+    let (index, num_matches, states_searched, pathways, timed_out) = index_search(
         &mol,
         cli.timeout,
         cli.canonize,
@@ -130,33 +131,27 @@ fn main() -> Result<()> {
         cli.pathways,
     );
 
-    // Print final output depending on --verbose, pathways, and timeout status.
-    let timed_out = states_searched.is_none();
-    if timed_out {
-        if cli.verbose {
-            // Timed out and verbose.
-            println!("Assembly Index:  <= {index} (timed out)");
-            println!("Matches:         {num_matches}");
-            println!("States Searched: not computed on timeout");
-            println!("Pathways Found:  not computed on timeout");
-            println!("\nMolecule Graph: {}", mol.info());
-        } else {
-            // Timed out but not verbose.
-            println!("<= {index} (timed out)");
-        }
-    } else if cli.verbose || cli.pathways.is_some() {
-        // Did not time out AND [verbose OR at least one pathway].
-        println!("Assembly Index:  {index}");
+    // Format the assembly index, marking it as an upper bound if search timed out.
+    let index_str = if timed_out {
+        format!("<= {index} (timed out)")
+    } else {
+        format!("{index}")
+    };
+
+    // Print final output depending on --verbose and --pathways.
+    if cli.verbose || cli.pathways.is_some() {
+        println!("Assembly Index:  {index_str}");
         println!("Matches:         {num_matches}");
-        println!("States Searched: {}", states_searched.unwrap());
-        println!("Pathways Found:  {}", pathways.len());
-        println!("\nMolecule Graph: {}", mol.info());
-        for (i, pathway) in pathways.iter().enumerate() {
-            println!("Pathway {i}: {pathway}");
+        println!("States Searched: {states_searched}");
+        if cli.pathways.is_some() {
+            println!("Pathways Found:  {}", pathways.len());
+            println!("\nMolecule Graph: {}", mol.info());
+            for (i, pathway) in pathways.iter().enumerate() {
+                println!("Pathway {i}: {pathway}");
+            }
         }
     } else {
-        // Did not time out and only assembly index is desired.
-        println!("{index}");
+        println!("{index_str}");
     }
 
     Ok(())

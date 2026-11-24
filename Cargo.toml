@@ -12,17 +12,16 @@ license = "MIT OR Apache-2.0"
 anyhow = "1.0.102"
 bit-set = "0.10.0"
 clap = { version = "4.6.1", features = ["derive"] }
-csv = "1.4.0"
 petgraph = "0.8.3"
 pyo3 = { version = "0.29.0", features = ["abi3-py310", "extension-module"]}
 rayon = "1.12.0"
 dashmap = "6.2.1"
 nauty-Traces-sys = "0.11.0"
 bitvec = "1.0.1"
-tokio = { version = "1.52.3", features = ["rt", "rt-multi-thread", "sync", "time"] }
 
 [dev-dependencies]
 criterion = "0.8.2"
+csv = "1.4.0"
 
 [features]
 default = ["python"]

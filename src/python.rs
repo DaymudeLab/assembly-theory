@@ -389,15 +389,14 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 ///
 /// # Python Returns
 ///
-/// A 4-tuple containing:
+/// A 5-tuple containing:
 /// - The molecule's `int` assembly index (or an upper bound if timed out).
 /// - The molecule's `int` number of edge-disjoint isomorphic subgraph pairs.
-/// - The `int` number of assembly states searched if search completes, or
-///   `None` otherwise (i.e., if search timed out).
+/// - The `int` number of assembly states searched.
 /// - A list of [DOT-formatted](https://graphviz.org/doc/info/lang.html) `str`
 ///   representations of the molecule's minimum assembly pathways. This list is
-///   nonempty if and only if search did not time out and `max_pathways` is not
-///   `None`.
+///   nonempty if and only if `max_pathways` is not `None`.
+/// - A `bool` that is `True` if and only if search timed out.
 ///
 /// # Python Examples
 ///
@@ -414,7 +413,7 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 ///
 /// # Calculate the molecule's assembly index without any search optimizations
 /// # like parallelism, memoization, kernelization, or bounding.
-/// (slow_index, num_matches, states_searched, _) = at.index_search(
+/// (slow_index, num_matches, states_searched, _, _) = at.index_search(
 ///     mol_block,
 ///     timeout=None,
 ///     canonize_str="tree-nauty",
@@ -428,7 +427,7 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 /// print(f"States Searched: {states_searched}")  # 133814
 ///
 /// # Repeat the calculation with parallelism, memoization, and some bounds.
-/// (fast_index, num_matches, states_searched, _) = at.index_search(
+/// (fast_index, num_matches, states_searched, _, _) = at.index_search(
 ///     mol_block,
 ///     timeout=None,
 ///     canonize_str="tree-nauty",
@@ -447,13 +446,14 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 /// Assembly index calculation can be slow on large molecules, even with search
 /// optimizations enabled. If `timeout` is set, two outcomes are possible:
 /// 1. Search completes before the timeout and everything behaves as usual.
-/// 2. The timeout is reached before search completes, search is interrupted,
-///    and the best upper bound on the assembly index found so far is returned.
-///    The number of states searched and assembly pathways are not returned.
+/// 2. The timeout is reached before search completes and search is interrupted.
+///    The assembly index returned in this case is an upper bound on the true
+///    assembly index, and the number of states searched and assembly pathways
+///    reflect this partial search.
 /// ```custom,{class=language-python}
 /// # Limit search to 10 s, which is plenty for search to complete as usual,
 /// # even with some search optimizations disabled.
-/// (true_index, num_matches, states_searched, pathways) = at.index_search(
+/// (true_index, num_matches, states_searched, pathways, timed_out) = at.index_search(
 ///     mol_block,
 ///     timeout=10000,              # Set a 10 s timeout.
 ///     canonize_str="tree-nauty",
@@ -466,9 +466,10 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 /// print(f"Matches:                {num_matches}")      # 466
 /// print(f"States Searched:        {states_searched}")  # 2454
 /// print(f"Pathways Reconstructed: {len(pathways)}")    # 1
+/// print(f"Timed Out:              {timed_out}")        # False
 ///
 /// # Limit search to 1 ms, which will time out without more optimizations.
-/// (index_bound, num_matches, states_searched, pathways) = at.index_search(
+/// (index_bound, num_matches, states_searched, pathways, timed_out) = at.index_search(
 ///     mol_block,
 ///     timeout=1,                  # Set a 1 ms timeout.
 ///     canonize_str="tree-nauty",
@@ -479,8 +480,9 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 ///     max_pathways=1)             # Reconstruct one pathway.
 /// print(f"Assembly Index:         {index_bound}")      # >= 6
 /// print(f"Matches:                {num_matches}")      # 466, unaffected
-/// print(f"States Searched:        {states_searched}")  # None, not computed on timeout
-/// print(f"Pathways Reconstructed: {len(pathways)}")    # 0, not computed on timeout
+/// print(f"States Searched:        {states_searched}")  # <= 2454
+/// print(f"Pathways Reconstructed: {len(pathways)}")    # <= 1
+/// print(f"Timed Out:              {timed_out}")        # True
 /// ```
 ///
 /// ## Reconstructing Minimum Assembly Pathways
@@ -502,7 +504,7 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 /// pathway reconstruction.
 /// ```custom,{class=language-python}
 /// # Reconstruct a minimum assembly pathway discovered during search.
-/// (_, _, _, pathways) = at.index_search(
+/// (_, _, _, pathways, _) = at.index_search(
 ///     mol_block,
 ///     timeout=None,
 ///     canonize_str="tree-nauty",
@@ -549,7 +551,7 @@ pub fn _index_search(
     kernel_str: &str,
     bound_strs: Vec<String>,
     max_pathways: Option<usize>,
-) -> PyResult<(u32, u32, Option<usize>, Vec<String>)> {
+) -> PyResult<(u32, u32, usize, Vec<String>, bool)> {
     // Parse the .mol file contents as a molecule::Molecule.
     let mol = parse_molfile_str(mol_block)?;
 
@@ -583,7 +585,7 @@ pub fn _index_search(
     let boundlist = make_boundlist(&pybounds);
 
     // Compute assembly index.
-    let (index, num_matches, states_searched, pathways) = index_search(
+    let (index, num_matches, states_searched, pathways, timed_out) = index_search(
         &mol,
         timeout,
         canonize_mode,
@@ -600,7 +602,7 @@ pub fn _index_search(
         pathways_dot.push(format!("{pathway}"));
     }
 
-    Ok((index, num_matches, states_searched, pathways_dot))
+    Ok((index, num_matches, states_searched, pathways_dot, timed_out))
 }
 
 /// A Python wrapper for the assembly_theory Rust crate.

@@ -127,6 +127,7 @@ pub fn bench_bounds(c: &mut Criterion) {
                                     &mut cache,
                                     ParallelMode::DepthOne,
                                     None,
+                                    None,
                                 );
                                 total_time += start.elapsed();
                             }
@@ -192,6 +193,7 @@ pub fn bench_memoize(c: &mut Criterion) {
                                     &mut cache,
                                     ParallelMode::DepthOne,
                                     None,
+                                    None,
                                 );
                                 total_time += start.elapsed();
                             }
@@ -250,6 +252,7 @@ pub fn bench_removal_orders(c: &mut Criterion) {
                                     &mut cache,
                                     ParallelMode::DepthOne,
                                     *num_orders,
+                                    None,
                                 );
                                 total_time += start.elapsed();
                             }
