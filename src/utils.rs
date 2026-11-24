@@ -5,6 +5,7 @@ use petgraph::{
     graph::{EdgeIndex, Graph, IndexType},
     EdgeType,
 };
+use smallvec::SmallVec;
 
 pub fn is_subset_connected<N, E, Ty, Ix>(
     g: &Graph<N, E, Ty, Ix>,
@@ -71,14 +72,12 @@ where
     Ix: IndexType,
 {
     let mut remainder = s.clone();
-    let mut components = Vec::new();
-    while let Some(c) = remainder.iter().next() {
-        let mut queue = BitSet::new();
-        queue.reserve_len(s.count());
-        queue.insert(c);
+    let mut components = SmallVec::<[BitSet; 8]>::new();
 
-        let mut visited = BitSet::new();
-        visited.reserve_len(s.count());
+    while let Some(c) = remainder.iter().next() {
+        let mut queue = BitSet::with_capacity(s.count());
+        let mut visited = BitSet::with_capacity(s.count());
+        queue.insert(c);
 
         while let Some(e) = queue.iter().next() {
             queue.remove(e);
@@ -102,9 +101,11 @@ where
             queue.extend(nl);
             queue.extend(nr);
         }
+
         remainder.difference_with(&visited);
         components.push(visited);
     }
+
     components.into_iter()
 }
 
