@@ -70,7 +70,6 @@ def test_index_search():
         canonize_str="tree-nauty",
         parallel_str="none",  # Make states_searched deterministic.
         memoize_str="none",
-        kernel_str="none",
         bound_strs=["int", "matchable-edges"],
         max_pathways=1,
     )
@@ -118,7 +117,6 @@ def test_index_search_timeout():
         canonize_str="tree-nauty",
         parallel_str="none",
         memoize_str="none",
-        kernel_str="none",
         bound_strs=[],
         max_pathways=0,
     )
@@ -161,16 +159,6 @@ def test_index_search_bad_memoize():
         at.index_search(mol_block, memoize_str="invalid-mode")
 
     assert e.type is ValueError and "Invalid memoization" in str(e.value)
-
-
-def test_index_search_bad_kernel():
-    with open(osp.join("data", "checks", "anthracene.mol")) as f:
-        mol_block = f.read()
-
-    with pytest.raises(ValueError) as e:
-        at.index_search(mol_block, kernel_str="invalid-mode")
-
-    assert e.type is ValueError and "Invalid kernelization" in str(e.value)
 
 
 def test_index_search_bad_bound():

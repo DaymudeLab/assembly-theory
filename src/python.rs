@@ -76,7 +76,6 @@ use crate::{
     assembly::{depth, index, index_search, ParallelMode},
     bounds::Bound as OurBound,
     canonize::CanonizeMode,
-    kernels::KernelMode,
     loader::{parse_molfile_str, ParserError},
     memoize::MemoizeMode,
 };
@@ -113,15 +112,6 @@ enum PyParallelMode {
 enum PyMemoizeMode {
     None,
     CanonIndex,
-}
-
-/// Mirrors the `kernels::KernelMode` enum.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum PyKernelMode {
-    None,
-    Once,
-    DepthOne,
-    Always,
 }
 
 /// Mirrors the `bounds::Bound` enum.
@@ -180,24 +170,6 @@ impl FromStr for PyMemoizeMode {
             _ => Err(PyValueError::new_err(format!(
                 "Invalid memoization mode \"{s}\", options are: \
                 [\"none\", \"frags-index\", \"canon-index\"]"
-            ))),
-        }
-    }
-}
-
-/// Converts bound options in `&str` format to `PyKernelMode`.
-impl FromStr for PyKernelMode {
-    type Err = PyErr;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "none" => Ok(PyKernelMode::None),
-            "once" => Ok(PyKernelMode::Once),
-            "depth-one" => Ok(PyKernelMode::DepthOne),
-            "always" => Ok(PyKernelMode::Always),
-            _ => Err(PyValueError::new_err(format!(
-                "Invalid kernelization mode \"{s}\", options are: \
-                [\"none\", \"once\", \"depth-one\", \"always\"]"
             ))),
         }
     }
@@ -376,8 +348,6 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 ///   (default), `"always"`]. See [`ParallelMode`] for details.
 /// - `memoize_str`: A memoization mode from [`none`, `canon-index` (default)].
 ///   See [`MemoizeMode`] for details.
-/// - `kernel_str`: A kernelization mode from [`"none"` (default), `"once"`,
-///   `"depth-one"`, `"always"`]. See [`KernelMode`] for details.
 /// - `bound_strs`: A list of bounds containing zero or more of [`"log"`,
 ///   `"int"`, `"vec-simple"`, `"vec-small-frags"`, `"matchable-edges"`].
 ///   The default bounds are [`"int"`, `"matchable-edges"`]. See
@@ -412,14 +382,13 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 ///     mol_block = f.read()
 ///
 /// # Calculate the molecule's assembly index without any search optimizations
-/// # like parallelism, memoization, kernelization, or bounding.
+/// # like parallelism, memoization, or bounding.
 /// (slow_index, num_matches, states_searched, _, _) = at.index_search(
 ///     mol_block,
 ///     timeout=None,
 ///     canonize_str="tree-nauty",
 ///     parallel_str="none",        # Disable parallelism.
 ///     memoize_str="none",         # Disable memoization.
-///     kernel_str="none",          # Disable kernelization.
 ///     bound_strs=[],              # Disable bounding.
 ///     max_pathways=None)
 /// print(f"Assembly Index:  {slow_index}")       # 6
@@ -433,7 +402,6 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 ///     canonize_str="tree-nauty",
 ///     parallel_str="depth-one",   # Enable parallelism.
 ///     memoize_str="canon-index",  # Enable memoization.
-///     kernel_str="none",
 ///     bound_strs=["log", "int"],  # Enable some bounds.
 ///     max_pathways=None)
 /// print(f"Assembly Index:  {fast_index}")       # 6, unchanged
@@ -459,7 +427,6 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 ///     canonize_str="tree-nauty",
 ///     parallel_str="none",        # Disable parallelism.
 ///     memoize_str="none",         # Disable memoization.
-///     kernel_str="none",          # Disable kernelization.
 ///     bound_strs=["log", "int"],  # Enable some bounds.
 ///     max_pathways=1)             # Reconstruct one pathway.
 /// print(f"Assembly Index:         {true_index}")       # 6
@@ -475,7 +442,6 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 ///     canonize_str="tree-nauty",
 ///     parallel_str="none",        # Disable parallelism.
 ///     memoize_str="none",         # Disable memoization.
-///     kernel_str="none",          # Disable kernelization.
 ///     bound_strs=["log", "int"],  # Enable some bounds.
 ///     max_pathways=1)             # Reconstruct one pathway.
 /// print(f"Assembly Index:         {index_bound}")      # >= 6
@@ -510,7 +476,6 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 ///     canonize_str="tree-nauty",
 ///     parallel_str="none",        # Disable parallelism for determinism.
 ///     memoize_str="canon-index",
-///     kernel_str="none",
 ///     bound_strs=["log", "int"],
 ///     max_pathways=1)             # Reconstruct one pathway.
 /// print(pathways[0])
@@ -540,7 +505,7 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 /// #
 /// ```
 #[pyfunction(name = "index_search")]
-#[pyo3(signature = (mol_block, timeout=None, canonize_str="tree-nauty", parallel_str="depth-one", memoize_str="canon-index", kernel_str="none", bound_strs=vec!["int".to_string(), "matchable-edges".to_string()], max_pathways=None), text_signature = "(mol_block, timeout=None, canonize_str=\"tree-nauty\", parallel_str=\"depth-one\", memoize_str=\"canon-index\", kernel_str=\"none\", bound_strs=[\"int\", \"matchable-edges\"], max_pathways=None)")]
+#[pyo3(signature = (mol_block, timeout=None, canonize_str="tree-nauty", parallel_str="depth-one", memoize_str="canon-index", bound_strs=vec!["int".to_string(), "matchable-edges".to_string()], max_pathways=None), text_signature = "(mol_block, timeout=None, canonize_str=\"tree-nauty\", parallel_str=\"depth-one\", memoize_str=\"canon-index\", bound_strs=[\"int\", \"matchable-edges\"], max_pathways=None)")]
 #[allow(clippy::too_many_arguments)]
 pub fn _index_search(
     mol_block: &str,
@@ -548,7 +513,6 @@ pub fn _index_search(
     canonize_str: &str,
     parallel_str: &str,
     memoize_str: &str,
-    kernel_str: &str,
     bound_strs: Vec<String>,
     max_pathways: Option<usize>,
 ) -> PyResult<(u32, u32, usize, Vec<String>, bool)> {
@@ -574,13 +538,6 @@ pub fn _index_search(
         Ok(PyMemoizeMode::CanonIndex) => MemoizeMode::CanonIndex,
         Err(e) => return Err(e),
     };
-    let kernel_mode = match PyKernelMode::from_str(kernel_str) {
-        Ok(PyKernelMode::None) => KernelMode::None,
-        Ok(PyKernelMode::Once) => KernelMode::Once,
-        Ok(PyKernelMode::DepthOne) => KernelMode::DepthOne,
-        Ok(PyKernelMode::Always) => KernelMode::Always,
-        Err(e) => return Err(e),
-    };
     let pybounds = process_bound_strs(bound_strs)?;
     let boundlist = make_boundlist(&pybounds);
 
@@ -591,7 +548,6 @@ pub fn _index_search(
         canonize_mode,
         parallel_mode,
         memoize_mode,
-        kernel_mode,
         &boundlist,
         max_pathways,
     );

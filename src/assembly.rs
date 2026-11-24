@@ -37,7 +37,6 @@ use rayon::iter::{ParallelBridge, ParallelIterator};
 use crate::{
     bounds::{state_bounds, Bound},
     canonize::CanonizeMode,
-    kernels::KernelMode,
     matches::Matches,
     memoize::{Cache, MemoizeMode},
     molecule::Molecule,
@@ -303,7 +302,7 @@ pub fn recurse_index_search(
 /// stop after `timeout` milliseconds and return the best upper bound on the
 /// assembly index found so far.
 ///
-/// See [`CanonizeMode`], [`ParallelMode`], [`KernelMode`], and [`Bound`] for
+/// See [`CanonizeMode`], [`ParallelMode`], and [`Bound`] for
 /// details on how to customize the algorithm. Notably, bounds are applied in
 /// the order they appear in the `bounds` slice. It is generally better to
 /// provide bounds that are quick to compute first.
@@ -336,7 +335,6 @@ pub fn recurse_index_search(
 ///     assembly::{index_search, ParallelMode},
 ///     bounds::Bound,
 ///     canonize::CanonizeMode,
-///     kernels::KernelMode,
 ///     loader::parse_molfile_str,
 ///     memoize::MemoizeMode,
 /// };
@@ -348,14 +346,13 @@ pub fn recurse_index_search(
 /// let anthracene = parse_molfile_str(&molfile).expect("Parsing failure.");
 ///
 /// // Calculate the molecule's assembly index without any search optimizations
-/// // like parallelism, memoization, kernelization, or bounding.
+/// // like parallelism, memoization, or bounding.
 /// let (slow_index, num_matches, states_searched, _, _) = index_search(
 ///     &anthracene,
 ///     None,
 ///     CanonizeMode::TreeNauty,
 ///     ParallelMode::None,      // Disable parallelism.
 ///     MemoizeMode::None,       // Disable memoization.
-///     KernelMode::None,        // Disable kernelization.
 ///     &[],                     // Do not use any bounds.
 ///     None,
 /// );
@@ -370,7 +367,6 @@ pub fn recurse_index_search(
 ///     CanonizeMode::TreeNauty,
 ///     ParallelMode::DepthOne,
 ///     MemoizeMode::CanonIndex,
-///     KernelMode::None,
 ///     &[Bound::Log, Bound::Int],
 ///     None,
 /// );
@@ -396,7 +392,6 @@ pub fn recurse_index_search(
 /// #     assembly::{index_search, ParallelMode},
 /// #     bounds::Bound,
 /// #     canonize::CanonizeMode,
-/// #     kernels::KernelMode,
 /// #     loader::parse_molfile_str,
 /// #     memoize::MemoizeMode,
 /// # };
@@ -414,7 +409,6 @@ pub fn recurse_index_search(
 ///     CanonizeMode::TreeNauty,
 ///     ParallelMode::None,        // Disable parallelism.
 ///     MemoizeMode::None,         // Disable memoization.
-///     KernelMode::None,          // Disable kernelization.
 ///     &[Bound::Log, Bound::Int], // Enable some bounds.
 ///     Some(1),                   // Reconstuct one pathway.
 /// );
@@ -431,7 +425,6 @@ pub fn recurse_index_search(
 ///     CanonizeMode::TreeNauty,
 ///     ParallelMode::None,        // Disable parallelism.
 ///     MemoizeMode::None,         // Disable memoization.
-///     KernelMode::None,          // Disable kernelization.
 ///     &[Bound::Log, Bound::Int], // Enable some bounds.
 ///     Some(1),                   // Reconstuct one pathway.
 /// );
@@ -465,7 +458,6 @@ pub fn recurse_index_search(
 /// #     assembly::{index_search, ParallelMode},
 /// #     bounds::Bound,
 /// #     canonize::CanonizeMode,
-/// #     kernels::KernelMode,
 /// #     loader::parse_molfile_str,
 /// #     memoize::MemoizeMode,
 /// # };
@@ -482,7 +474,6 @@ pub fn recurse_index_search(
 ///     CanonizeMode::TreeNauty,
 ///     ParallelMode::None,        // Disable parallelism for determinism.
 ///     MemoizeMode::CanonIndex,
-///     KernelMode::None,
 ///     &[Bound::Log, Bound::Int],
 ///     Some(1),                   // Reconstuct one pathway.
 /// );
@@ -525,15 +516,9 @@ pub fn index_search(
     canonize_mode: CanonizeMode,
     parallel_mode: ParallelMode,
     memoize_mode: MemoizeMode,
-    kernel_mode: KernelMode,
     bounds: &[Bound],
     max_pathways: Option<usize>,
 ) -> (u32, u32, usize, Vec<Pathway>, bool) {
-    // Catch not-yet-implemented modes.
-    if kernel_mode != KernelMode::None {
-        panic!("The chosen --kernel mode is not implemented yet!")
-    }
-
     // Create the initial assembly state and memoization cache.
     let state = State::new(mol);
     let mut cache = Cache::new(memoize_mode, canonize_mode);
@@ -613,7 +598,6 @@ pub fn index(mol: &Molecule) -> u32 {
         CanonizeMode::TreeNauty,
         ParallelMode::DepthOne,
         MemoizeMode::CanonIndex,
-        KernelMode::None,
         &[Bound::Int, Bound::MatchableEdges],
         None, // Disable pathway reconstruction.
     )

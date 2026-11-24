@@ -5,7 +5,6 @@ use assembly_theory::{
     assembly::{depth, index_search, ParallelMode},
     bounds::Bound,
     canonize::CanonizeMode,
-    kernels::KernelMode,
     loader::parse_molfile_str,
     memoize::MemoizeMode,
 };
@@ -54,10 +53,6 @@ struct Cli {
     /// Bounding strategies to apply in the search phase.
     #[command(flatten)]
     boundsgroup: Option<BoundsGroup>,
-
-    /// Strategy for performing graph kernelization during the search phase.
-    #[arg(long, value_enum, default_value_t = KernelMode::None)]
-    kernel: KernelMode,
 
     /// Maximum number of minimum assembly pathways to reconstruct, or `None` (default) to disable
     /// pathway reconstruction. Set this option to 0 to reconstruct all minimum assembly pathways
@@ -126,7 +121,6 @@ fn main() -> Result<()> {
         cli.canonize,
         cli.parallel,
         cli.memoize,
-        cli.kernel,
         boundlist,
         cli.pathways,
     );

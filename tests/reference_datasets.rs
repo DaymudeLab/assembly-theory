@@ -8,7 +8,6 @@ use assembly_theory::{
     assembly::{index_search, ParallelMode},
     bounds::Bound,
     canonize::CanonizeMode,
-    kernels::KernelMode,
     loader::parse_molfile_str,
     memoize::MemoizeMode,
 };
@@ -42,7 +41,6 @@ fn test_reference_dataset(
     canonize_mode: CanonizeMode,
     parallel_mode: ParallelMode,
     memoize_mode: MemoizeMode,
-    kernel_mode: KernelMode,
     bounds: &[Bound],
 ) {
     // Load ground truth.
@@ -77,7 +75,6 @@ fn test_reference_dataset(
             canonize_mode,
             parallel_mode,
             memoize_mode,
-            kernel_mode,
             bounds,
             None,
         );
@@ -111,7 +108,6 @@ fn canonization() {
             canonize_mode,
             ParallelMode::None,
             MemoizeMode::None,
-            KernelMode::None,
             &[],
         );
     }
@@ -139,7 +135,6 @@ fn memoization() {
             canonize_mode,
             ParallelMode::DepthOne,
             memoize_mode,
-            KernelMode::None,
             &[],
         );
     }
@@ -164,7 +159,6 @@ fn individual_bounds() {
             CanonizeMode::TreeNauty,
             ParallelMode::DepthOne,
             MemoizeMode::None,
-            KernelMode::None,
             &[bound],
         );
     }
@@ -178,7 +172,6 @@ fn all_bounds() {
         CanonizeMode::TreeNauty,
         ParallelMode::DepthOne,
         MemoizeMode::None,
-        KernelMode::None,
         &[
             Bound::Log,
             Bound::Int,
@@ -197,7 +190,6 @@ fn memoize_bounds() {
         CanonizeMode::TreeNauty,
         ParallelMode::DepthOne,
         MemoizeMode::CanonIndex,
-        KernelMode::None,
         &[
             Bound::Log,
             Bound::Int,
