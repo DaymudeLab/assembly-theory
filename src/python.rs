@@ -395,8 +395,7 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 /// - The `int` number of assembly states searched.
 /// - A list of [DOT-formatted](https://graphviz.org/doc/info/lang.html) `str`
 ///   representations of the molecule's minimum assembly pathways. This list is
-///   nonempty if and only if search did not time out and `max_pathways` is not
-///   `None`.
+///   nonempty if and only if `max_pathways` is not `None`.
 /// - A `bool` that is `True` if and only if search timed out.
 ///
 /// # Python Examples
@@ -470,7 +469,7 @@ pub fn _index(mol_block: &str) -> PyResult<u32> {
 /// print(f"Timed Out:              {timed_out}")        # False
 ///
 /// # Limit search to 1 ms, which will time out without more optimizations.
-/// (index_bound, num_matches, states_searched, pathways) = at.index_search(
+/// (index_bound, num_matches, states_searched, pathways, timed_out) = at.index_search(
 ///     mol_block,
 ///     timeout=1,                  # Set a 1 ms timeout.
 ///     canonize_str="tree-nauty",

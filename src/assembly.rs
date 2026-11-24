@@ -317,8 +317,8 @@ pub fn recurse_index_search(
 /// - The molecule's `u32` assembly index (or an upper bound if timed out).
 /// - The molecule's `u32` number of edge-disjoint isomorphic subgraph pairs.
 /// - The `usize` total number of assembly [`State`]s searched.
-/// - A vector of the molecule's minimum assembly [`Pathway`]s that is nonempty if and only if
-///   search did not time out and `max_pathways` is not `None`.
+/// - A vector of the molecule's minimum assembly [`Pathway`]s that is nonempty if and only if 
+///   `max_pathways` is not `None`.
 /// - A `bool` that is `true` if and only if search timed out.
 ///
 /// If `parallel_mode` is set to anything other than [`ParallelMode::None`], the total number of

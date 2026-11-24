@@ -26,8 +26,8 @@ struct Cli {
     depth: bool,
 
     /// Print the molecule's assembly index, number of matches (edge-disjoint
-    /// isomorphic subgraph pairs), number of states searched, molecule graph
-    /// structure, and assembly pathways (if --pathways is given).
+    /// isomorphic subgraph pairs), number of states searched, plus molecule graph
+    /// structure and assembly pathways if --pathways is given.
     #[arg(long)]
     verbose: bool,
 
@@ -61,9 +61,10 @@ struct Cli {
 
     /// Maximum number of minimum assembly pathways to reconstruct, or `None` (default) to disable
     /// pathway reconstruction. Set this option to 0 to reconstruct all minimum assembly pathways
-    /// found during search. If not `None`, output will automatically use --verbose formatting.
-    /// Reconstructing minimum assembly pathways incurs a 5-20% runtime overhead; disable for
-    /// faster assembly index calculation.
+    /// found during search. If --timeout is set and the computation is stopped early, then
+    /// pathways corresponding to the minimum assembly index found so far are returned. If not
+    /// `None`, output will automatically use --verbose formatting. Reconstructing minimum assembly
+    /// pathways incurs a 5-20% runtime overhead; disable for faster assembly index calculation.
     #[arg(long)]
     pathways: Option<usize>,
 }
