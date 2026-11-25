@@ -84,6 +84,9 @@ anthracene = Chem.MolToMolBlock(anthracene)
 at.index(anthracene)  # 6
 ```
 
+For convenience functions that visualize the molecular structures and assembly pathways we operate on, consider using [AssemblyTheoryTools](https://pypi.org/project/assemblytheorytools/) (installed separately).
+Their Python package uses ours under the hood.
+
 
 ## API Reference
 

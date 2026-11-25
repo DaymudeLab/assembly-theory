@@ -513,6 +513,11 @@ pub fn recurse_index_search(
 /// # Ok(())
 /// # }
 /// ```
+/// This crate represents assembly pathways as [`Pathway`]s internally and
+/// [DOT strings](https://graphviz.org/doc/info/lang.html) externally, as shown above. If you need
+/// to *visualize* assembly pathways as directed acyclic graphs, consider using the
+/// [AssemblyTheoryTools](https://pypi.org/project/assemblytheorytools/) Python package which
+/// provides, among other things, convenience wrappers around this crate's pathway reconstruction.
 #[allow(clippy::too_many_arguments)]
 pub fn index_search(
     mol: &Molecule,
